@@ -3,8 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   LayoutDashboard,
   Users,
@@ -16,7 +14,6 @@ import {
   Sun,
   Moon,
   LogOut,
-  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,14 +25,14 @@ interface NavItem {
 }
 
 const platformItems: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Nurses", href: "/nurses", icon: Users },
-  { label: "Pipeline", href: "/pipeline", icon: GitBranch },
+  { label: "Dashboard",  href: "/",          icon: LayoutDashboard },
+  { label: "Nurses",     href: "/nurses",     icon: Users },
+  { label: "Pipeline",   href: "/pipeline",   icon: GitBranch },
 ];
 
 const moduleItems: NavItem[] = [
-  { label: "Preboard", href: "/preboard", icon: ClipboardCheck },
-  { label: "Onboard", href: "/onboard", icon: ShieldCheck },
+  { label: "Preboard",      href: "/preboard",     icon: ClipboardCheck },
+  { label: "Onboard",       href: "/onboard",      icon: ShieldCheck },
   { label: "Skills Arcade", href: "/skills-arcade", icon: Gamepad2 },
 ];
 
@@ -54,44 +51,41 @@ function NavSection({
   currentPath: string;
   role?: string;
 }) {
-  const filtered = items.filter(
-    (item) => !item.adminOnly || role === "admin",
-  );
-
+  const filtered = items.filter((item) => !item.adminOnly || role === "admin");
   if (filtered.length === 0) return null;
 
   return (
-    <div className="mb-2">
-      <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+    <div className="mb-5">
+      <p className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50 select-none">
         {title}
       </p>
       <nav className="flex flex-col gap-0.5">
         {filtered.map((item) => {
           const isActive =
-            item.href === "/"
-              ? currentPath === "/"
-              : currentPath.startsWith(item.href);
+            item.href === "/" ? currentPath === "/" : currentPath.startsWith(item.href);
           const Icon = item.icon;
 
           return (
             <Link key={item.href} href={item.href}>
               <div
                 className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all cursor-pointer",
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                    ? "bg-primary/12 text-primary nav-active-indicator"
+                    : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                 )}
               >
                 <Icon
                   className={cn(
-                    "h-4 w-4 shrink-0",
-                    isActive ? "text-primary" : "text-muted-foreground/70",
+                    "h-4 w-4 shrink-0 transition-colors duration-200",
+                    isActive
+                      ? "text-primary"
+                      : "text-muted-foreground/60 group-hover:text-sidebar-foreground/80",
                   )}
                 />
-                <span className="flex-1">{item.label}</span>
+                <span className="flex-1 tracking-tight">{item.label}</span>
                 {isActive && (
-                  <ChevronRight className="h-3 w-3 text-primary/60" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary/70" />
                 )}
               </div>
             </Link>
@@ -126,92 +120,74 @@ export function SidebarNav() {
     }
   };
 
+  const initials = authData?.username
+    ? authData.username.slice(0, 2).toUpperCase()
+    : "?";
+
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar">
-      {/* Logo */}
-      <div className="flex h-16 items-center gap-2 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-          <span className="text-sm font-bold text-primary-foreground">L</span>
+
+      {/* ── Logo ── */}
+      <div className="flex h-16 items-center gap-3 px-5 border-b border-sidebar-border/60">
+        <div className="relative">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-md">
+            <span className="text-sm font-bold text-primary-foreground">L</span>
+          </div>
         </div>
-        <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">
-          Livaware
-        </span>
+        <div>
+          <span className="text-[15px] font-semibold tracking-tight text-sidebar-foreground">
+            Livaware
+          </span>
+          <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Clinical Platform</p>
+        </div>
       </div>
 
-      <Separator className="bg-sidebar-border" />
-
-      {/* Navigation */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        <NavSection
-          title="Platform"
-          items={platformItems}
-          currentPath={location}
-          role={authData?.role}
-        />
-        <NavSection
-          title="Modules"
-          items={moduleItems}
-          currentPath={location}
-          role={authData?.role}
-        />
-        <NavSection
-          title="System"
-          items={systemItems}
-          currentPath={location}
-          role={authData?.role}
-        />
+      {/* ── Navigation ── */}
+      <div className="flex-1 overflow-y-auto px-3 py-5">
+        <NavSection title="Platform" items={platformItems} currentPath={location} role={authData?.role} />
+        <NavSection title="Modules"  items={moduleItems}  currentPath={location} role={authData?.role} />
+        <NavSection title="System"   items={systemItems}  currentPath={location} role={authData?.role} />
       </div>
 
-      {/* Bottom section */}
-      <div className="border-t border-sidebar-border p-3">
+      {/* ── Bottom ── */}
+      <div className="border-t border-sidebar-border/60 p-3 space-y-1">
+
         {/* Theme toggle */}
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
           onClick={toggleTheme}
-          className="mb-2 w-full justify-start gap-3 text-muted-foreground hover:text-foreground"
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground transition-all duration-200"
         >
           {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
+            <Sun className="h-4 w-4 text-amber-400" />
           ) : (
             <Moon className="h-4 w-4" />
           )}
-          <span className="text-sm">
-            {theme === "dark" ? "Light Mode" : "Dark Mode"}
-          </span>
-        </Button>
+          <span className="font-medium">{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+        </button>
 
-        <Separator className="mb-2 bg-sidebar-border" />
-
-        {/* User info */}
-        {isLoading ? (
-          <div className="flex items-center gap-3 px-2">
-            <Skeleton className="h-8 w-8 rounded-full" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-        ) : authData?.authenticated ? (
-          <div className="flex items-center gap-3 px-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
-              {authData.username.charAt(0).toUpperCase()}
+        {/* User row */}
+        {!isLoading && authData?.authenticated && (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-accent/40 transition-all duration-200 group">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/30 text-[11px] font-bold text-primary">
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">
+              <p className="truncate text-sm font-semibold text-sidebar-foreground leading-tight">
                 {authData.username}
               </p>
-              <p className="text-[10px] text-muted-foreground capitalize">
-                {authData.role || "user"}
+              <p className="text-[10px] text-muted-foreground capitalize tracking-wide">
+                {authData.role ?? "user"}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
               onClick={handleLogout}
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+              className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all duration-200 opacity-0 group-hover:opacity-100"
+              title="Sign out"
             >
-              <LogOut className="h-4 w-4" />
-            </Button>
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
-        ) : null}
+        )}
       </div>
     </aside>
   );
