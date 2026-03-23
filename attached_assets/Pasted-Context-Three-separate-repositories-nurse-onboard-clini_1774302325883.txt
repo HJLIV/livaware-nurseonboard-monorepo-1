@@ -1,0 +1,198 @@
+Context
+Three separate repositories (nurse-onboard, clinical-skills-arcade, nurse-preboard) share an identical tech stack and design system but run as independent apps. The goal is to consolidate them into hjliv/livaware-nurseonboard-monorepo-1 as a unified platform with:
+
+A single shared PostgreSQL database
+A unified design system and UX/UI frontend
+Proper monorepo structure enabling cross-app features
+
+Branch: claude/clarify-next-steps-FNYZd on livaware-nurseonboard-monorepo-1
+
+Current State
+RepoPurposeSize/Complexitynurse-onboardCompliance/HR onboarding platformHeavy — 118KB candidate-detail, 90KB portal, 7+ AI modules, NMC/DBS/SharePoint integrationsclinical-skills-arcadeCompetency assessment engineMedium — 43KB scenario player, 30KB routes, 154KB seed data, scoring enginenurse-preboardPre-boarding prep toolLight — 58KB assessment page, simple API
+Design system: Already 95% identical across all three (shadcn/ui "new-york", same Tailwind config, same CSS variables, same 50+ Radix UI components). nurse-onboard has the most mature layout system.
+Existing PR: clinical-skills-arcade #1 (monorepo setup) — should be closed since we're doing a fresh consolidation in the target repo.
+
+Monorepo Structure
+livaware-nurseonboard-monorepo-1/
+├── package.json                    # Root — npm workspaces
+├── tsconfig.base.json              # Shared TS config
+├── turbo.json                      # Turborepo config (build orchestration)
+├── drizzle.config.ts               # Unified Drizzle ORM config
+├── migrations/                     # Unified database migrations
+├── packages/
+│   ├── ui/                         # Shared UI components (shadcn/ui + custom)
+│   │   ├── package.json
+│   │   ├── components/             # All shadcn/ui base components
+│   │   ├── layout/                 # Shared layouts (from nurse-onboard)
+│   │   ├── theme/                  # ThemeProvider, CSS variables
+│   │   └── tailwind.config.ts      # Shared Tailwind config
+│   ├── shared/                     # Shared types, utilities, constants
+│   │   ├── package.json
+│   │   ├── schema.ts               # Shared Drizzle schema (users, auth, common tables)
+│   │   └── lib/                    # Shared utilities (auth, API helpers)
+│   └── db/                         # Database connection & shared queries
+│       ├── package.json
+│       ├── index.ts                # DB connection pool
+│       └── schema/                 # All schema files (shared + app-specific)
+├── apps/
+│   ├── nurse-onboard/
+│   │   ├── package.json
+│   │   ├── client/                 # React frontend (pages, app-specific components)
+│   │   └── server/                 # Express API (routes, AI modules, services)
+│   ├── clinical-skills-arcade/
+│   │   ├── package.json
+│   │   ├── client/
+│   │   └── server/
+│   └── nurse-preboard/
+│       ├── package.json
+│       ├── client/
+│       └── server/
+└── .env                            # Shared environment variables
+
+Implementation Steps
+Phase 1: Monorepo Scaffold
+
+Create root config files in livaware-nurseonboard-monorepo-1:
+
+package.json with npm workspaces pointing to packages/* and apps/*
+turbo.json for build orchestration (dev, build, lint tasks)
+tsconfig.base.json with shared compiler options
+Root .gitignore, .env.example
+
+
+
+Phase 2: Shared Packages
+
+Create packages/ui/ — Extract the shared design system:
+
+Copy all shadcn/ui components (identical across repos) into packages/ui/components/
+Move nurse-onboard's layout system (app-layout.tsx, sidebar-nav.tsx, portal-layout.tsx) into packages/ui/layout/
+Move ThemeProvider and CSS variables into packages/ui/theme/
+Shared tailwind.config.ts and components.json
+Export everything via package.json
+
+
+Create packages/db/ — Unified database layer:
+
+Single Drizzle ORM connection
+Schema files organized by domain:
+
+schema/shared.ts — users, roles, auth, sessions (shared across apps)
+schema/onboard.ts — candidates, compliance, documents, references
+schema/arcade.ts — modules, scenarios, assessments, scores
+schema/preboard.ts — preboard assessments, reports
+
+
+All schemas in one PostgreSQL database (using table prefixes per app domain)
+
+
+Create packages/shared/ — Common utilities:
+
+Shared TypeScript types/interfaces
+Auth utilities (login, session management)
+API helper functions
+Common constants
+
+
+
+Phase 3: Migrate Apps
+
+Migrate nurse-onboard → apps/nurse-onboard/:
+
+Move client/src/pages/ and app-specific components
+Move server/ (routes, AI modules, services)
+Update imports to use @livaware/ui, @livaware/db, @livaware/shared
+Remove duplicated UI components (now in packages/ui)
+
+
+Migrate clinical-skills-arcade → apps/clinical-skills-arcade/:
+
+Move client/src/pages/ (scenario-player, nurse-dashboard, admin pages)
+Move server/ (routes, scoring engine, seed data)
+Update imports to shared packages
+
+
+Migrate nurse-preboard → apps/nurse-preboard/:
+
+Move client/src/pages/ (assessment page)
+Move server/ (AI, email, PDF, routes)
+Update imports to shared packages
+
+
+
+Phase 4: Unified Database
+
+Consolidate database schemas:
+
+Merge Drizzle schema files from all three repos
+Create shared tables (users, roles) that all apps reference
+Generate unified migrations
+Create seed scripts that work with the unified schema
+
+
+
+Phase 5: Unified Frontend Shell
+
+Create shared app shell:
+
+Unified navigation that links between all three app areas
+Shared login/auth flow
+Consistent sidebar navigation using nurse-onboard's layout patterns
+Role-based routing (admin sees all apps, nurses see relevant sections)
+
+
+
+Phase 6: Wiring & Polish
+
+Dev tooling:
+
+Root npm run dev starts all apps
+Individual npm run dev --workspace=apps/nurse-onboard for single app
+Shared environment variable handling
+Turborepo caching for builds
+
+
+
+
+Key Files to Read/Modify
+Source files (read from GitHub):
+
+hjliv/nurse-onboard: client/src/components/, client/src/pages/, server/, shared/, drizzle.config.ts
+hjliv/clinical-skills-arcade: same directories
+hjliv/nurse-preboard: same directories
+
+Target files (create in livaware-nurseonboard-monorepo-1):
+
+Root: package.json, turbo.json, tsconfig.base.json, drizzle.config.ts
+packages/ui/: components, layouts, theme
+packages/db/: connection, schema files
+packages/shared/: types, auth, utilities
+apps/*/: migrated app code with updated imports
+
+
+Existing Code to Reuse
+
+UI components: All shadcn/ui components are identical — copy once into packages/ui/
+Layout system: nurse-onboard's layout/app-layout.tsx, layout/sidebar-nav.tsx, layout/portal-layout.tsx
+ThemeProvider: Identical across repos — use any as source
+Tailwind config: Identical — use as shared config
+AI modules: nurse-onboard's AI service pattern (audit-summary-ai.ts, etc.) — keep in app but could extract common AI utility
+
+
+Verification
+
+Structure check: Verify monorepo directory structure is correct
+Package resolution: npm install at root resolves all workspace dependencies
+TypeScript: tsc --noEmit passes for all packages and apps
+Build: turbo build completes for all apps
+Dev: Each app starts independently via workspace commands
+Database: Drizzle migrations generate and apply correctly to single DB
+Cross-app: Shared UI components render correctly in all three apps
+Auth: Unified login works and routes to correct app based on role
+
+
+Execution Constraints
+
+All code pushed via GitHub MCP tools (mcp__github__push_files) to branch claude/clarify-next-steps-FNYZd
+Close existing PR #1 on clinical-skills-arcade (superseded by this consolidation)
+This is a large migration — will be done in phases, verifying each phase works before proceeding
