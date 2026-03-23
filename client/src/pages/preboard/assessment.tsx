@@ -1491,6 +1491,36 @@ export default function AssessmentPage() {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [portalToken, setPortalToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      setPortalToken(token);
+      fetch(`/api/portal/${token}`)
+        .then((r) => {
+          if (!r.ok) {
+            console.warn("Portal token invalid or expired, falling back to manual entry");
+            return null;
+          }
+          return r.json();
+        })
+        .then((data) => {
+          if (data?.nurse) {
+            setNurseInfo({
+              name: data.nurse.fullName || "",
+              email: data.nurse.email || "",
+              phone: "",
+            });
+            setScreen("intro");
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch portal token:", err);
+        });
+    }
+  }, []);
 
   const handleInfoSubmit = (info: NurseInfo) => {
     setNurseInfo(info);
@@ -1509,6 +1539,7 @@ export default function AssessmentPage() {
         nurseEmail: nurseInfo.email,
         nursePhone: nurseInfo.phone || null,
         responses: allAnswers,
+        ...(portalToken ? { portalToken } : {}),
       });
       setSubmitting(false);
       setScreen("complete");

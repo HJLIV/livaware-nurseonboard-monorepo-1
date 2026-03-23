@@ -1,10 +1,13 @@
 import type { Express } from "express";
 import { storage } from "../preboard-storage";
-import { insertAssessmentSchema, assessmentResponseSchema } from "@shared/schema";
+import { insertAssessmentSchema, assessmentResponseSchema, portalLinks, nurses } from "@shared/schema";
 import { analyzeAssessment } from "../preboard-ai";
 import { sendEmail } from "../preboard-outlook";
 import { buildEmailHtml } from "../preboard-email-template";
 import { generatePdfReport } from "../preboard-pdf-report";
+import { logAction } from "../services/audit";
+import { db } from "../db";
+import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
 
 const RECIPIENT_EMAIL = process.env.REPORT_EMAIL || "";
@@ -14,11 +17,25 @@ const submitSchema = z.object({
   nurseEmail: z.string().email("Invalid email address"),
   nursePhone: z.string().nullable().optional(),
   responses: z.array(assessmentResponseSchema).min(1, "At least one response required"),
+  portalToken: z.string().optional(),
 });
 
 export async function registerRoutes(
   app: Express
 ): Promise<void> {
+
+  app.get("/api/preboard/assessments", async (req, res) => {
+    if (!req.session?.isAuthenticated) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    try {
+      const all = await storage.getAllAssessments();
+      res.json(all);
+    } catch (err) {
+      console.error("Error fetching assessments:", err);
+      res.status(500).json({ error: "Failed to fetch assessments" });
+    }
+  });
 
   app.post("/api/assessments", async (req, res) => {
     try {
@@ -27,7 +44,34 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid data", details: parsed.error.issues });
       }
 
-      const assessment = await storage.createAssessment(parsed.data);
+      let nurseId: string | null = null;
+      if (parsed.data.portalToken) {
+        try {
+          const [link] = await db.select().from(portalLinks).where(
+            and(eq(portalLinks.token, parsed.data.portalToken), gt(portalLinks.expiresAt, new Date()))
+          );
+          if (link) {
+            nurseId = link.nurseId;
+          }
+        } catch (linkErr) {
+          console.error("Failed to look up portal token:", linkErr);
+        }
+      }
+
+      const assessmentData = nurseId
+        ? { ...parsed.data, nurseId }
+        : parsed.data;
+      const assessment = await storage.createAssessment(assessmentData);
+
+      if (nurseId) {
+        try {
+          await logAction(nurseId, "preboard", "assessment_submitted", parsed.data.nurseName, {
+            assessmentId: assessment.id,
+          });
+        } catch (auditErr) {
+          console.error("Failed to log assessment audit:", auditErr);
+        }
+      }
 
       res.json({ id: assessment.id, status: "received" });
 

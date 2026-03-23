@@ -15,12 +15,12 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface PortalData {
   nurse: {
-    id: number;
-    firstName: string;
-    lastName: string;
+    id: string;
+    fullName: string;
     email: string;
     currentStage: string;
   };
@@ -29,6 +29,7 @@ interface PortalData {
     onboard: { status: string; actionUrl?: string; label: string };
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
+  token: string;
 }
 
 const journeyConfig = [
@@ -132,7 +133,7 @@ export default function PortalHub() {
             <span className="text-sm text-muted-foreground">Welcome back,</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight">
-            {nurse.firstName} {nurse.lastName}
+            {nurse.fullName}
           </h2>
           <div className="mt-2 flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Current stage:</span>
@@ -197,10 +198,12 @@ export default function PortalHub() {
                   </div>
 
                   {data.actionUrl && isActive && (
-                    <Button size="sm" className="shrink-0">
-                      {data.label || "Continue"}
-                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                    </Button>
+                    <Link href={data.actionUrl}>
+                      <Button size="sm" className="shrink-0">
+                        {data.label || "Continue"}
+                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                   )}
 
                   {isCompleted && (

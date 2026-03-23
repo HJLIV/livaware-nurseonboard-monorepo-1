@@ -1,7 +1,7 @@
 import type { Express, Request } from "express";
 import { db } from "../db";
 import { nurses, portalLinks, auditLogs, preboardAssessments, nmcVerifications, dbsVerifications } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gt } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import crypto from "crypto";
 
@@ -156,6 +156,59 @@ export function registerNurseRoutes(app: Express) {
 
     await logAction(nurse.id, "admin", "stage_advanced", agentFor(req), { from: nurse.currentStage, to: nextStage });
     res.json(updated);
+  });
+
+  app.get("/api/portal/:token", async (req, res) => {
+    try {
+      const [link] = await db.select().from(portalLinks).where(
+        and(eq(portalLinks.token, req.params.token), gt(portalLinks.expiresAt, new Date()))
+      );
+      if (!link) return res.status(404).json({ message: "Invalid or expired portal link" });
+
+      const [nurse] = await db.select().from(nurses).where(eq(nurses.id, link.nurseId));
+      if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+
+      if (!link.usedAt) {
+        await db.update(portalLinks).set({ usedAt: new Date() }).where(eq(portalLinks.id, link.id));
+        await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
+      }
+
+      const preboardDone = nurse.preboardStatus === "completed" || nurse.currentStage !== "preboard";
+      const onboardDone = nurse.onboardStatus === "cleared" || nurse.currentStage === "skills_arcade" || nurse.currentStage === "completed";
+      const arcadeDone = nurse.arcadeStatus === "competent" || nurse.currentStage === "completed";
+
+      const journey = {
+        preboard: {
+          status: preboardDone ? "completed" : nurse.currentStage === "preboard" ? "in_progress" : "not_started",
+          actionUrl: !preboardDone && nurse.currentStage === "preboard" ? `/preboard/assessment?token=${link.token}` : undefined,
+          label: preboardDone ? "Completed" : "Start Assessment",
+        },
+        onboard: {
+          status: onboardDone ? "completed" : nurse.currentStage === "onboard" ? "in_progress" : "not_started",
+          actionUrl: !onboardDone && nurse.currentStage === "onboard" ? `/portal/page/${link.token}` : undefined,
+          label: onboardDone ? "Completed" : "Continue Onboarding",
+        },
+        skillsArcade: {
+          status: arcadeDone ? "completed" : nurse.currentStage === "skills_arcade" ? "in_progress" : "not_started",
+          actionUrl: !arcadeDone && nurse.currentStage === "skills_arcade" ? `/arcade?token=${link.token}` : undefined,
+          label: arcadeDone ? "Completed" : "Start Skills Arcade",
+        },
+      };
+
+      res.json({
+        nurse: {
+          id: nurse.id,
+          fullName: nurse.fullName,
+          email: nurse.email,
+          currentStage: nurse.currentStage,
+        },
+        journey,
+        token: link.token,
+      });
+    } catch (err) {
+      console.error("Portal token error:", err);
+      res.status(500).json({ message: "Failed to load portal" });
+    }
   });
 }
 

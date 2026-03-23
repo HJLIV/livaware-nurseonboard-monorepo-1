@@ -69,6 +69,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/:token" component={PortalHub} />
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/referee/:token" component={RefereeForm} />
+        <Route path="/preboard/assessment" component={PreboardAssessment} />
 
         <Route>
           {isAuthenticated ? (

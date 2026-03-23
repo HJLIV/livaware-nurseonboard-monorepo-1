@@ -128,8 +128,17 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 - **Page header pattern**: `text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60` eyebrow + `font-serif text-2xl/3xl font-light tracking-tight` heading — consistent across all pages
 - **Stat numbers**: Use `font-serif text-2xl font-light` (not bold) for elegant data display
 - **Animations**: Staggered fade-in-up reveals with `animate-delay-*` utility classes; `prefers-reduced-motion` fully supported
+- **Design system tokens**: `client/src/lib/design-system.ts` — BRAND colors, FONT families, DOMAIN_COLORS, GLOBAL_STYLES, GRADIENTS, GRAIN_TEXTURE (used by preboard assessment)
 - **Auth hook**: `client/src/lib/auth.ts` exports `useAuth()` for arcade nurse authentication
 - **Shared components**: `client/src/components/shared/step-progress.tsx` (pipeline stepper), `status-badge.tsx` (status pills)
+
+## Portal Flow (Nurse-Facing)
+
+1. Admin registers nurse → `POST /api/nurses` auto-generates portal link → `preboardInviteUrl` returned
+2. Nurse clicks invite link → `/portal/:token` → Portal hub shows journey (preboard/onboard/arcade)
+3. Preboard "Start Assessment" → `/preboard/assessment?token=<token>` → quiz auto-fills nurse name/email from token
+4. Assessment submission → `POST /api/assessments` with `portalToken` → links to nurse record via audit log
+5. `GET /api/portal/:token` validates token, returns nurse info + journey status with action URLs
 
 ## Deployment
 
