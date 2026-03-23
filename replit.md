@@ -54,6 +54,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - Trainer remediation queue
 - Admin: module management, user management, CSV reports
 - Routes: `server/routes/skills-arcade.ts`
+- Auth: Platform admins (`isAuthenticated + role=admin`) are bridged into arcade admin endpoints via `isPlatformAdmin()` in skills-arcade.ts
 
 ### Nurse-Preboard (Pre-onboarding assessment)
 - AI-powered timed assessment with domain scoring

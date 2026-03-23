@@ -12,15 +12,32 @@ declare module "express-session" {
   }
 }
 
+function isPlatformAdmin(req: Request): boolean {
+  return !!(req.session as any).isAuthenticated && (req.session as any).role === "admin";
+}
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Not authenticated" });
+  if (req.session.userId || isPlatformAdmin(req)) {
+    if (!req.session.userId && isPlatformAdmin(req)) {
+      req.session.userId = "platform-admin";
+    }
+    return next();
   }
-  next();
+  return res.status(401).json({ message: "Not authenticated" });
 }
 
 function requireRole(...roles: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    if (isPlatformAdmin(req) && roles.includes("admin")) {
+      (req as any).user = {
+        id: "platform-admin",
+        name: (req.session as any).displayName || (req.session as any).username || "Platform Admin",
+        email: (req.session as any).email || "",
+        role: "admin",
+        active: true,
+      } as User;
+      return next();
+    }
     if (!req.session.userId) {
       return res.status(401).json({ message: "Not authenticated" });
     }
