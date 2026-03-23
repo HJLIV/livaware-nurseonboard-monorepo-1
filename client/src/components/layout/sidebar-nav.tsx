@@ -14,6 +14,10 @@ import {
   Sun,
   Moon,
   LogOut,
+  UserCheck,
+  Stethoscope,
+  BarChart3,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,15 +29,23 @@ interface NavItem {
 }
 
 const platformItems: NavItem[] = [
-  { label: "Dashboard",  href: "/",          icon: LayoutDashboard },
-  { label: "Nurses",     href: "/nurses",     icon: Users },
-  { label: "Pipeline",   href: "/pipeline",   icon: GitBranch },
+  { label: "Dashboard",   href: "/",            icon: LayoutDashboard },
+  { label: "Candidates",  href: "/candidates",  icon: Users },
+  { label: "Pipeline",    href: "/pipeline",    icon: GitBranch },
 ];
 
 const moduleItems: NavItem[] = [
-  { label: "Preboard",      href: "/preboard",     icon: ClipboardCheck },
-  { label: "Onboard",       href: "/onboard",      icon: ShieldCheck },
-  { label: "Skills Arcade", href: "/skills-arcade", icon: Gamepad2 },
+  { label: "Preboard",        href: "/preboard",           icon: ClipboardCheck },
+  { label: "Onboard",         href: "/nurses",             icon: ShieldCheck },
+  { label: "Skills Arcade",   href: "/arcade",             icon: Gamepad2 },
+];
+
+const arcadeItems: NavItem[] = [
+  { label: "Nurse View",      href: "/arcade",                    icon: Stethoscope },
+  { label: "Trainer Queue",   href: "/arcade/trainer",            icon: UserCheck },
+  { label: "Modules",         href: "/arcade/admin/modules",      icon: Shield, adminOnly: true },
+  { label: "Reports",         href: "/arcade/admin/reports",      icon: BarChart3, adminOnly: true },
+  { label: "Users",           href: "/arcade/admin/users",        icon: Users, adminOnly: true },
 ];
 
 const systemItems: NavItem[] = [
@@ -146,6 +158,9 @@ export function SidebarNav() {
       <div className="flex-1 overflow-y-auto px-3 py-5">
         <NavSection title="Platform" items={platformItems} currentPath={location} role={authData?.role} />
         <NavSection title="Modules"  items={moduleItems}  currentPath={location} role={authData?.role} />
+        {location.startsWith("/arcade") && (
+          <NavSection title="Arcade" items={arcadeItems} currentPath={location} role={authData?.role} />
+        )}
         <NavSection title="System"   items={systemItems}  currentPath={location} role={authData?.role} />
       </div>
 

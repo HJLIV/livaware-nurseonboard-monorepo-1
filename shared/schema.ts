@@ -495,6 +495,41 @@ export type RemediationCase = typeof remediationCases.$inferSelect;
 export type RemediationNote = typeof remediationNotes.$inferSelect;
 export type Clearance = typeof clearances.$inferSelect;
 
+// ==================== ARCADE COMPATIBILITY ALIASES ====================
+// The Arcade app used "users" and "modules"; monorepo uses "arcadeUsers", "arcadeModules"
+export const users = arcadeUsers;
+export const modules = arcadeModules;
+export type User = ArcadeUser;
+export type InsertUser = z.infer<typeof insertArcadeUserSchema>;
+export type Module = ArcadeModule;
+
+// ==================== NURSE-ONBOARD COMPATIBILITY ALIASES ====================
+// The Nurse-Onboard app used "candidates" naming; monorepo uses "nurses"
+export const candidates = nurses;
+export type Candidate = Nurse;
+export type InsertCandidate = InsertNurse;
+
+// The Nurse-Onboard app used "magicLinks"; monorepo uses "portalLinks"
+export const magicLinks = portalLinks;
+export type MagicLink = PortalLink;
+export type InsertMagicLink = z.infer<typeof insertPortalLinkSchema>;
+
+// Insert type aliases
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type InsertNmcVerification = z.infer<typeof insertNmcVerificationSchema>;
+export type InsertDbsVerification = z.infer<typeof insertDbsVerificationSchema>;
+export type InsertCompetencyDeclaration = z.infer<typeof insertCompetencyDeclarationSchema>;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+export type InsertReference = z.infer<typeof insertReferenceSchema>;
+export type InsertMandatoryTraining = z.infer<typeof insertMandatoryTrainingSchema>;
+export type InsertHealthDeclaration = z.infer<typeof insertHealthDeclarationSchema>;
+export type InsertInductionPolicy = z.infer<typeof insertInductionPolicySchema>;
+export type InsertProfessionalIndemnity = z.infer<typeof insertProfessionalIndemnitySchema>;
+export type InsertOnboardingState = z.infer<typeof insertOnboardingStateSchema>;
+export type InsertRefereeToken = z.infer<typeof insertRefereeTokenSchema>;
+export type InsertEmploymentHistory = z.infer<typeof insertEmploymentHistorySchema>;
+export type InsertEducationHistory = z.infer<typeof insertEducationHistorySchema>;
+
 // ==================== CONSTANTS ====================
 
 export const ONBOARDING_STEPS = [
@@ -527,6 +562,43 @@ export const MANDATORY_TRAINING_MODULES = [
   { name: "Duty of Candour", renewalFrequency: "3 years" },
   { name: "Lone Working Safety", renewalFrequency: "Annual" },
   { name: "Food Hygiene Awareness", renewalFrequency: "3 years" },
+] as const;
+
+export const PORTAL_STEPS = [
+  { step: 1, name: "Identity & Contact", key: "identity" },
+  { step: 2, name: "NMC PIN Verification", key: "nmc" },
+  { step: 3, name: "DBS Verification", key: "dbs" },
+  { step: 4, name: "Right to Work", key: "right_to_work" },
+  { step: 5, name: "Professional Profile", key: "profile" },
+  { step: 6, name: "Clinical Competency", key: "competency" },
+  { step: 7, name: "Mandatory Training", key: "training" },
+  { step: 8, name: "Health Declaration", key: "health" },
+  { step: 9, name: "References", key: "references" },
+  { step: 10, name: "Professional Indemnity", key: "indemnity" },
+] as const;
+
+export const COMPETENCY_MATRIX = [
+  { domain: "Core Clinical", competency: "Basic Life Support (adult)", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Core Clinical", competency: "Immediate Life Support", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Core Clinical", competency: "Clinical observations — NEWS2 assessment and escalation", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Core Clinical", competency: "Sepsis screening (Sepsis Six / NEWS2 trigger)", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Core Clinical", competency: "ABCDE systematic assessment", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Medication", competency: "Oral medication administration", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Medication", competency: "Subcutaneous injection", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Medication", competency: "Intramuscular injection", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Medication", competency: "Intravenous medication administration", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Medication", competency: "Syringe driver management", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Wound Care", competency: "Wound assessment and documentation", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Wound Care", competency: "Complex dressing application", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Catheter Care", competency: "Urinary catheter care (male & female)", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Catheter Care", competency: "Urinary catheter insertion (female)", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Enteral Feeding", competency: "Nasogastric tube feeding management", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Enteral Feeding", competency: "PEG/gastrostomy tube management", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Respiratory", competency: "Oxygen therapy administration", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Respiratory", competency: "Nebuliser therapy", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Respiratory", competency: "Tracheostomy care", mandatory: false, minimumLevel: "level_2" },
+  { domain: "Palliative", competency: "End of life care and syringe driver management", mandatory: true, minimumLevel: "level_3" },
+  { domain: "Palliative", competency: "Liverpool Care Pathway / individualised care plan", mandatory: false, minimumLevel: "level_2" },
 ] as const;
 
 export const INDUCTION_POLICIES = [
@@ -664,3 +736,14 @@ export const registerSchema = z.object({
   (data) => data.password === data.confirmPassword,
   { message: "Passwords do not match", path: ["confirmPassword"] },
 );
+
+// Aliases for preboard-storage compatibility
+export const assessments = preboardAssessments;
+export const insertAssessmentSchema = createInsertSchema(preboardAssessments).omit({
+  id: true,
+  aiAnalysis: true,
+  emailSent: true,
+  completedAt: true,
+});
+export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
+export type Assessment = typeof preboardAssessments.$inferSelect;

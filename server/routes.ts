@@ -71,8 +71,9 @@ export async function registerRoutes(
   app.use("/api/dashboard", requireAuth);
   app.use("/api/pipeline", requireAuth);
   app.use("/api/audit-logs", requireAdmin);
+  app.use("/api/admin", requireAdmin);
 
-  // === NURSE MANAGEMENT (unified admin) ===
+  // === NURSE MANAGEMENT (legacy simple CRUD) ===
   const { registerNurseRoutes } = await import("./routes/admin");
   registerNurseRoutes(app);
 
@@ -81,20 +82,24 @@ export async function registerRoutes(
   registerDashboardRoutes(app);
 
   // === PREBOARD MODULE ===
-  const { registerPreboardRoutes } = await import("./routes/preboard");
-  registerPreboardRoutes(app);
+  const { registerRoutes: registerPreboardRoutes } = await import("./routes/preboard");
+  await registerPreboardRoutes(app);
 
-  // === ONBOARD MODULE ===
-  const { registerOnboardRoutes } = await import("./routes/onboard");
-  registerOnboardRoutes(app);
+  // === ONBOARD MODULE (full AI-powered compliance, NMC, DBS, references) ===
+  const { registerAdminRoutes } = await import("./routes/onboard");
+  registerAdminRoutes(app);
 
-  // === SKILLS ARCADE MODULE ===
-  const { registerSkillsArcadeRoutes } = await import("./routes/skills-arcade");
-  registerSkillsArcadeRoutes(app);
-
-  // === PORTAL (nurse-facing) ===
+  // === PORTAL (nurse-facing self-service) ===
   const { registerPortalRoutes } = await import("./routes/portal");
   registerPortalRoutes(app);
+
+  // === REFEREE FORM ===
+  const { registerRefereeRoutes } = await import("./routes/referee");
+  registerRefereeRoutes(app);
+
+  // === SKILLS ARCADE MODULE ===
+  const { registerRoutes: registerArcadeRoutes } = await import("./routes/skills-arcade");
+  await registerArcadeRoutes(app);
 
   // === AUDIT ===
   const { registerAuditRoutes } = await import("./routes/audit");

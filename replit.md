@@ -1,44 +1,131 @@
-# Clinical Skills Arcade / LiveAware NurseOnboard Platform
+# Livaware NurseOnboard Platform (Consolidated Monorepo)
 
 ## Project Overview
 
-A full-stack TypeScript monorepo for clinical skills training and nurse onboarding. It includes an Express backend, a React/Vite frontend, and uses PostgreSQL via Drizzle ORM.
+A full-stack TypeScript monorepo combining three private applications — **Clinical-Skills-Arcade**, **Nurse-Preboard**, and **Nurse-Onboard** — into a single Express + React/Vite platform. Uses PostgreSQL with Drizzle ORM. Deployed on Replit with autoscale.
 
 ## Architecture
 
-- **Frontend**: React 18 + Vite, with Tailwind CSS + Radix UI components, located in `client/`
-- **Backend**: Express 5 (Node.js), located in `server/`
-- **Shared**: Drizzle ORM schema and shared types, located in `shared/`
-- **Build System**: `npm` with `tsx` for TypeScript execution and `esbuild` for production bundling
+- **Frontend**: React 18 + Vite, Tailwind CSS + Radix UI components, `client/`
+- **Backend**: Express 5 (Node.js), `server/`
+- **Shared schema**: Drizzle ORM + unified types, `shared/schema.ts`
+- **Build System**: `npm` with `tsx` (dev) and `esbuild` (production)
 
 ## Key Technologies
 
 - TypeScript (strict monorepo)
-- Express 5 + express-session (authentication via passport-local + Microsoft/Azure MSAL)
+- Express 5 + express-session (session-based auth, admin/team roles)
 - Drizzle ORM + PostgreSQL (`pg` driver)
-- React + Vite (with HMR in dev, served through Express in development mode)
+- React + Vite (HMR in dev, served through Express)
 - Tailwind CSS + Radix UI + shadcn-style components
 - Framer Motion, Recharts, React Hook Form, Zod
-- WebSocket (`ws`) for real-time features
+- OpenAI / Anthropic AI services (compliance, NMC, DBS, references, certificates)
+- Microsoft Graph / Outlook API integration (emails, SharePoint)
 
 ## Running the Project
 
-- **Development**: `npm run dev` — starts the Express server which also serves the Vite frontend via middleware on port 5000
-- **Production build**: `npm run build` — outputs to `dist/`
-- **Production start**: `npm start` — runs `dist/index.cjs`
+- **Development**: `npm run dev` — starts Express on port 5000, serves Vite frontend
+- **Production build**: `npm run build`
+- **Production start**: `npm start`
 - **DB schema push**: `npm run db:push`
+
+## Modules
+
+### Nurse-Onboard (AI-powered compliance & onboarding)
+- Full NMC PIN verification (`server/nmc-service.ts`)
+- DBS certificate checking (`server/dbs-service.ts`)
+- AI compliance checks (`server/compliance-check-ai.ts`, `server/audit-summary-ai.ts`)
+- Document AI analysis (`server/document-ai.ts`, `server/certificate-ai.ts`)
+- Reference AI (`server/reference-ai.ts`)
+- Health triage (`server/health-triage-ai.ts`)
+- Passport parsing (`server/passport-parser.ts`)
+- PDF generation (`server/pdf-generator.ts`)
+- SharePoint integration (`server/sharepoint.ts`, `server/sharepoint-helper.ts`)
+- Outlook email integration (`server/outlook.ts`)
+- Magic link portal for nurses (`server/routes/portal.ts`)
+- Referee form handling (`server/routes/referee.ts`)
+- Full admin candidate management (`server/routes/onboard.ts`)
+
+### Clinical-Skills-Arcade (Gamified competency assessments)
+- 40 pre-seeded clinical scenario modules (`server/arcade-seed.ts`, `server/arcade-seed-modules.ts`)
+- Scenario player with scoring (`server/arcade-scoring.ts`)
+- Nurse, trainer, and admin roles with separate views
+- Trainer remediation queue
+- Admin: module management, user management, CSV reports
+- Routes: `server/routes/skills-arcade.ts`
+
+### Nurse-Preboard (Pre-onboarding assessment)
+- AI-powered timed assessment with domain scoring
+- PDF report generation and email delivery
+- Routes: `server/routes/preboard.ts`
+
+## Frontend Pages
+
+### Core
+- `/` — Dashboard with stats, pipeline funnel, activity
+- `/candidates` — Candidate list (Nurse-Onboard)
+- `/candidates/:id` — Full candidate detail with AI tools
+- `/pipeline` — Kanban pipeline view
+- `/nurses` — Legacy nurse list
+- `/nurses/:id` — Legacy nurse detail
+
+### Portal (public)
+- `/portal/:token` — Portal hub (token-gated)
+- `/portal/page/:token` — Full nurse-facing onboarding portal
+- `/referee/:token` — Referee form
+
+### Preboard
+- `/preboard` — Admin preboard overview
+- `/preboard/assessment` — Nurse self-assessment form
+
+### Skills Arcade
+- `/arcade` — Nurse dashboard (module assignments)
+- `/arcade/scenario/:id` — Scenario player
+- `/arcade/walkthrough/:id` — Module walkthrough
+- `/arcade/trainer` — Trainer remediation queue
+- `/arcade/admin/modules` — Module management
+- `/arcade/admin/reports` — Reports + CSV export
+- `/arcade/admin/users` — User management
+
+### System
+- `/audit` — Audit trail (admin only)
+
+## Server Routes
+
+- `server/routes/admin.ts` — Legacy simple nurse CRUD
+- `server/routes/onboard.ts` — Full Nurse-Onboard admin (786 lines, all AI integrations)
+- `server/routes/portal.ts` — Nurse-facing portal (686 lines)
+- `server/routes/referee.ts` — Referee token form
+- `server/routes/preboard.ts` — Preboard assessment submission
+- `server/routes/skills-arcade.ts` — Arcade routes (862 lines, full arcade API)
+- `server/routes/dashboard.ts` — Dashboard stats
+- `server/routes/audit.ts` — Audit trail
+
+## Schema Compatibility Aliases
+
+The unified `shared/schema.ts` exports compatibility aliases so each app's original import names work:
+- `candidates` → `nurses` (Nurse-Onboard used "candidates")
+- `magicLinks` → `portalLinks` (Nurse-Onboard used "magicLinks")
+- `users` → `arcadeUsers`, `modules` → `arcadeModules` (Arcade naming)
+- `assessments` → `preboardAssessments` (Preboard naming)
+- All Insert types (`InsertCandidate`, `InsertMagicLink`, `InsertAuditLog`, etc.)
 
 ## Environment Variables
 
-- `DATABASE_URL` — PostgreSQL connection string (provided by Replit)
-- `SESSION_SECRET` — Required in production for session signing
-- `PORT` — Server port (default 5000)
+- `DATABASE_URL` — PostgreSQL connection string (Replit)
+- `SESSION_SECRET` — Session signing secret
+- `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` — For AI services
+- `ANTHROPIC_API_KEY` — For Anthropic AI services (compliance checks)
+- `REPORT_EMAIL` — Recipient for preboard assessment reports
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD` — Admin credentials (default: admin/admin)
+- `TEAM_USERNAME`, `TEAM_PASSWORD` — Team credentials
+- Microsoft Graph / SharePoint env vars for email + document integration
 
-## Database
+## Design System
 
-- PostgreSQL via Replit's built-in database
-- Schema managed with Drizzle Kit (`drizzle.config.ts` → `shared/schema.ts`)
-- Run `npm run db:push` to sync schema changes
+- **Colors**: Gold (#C8A96E) accent + deep navy dark theme / warm parchment light theme
+- **Fonts**: Fraunces (serif headings) + Be Vietnam Pro (sans body)
+- **Animations**: Staggered fade-in-up reveals, CSS transitions
 
 ## Deployment
 

@@ -5,6 +5,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { lazy, Suspense } from "react";
+
 import Dashboard from "@/pages/dashboard";
 import NursesPage from "@/pages/nurses";
 import NurseDetail from "@/pages/nurse-detail";
@@ -13,6 +15,33 @@ import AdminPreboard from "@/pages/preboard/admin-preboard";
 import PortalHub from "@/pages/portal/portal-hub";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+
+// Lazy-load heavier pages for better initial load
+const CandidateDetail = lazy(() => import("@/pages/candidate-detail"));
+const CandidatesPage = lazy(() => import("@/pages/candidates"));
+const PipelinePage = lazy(() => import("@/pages/pipeline"));
+const PortalPage = lazy(() => import("@/pages/portal"));
+const RefereeForm = lazy(() => import("@/pages/referee-form"));
+
+// Clinical Skills Arcade
+const ArcadeNurseDashboard = lazy(() => import("@/pages/arcade/nurse-dashboard"));
+const ArcadeScenarioPlayer = lazy(() => import("@/pages/arcade/scenario-player"));
+const ArcadeTrainerRemediation = lazy(() => import("@/pages/arcade/trainer-remediation"));
+const ArcadeWalkthrough = lazy(() => import("@/pages/arcade/walkthrough"));
+const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
+const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
+const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
+
+// Nurse Preboard
+const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
+
+function LoadingSpinner() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="h-8 w-8 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function AuthenticatedRouter() {
   const queryClient = useQueryClient();
@@ -28,35 +57,56 @@ function AuthenticatedRouter() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-2 border-[#C8A96E] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const isAuthenticated = authData?.authenticated;
 
   return (
-    <Switch>
-      {/* Portal routes - no auth required */}
-      <Route path="/portal/:token" component={PortalHub} />
+    <Suspense fallback={<LoadingSpinner />}>
+      <Switch>
+        {/* Public portal & referee routes - no auth required */}
+        <Route path="/portal/:token" component={PortalHub} />
+        <Route path="/portal/page/:token" component={PortalPage} />
+        <Route path="/referee/:token" component={RefereeForm} />
 
-      <Route>
-        {isAuthenticated ? (
-          <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/nurses" component={NursesPage} />
-            <Route path="/nurses/:id" component={NurseDetail} />
-            <Route path="/preboard" component={AdminPreboard} />
-            <Route path="/audit" component={AuditPage} />
-            <Route component={NotFound} />
-          </Switch>
-        ) : (
-          <LoginPage onLogin={handleLogin} />
-        )}
-      </Route>
-    </Switch>
+        <Route>
+          {isAuthenticated ? (
+            <Switch>
+              {/* Core dashboard */}
+              <Route path="/" component={Dashboard} />
+
+              {/* Nurse management */}
+              <Route path="/nurses" component={NursesPage} />
+              <Route path="/nurses/:id" component={NurseDetail} />
+              <Route path="/candidates" component={CandidatesPage} />
+              <Route path="/candidates/:id" component={CandidateDetail} />
+              <Route path="/pipeline" component={PipelinePage} />
+
+              {/* Pre-board & on-board */}
+              <Route path="/preboard" component={AdminPreboard} />
+              <Route path="/preboard/assessment" component={PreboardAssessment} />
+
+              {/* Clinical Skills Arcade */}
+              <Route path="/arcade" component={ArcadeNurseDashboard} />
+              <Route path="/arcade/scenario/:id" component={ArcadeScenarioPlayer} />
+              <Route path="/arcade/walkthrough/:id" component={ArcadeWalkthrough} />
+              <Route path="/arcade/trainer" component={ArcadeTrainerRemediation} />
+              <Route path="/arcade/admin/modules" component={ArcadeAdminModules} />
+              <Route path="/arcade/admin/reports" component={ArcadeAdminReports} />
+              <Route path="/arcade/admin/users" component={ArcadeAdminUsers} />
+
+              {/* Audit */}
+              <Route path="/audit" component={AuditPage} />
+
+              <Route component={NotFound} />
+            </Switch>
+          ) : (
+            <LoginPage onLogin={handleLogin} />
+          )}
+        </Route>
+      </Switch>
+    </Suspense>
   );
 }
 
