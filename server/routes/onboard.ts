@@ -67,28 +67,28 @@ export function registerAdminRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const candidate = await storage.createCandidate(parsed.data);
     await storage.createOnboardingState({
-      candidateId: candidate.id,
+      nurseId: candidate.id,
       currentStep: 1,
       stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending" },
     });
-    await storage.createAuditLog({ candidateId: candidate.id, action: "candidate_created", agentName: agentFor(req), detail: { name: candidate.fullName } });
+    await storage.createAuditLog({ nurseId: candidate.id, action: "candidate_created", agentName: agentFor(req), detail: { name: candidate.fullName } });
 
     let emailSent = false;
     if (candidate.email) {
       try {
         const token = crypto.randomBytes(32).toString("hex");
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        const link = await storage.createMagicLink({ candidateId: candidate.id, token, expiresAt });
+        const link = await storage.createMagicLink({ nurseId: candidate.id, token, expiresAt, module: "onboard" });
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
         await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
         emailSent = true;
-        await storage.createAuditLog({ candidateId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
-        await storage.createAuditLog({ candidateId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
       } catch (err: any) {
         console.error("Auto-invite email failed:", err?.message || err);
-        await storage.createAuditLog({ candidateId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });
       }
     }
 
@@ -112,7 +112,7 @@ export function registerAdminRoutes(app: Express) {
       }
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: candidate.id, action: "candidate_updated", agentName: agentFor(req), detail: req.body });
+    await storage.createAuditLog({ nurseId: candidate.id, action: "candidate_updated", agentName: agentFor(req), detail: req.body });
     res.json(candidate);
   });
 
@@ -122,7 +122,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/nmc-verification", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createNmcVerification(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -130,7 +130,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.nmc = result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "nmc_verification_created", agentName: agentFor(req), detail: { pin: result.pin, status: result.status } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "nmc_verification_created", agentName: agentFor(req), detail: { pin: result.pin, status: result.status } });
     res.status(201).json(result);
   });
 
@@ -177,7 +177,7 @@ export function registerAdminRoutes(app: Express) {
     }
 
     const nmcData = {
-      candidateId: param(req, "id"),
+      nurseId: param(req, "id"),
       pin: pin.trim().toUpperCase(),
       registeredName: registeredName || "",
       registrationStatus,
@@ -194,7 +194,7 @@ export function registerAdminRoutes(app: Express) {
 
     if (resolvedFilePath && uploadedFilename) {
       const nmcDoc = await storage.createDocument({
-        candidateId: param(req, "id"),
+        nurseId: param(req, "id"),
         type: "nmc_register_check",
         filename: uploadedFilename,
         originalFilename: originalFilename || "nmc-register-check.pdf",
@@ -203,8 +203,8 @@ export function registerAdminRoutes(app: Express) {
         mimeType: "application/pdf",
         uploadedBy: "admin",
       });
-      triggerSharePointUpload(nmcDoc.id, nmcDoc.candidateId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc');
-      triggerEmailNotification(nmcDoc.candidateId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc', 'admin', 'application/pdf');
+      triggerSharePointUpload(nmcDoc.id, nmcDoc.nurseId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc');
+      triggerEmailNotification(nmcDoc.nurseId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc', 'admin', 'application/pdf');
     }
 
     const state = await storage.getOnboardingState(param(req, "id"));
@@ -215,7 +215,7 @@ export function registerAdminRoutes(app: Express) {
     }
 
     await storage.createAuditLog({
-      candidateId: param(req, "id"),
+      nurseId: param(req, "id"),
       action: "nmc_verification_created",
       agentName: agentFor(req),
       detail: { pin: nmcData.pin, registrationStatus, registeredName: nmcData.registeredName, status: verificationStatus },
@@ -230,7 +230,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/dbs-verification", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createDbsVerification(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -238,7 +238,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.dbs = result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "dbs_verification_created", agentName: agentFor(req), detail: { certificateNumber: result.certificateNumber, status: result.status } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "dbs_verification_created", agentName: agentFor(req), detail: { certificateNumber: result.certificateNumber, status: result.status } });
     res.status(201).json(result);
   });
 
@@ -267,7 +267,7 @@ export function registerAdminRoutes(app: Express) {
       }
 
       const dbsData = {
-        candidateId: param(req, "id"),
+        nurseId: param(req, "id"),
         certificateNumber,
         issueDate: checkResult.printDate || null,
         certificateType: "Enhanced with Barred List",
@@ -286,7 +286,7 @@ export function registerAdminRoutes(app: Express) {
       }
 
       await storage.createAuditLog({
-        candidateId: param(req, "id"),
+        nurseId: param(req, "id"),
         action: "dbs_verification_created",
         agentName: agentFor(req),
         detail: {
@@ -335,7 +335,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/competency-declarations", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createCompetencyDeclaration(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -343,7 +343,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.competency = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "competency_declared", agentName: agentFor(req), detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "competency_declared", agentName: agentFor(req), detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
     res.status(201).json(result);
   });
 
@@ -359,7 +359,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/documents", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createDocument(data);
     if (data.category === "right_to_work") {
       const state = await storage.getOnboardingState(param(req, "id"));
@@ -369,10 +369,10 @@ export function registerAdminRoutes(app: Express) {
         await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
       }
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "document_uploaded", agentName: agentFor(req), detail: { type: result.type, filename: result.filename } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "document_uploaded", agentName: agentFor(req), detail: { type: result.type, filename: result.filename } });
     if (result.filePath) {
-      triggerSharePointUpload(result.id, result.candidateId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
-      triggerEmailNotification(result.candidateId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'admin', result.mimeType || undefined);
+      triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
+      triggerEmailNotification(result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'admin', result.mimeType || undefined);
     }
     res.status(201).json(result);
   });
@@ -430,7 +430,7 @@ export function registerAdminRoutes(app: Express) {
     const { emailSubject, emailBody, ...referenceData } = req.body;
     if (emailSubject && emailSubject.length > 500) return res.status(400).json({ message: "Subject too long" });
     if (emailBody && emailBody.length > 10000) return res.status(400).json({ message: "Email body too long" });
-    const data = { ...referenceData, candidateId: param(req, "id") };
+    const data = { ...referenceData, nurseId: param(req, "id") };
     const result = await storage.createReference(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -444,7 +444,7 @@ export function registerAdminRoutes(app: Express) {
       try {
         const refereeToken = crypto.randomBytes(32).toString("hex");
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await storage.createRefereeToken({ referenceId: result.id, candidateId: param(req, "id"), token: refereeToken, expiresAt });
+        await storage.createRefereeToken({ referenceId: result.id, nurseId: param(req, "id"), token: refereeToken, expiresAt });
 
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
@@ -457,14 +457,14 @@ export function registerAdminRoutes(app: Express) {
         emailSent = true;
 
         await storage.updateReference(result.id, { outcome: "sent", emailSentAt: new Date() } as any);
-        await storage.createAuditLog({ candidateId: param(req, "id"), action: "reference_email_sent", agentName: agentFor(req), detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName, expiresAt: expiresAt.toISOString() } });
+        await storage.createAuditLog({ nurseId: param(req, "id"), action: "reference_email_sent", agentName: agentFor(req), detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName, expiresAt: expiresAt.toISOString() } });
       } catch (err: any) {
         console.error("Failed to send reference request email:", err?.message || err);
-        await storage.createAuditLog({ candidateId: param(req, "id"), action: "reference_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
+        await storage.createAuditLog({ nurseId: param(req, "id"), action: "reference_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
       }
     }
 
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "reference_requested", agentName: agentFor(req), detail: { refereeName: result.refereeName, refereeEmail: result.refereeEmail, emailSent } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "reference_requested", agentName: agentFor(req), detail: { refereeName: result.refereeName, refereeEmail: result.refereeEmail, emailSent } });
     res.status(201).json({ ...result, emailSent });
   });
 
@@ -480,7 +480,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/mandatory-training", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createMandatoryTraining(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -488,13 +488,13 @@ export function registerAdminRoutes(app: Express) {
       statuses.training = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "training_recorded", agentName: agentFor(req), detail: { module: result.moduleName } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "training_recorded", agentName: agentFor(req), detail: { module: result.moduleName } });
     res.status(201).json(result);
   });
 
   app.post("/api/candidates/:id/training-cert-upload", uploadLimiter, upload.single("file"), async (req, res) => {
     try {
-      const candidateId = param(req, "id");
+      const nurseId = param(req, "id");
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       if (req.file.mimetype !== "application/pdf") return res.status(400).json({ message: "Only PDF files are accepted" });
 
@@ -502,7 +502,7 @@ export function registerAdminRoutes(app: Express) {
       const parseResult = await parseTrainingCertificate(buffer);
 
       const doc = await storage.createDocument({
-        candidateId,
+        nurseId,
         type: "Training Certificate Bundle",
         filename: req.file.filename,
         originalFilename: req.file.originalname,
@@ -512,17 +512,17 @@ export function registerAdminRoutes(app: Express) {
         category: "training_certificate",
         uploadedBy: "admin",
       });
-      triggerSharePointUpload(doc.id, candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
-      triggerEmailNotification(candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'admin', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
+      triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'admin', req.file.mimetype);
 
       const autoRecorded: string[] = [];
       for (const match of parseResult.matches) {
-        const existing = await storage.getMandatoryTraining(candidateId);
+        const existing = await storage.getMandatoryTraining(nurseId);
         const alreadyDone = existing.find((t: any) => t.moduleName === match.moduleName);
         if (!alreadyDone) {
           const mod = { name: match.moduleName, renewalFrequency: match.renewalFrequency };
           await storage.createMandatoryTraining({
-            candidateId,
+            nurseId,
             moduleName: mod.name,
             renewalFrequency: mod.renewalFrequency,
             completedDate: new Date().toISOString().split("T")[0],
@@ -538,7 +538,7 @@ export function registerAdminRoutes(app: Express) {
         }
       }
 
-      const state = await storage.getOnboardingState(candidateId);
+      const state = await storage.getOnboardingState(nurseId);
       if (state) {
         const statuses = (state.stepStatuses as Record<string, string>) || {};
         statuses.training = "in_progress";
@@ -546,7 +546,7 @@ export function registerAdminRoutes(app: Express) {
       }
 
       await storage.createAuditLog({
-        candidateId,
+        nurseId,
         action: "training_cert_uploaded",
         agentName: agentFor(req),
         detail: { matches: parseResult.matches.map(m => m.moduleName), autoRecorded, documentId: doc.id },
@@ -576,7 +576,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/health-declaration", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createHealthDeclaration(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -584,7 +584,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.health = result.completed ? "completed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "health_declaration_submitted", agentName: agentFor(req), detail: { ohReferral: result.ohReferralRequired } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "health_declaration_submitted", agentName: agentFor(req), detail: { ohReferral: result.ohReferralRequired } });
     res.status(201).json(result);
 
     triageHealthDeclarationInBackground(result);
@@ -596,7 +596,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/induction-policies", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createInductionPolicy(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -604,7 +604,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.induction = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "policy_acknowledged", agentName: agentFor(req), detail: { policy: result.policyName } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "policy_acknowledged", agentName: agentFor(req), detail: { policy: result.policyName } });
     res.status(201).json(result);
   });
 
@@ -620,7 +620,7 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.post("/api/candidates/:id/professional-indemnity", async (req, res) => {
-    const data = { ...req.body, candidateId: param(req, "id") };
+    const data = { ...req.body, nurseId: param(req, "id") };
     const result = await storage.createProfessionalIndemnity(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -628,7 +628,7 @@ export function registerAdminRoutes(app: Express) {
       statuses.indemnity = result.verified ? "completed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId: param(req, "id"), action: "indemnity_recorded", agentName: agentFor(req), detail: { provider: result.provider } });
+    await storage.createAuditLog({ nurseId: param(req, "id"), action: "indemnity_recorded", agentName: agentFor(req), detail: { provider: result.provider } });
     res.status(201).json(result);
   });
 
@@ -695,7 +695,7 @@ export function registerAdminRoutes(app: Express) {
     if (!candidate) return res.status(404).json({ message: "Candidate not found" });
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const link = await storage.createMagicLink({ candidateId: candidate.id, token, expiresAt });
+    const link = await storage.createMagicLink({ nurseId: candidate.id, token, expiresAt, module: "onboard" });
 
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const host = req.headers["host"] || "localhost:5000";
@@ -706,14 +706,14 @@ export function registerAdminRoutes(app: Express) {
       try {
         await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
         emailSent = true;
-        await storage.createAuditLog({ candidateId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
       } catch (err: any) {
         console.error("Failed to send portal invite email:", err?.message || err);
-        await storage.createAuditLog({ candidateId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });
       }
     }
 
-    await storage.createAuditLog({ candidateId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent } });
+    await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent } });
     res.status(201).json({ token: link.token, expiresAt: link.expiresAt, url: `/portal/${link.token}`, emailSent });
   });
 
@@ -765,13 +765,13 @@ export function registerAdminRoutes(app: Express) {
       if (!isComplianceCheckAvailable()) {
         return res.status(503).json({ error: "AI compliance check is not configured" });
       }
-      const candidateId = param(req, "id");
-      const candidate = await storage.getCandidate(candidateId);
+      const nurseIdVal = param(req, "id");
+      const candidate = await storage.getCandidate(nurseIdVal);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
 
-      const result = await runComplianceCheck(candidateId);
+      const result = await runComplianceCheck(nurseIdVal);
       await storage.createAuditLog({
-        candidateId,
+        nurseId: nurseIdVal,
         action: "compliance_check_generated",
         agentName: agentFor(req),
         detail: { generatedAt: new Date().toISOString() },

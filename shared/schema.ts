@@ -508,6 +508,7 @@ export type Module = ArcadeModule;
 export const candidates = nurses;
 export type Candidate = Nurse;
 export type InsertCandidate = InsertNurse;
+export const insertCandidateSchema = insertNurseSchema;
 
 // The Nurse-Onboard app used "magicLinks"; monorepo uses "portalLinks"
 export const magicLinks = portalLinks;

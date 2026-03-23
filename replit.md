@@ -8,7 +8,8 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 
 - **Frontend**: React 18 + Vite, Tailwind CSS + Radix UI components, `client/`
 - **Backend**: Express 5 (Node.js), `server/`
-- **Shared schema**: Drizzle ORM + unified types, `shared/schema.ts`
+- **Shared schema**: Drizzle ORM + unified types, `shared/schema.ts` (uses `nurseId` throughout; `candidates`/`magicLinks` are aliases for `nurses`/`portalLinks`)
+- **Naming convention**: Schema uses `nurseId` for FK columns. Storage/route code uses `nurseId` consistently. Legacy `candidateId` naming was fully migrated.
 - **Build System**: `npm` with `tsx` (dev) and `esbuild` (production)
 
 ## Key Technologies

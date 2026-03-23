@@ -86,24 +86,24 @@ export function registerPortalRoutes(app: Express) {
     const link = await storage.getMagicLinkByToken(req.params.token);
     if (!link) return res.status(404).json({ message: "Invalid portal link" });
     if (new Date() > link.expiresAt) return res.status(410).json({ message: "Portal link has expired" });
-    const candidate = await storage.getCandidate(link.candidateId);
+    const candidate = await storage.getCandidate(link.nurseId);
     if (!candidate) return res.status(404).json({ message: "Candidate not found" });
     if (!link.usedAt) {
       await storage.markMagicLinkUsed(link.id);
-      await storage.createAuditLog({ candidateId: candidate.id, action: "portal_accessed", agentName: "nurse_portal", detail: {} });
+      await storage.createAuditLog({ nurseId: candidate.id, action: "portal_accessed", agentName: "nurse_portal", detail: {} });
     }
     res.json({ candidate, token: link.token });
   });
 
   app.get("/api/portal/:token/candidate", validatePortalToken, async (req, res) => {
-    const candidate = await storage.getCandidate((req as any).candidateId);
+    const candidate = await storage.getCandidate((req as any).nurseId);
     res.json(candidate);
   });
 
   app.patch("/api/portal/:token/candidate", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const candidate = await storage.updateCandidate(candidateId, req.body);
-    const state = await storage.getOnboardingState(candidateId);
+    const nurseId = (req as any).nurseId;
+    const candidate = await storage.updateCandidate(nurseId, req.body);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       if (req.body.fullName || req.body.email || req.body.phone || req.body.address) statuses.identity = "in_progress";
@@ -112,74 +112,74 @@ export function registerPortalRoutes(app: Express) {
       if (req.body.currentEmployer || req.body.yearsQualified || req.body.specialisms) statuses.profile = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_candidate_updated", agentName: "nurse_portal", detail: { fields: Object.keys(req.body) } });
+    await storage.createAuditLog({ nurseId, action: "portal_candidate_updated", agentName: "nurse_portal", detail: { fields: Object.keys(req.body) } });
     res.json(candidate);
   });
 
   app.get("/api/portal/:token/onboarding-state", validatePortalToken, async (req, res) => {
-    const state = await storage.getOnboardingState((req as any).candidateId);
+    const state = await storage.getOnboardingState((req as any).nurseId);
     res.json(state || null);
   });
 
   app.get("/api/portal/:token/employment-history", validatePortalToken, async (req, res) => {
-    const result = await storage.getEmploymentHistory((req as any).candidateId);
+    const result = await storage.getEmploymentHistory((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/employment-history", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
+    const nurseId = (req as any).nurseId;
     const { employer, jobTitle, startDate } = req.body;
     if (!employer || !jobTitle || !startDate) {
       return res.status(400).json({ message: "Employer, job title, and start date are required" });
     }
-    const data = { ...req.body, candidateId };
+    const data = { ...req.body, nurseId };
     const result = await storage.createEmploymentHistory(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.profile = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_employment_added", agentName: "nurse_portal", detail: { employer: result.employer, jobTitle: result.jobTitle } });
+    await storage.createAuditLog({ nurseId, action: "portal_employment_added", agentName: "nurse_portal", detail: { employer: result.employer, jobTitle: result.jobTitle } });
     res.status(201).json(result);
   });
 
   app.delete("/api/portal/:token/employment-history/:id", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const deleted = await storage.deleteEmploymentHistory(req.params.id, candidateId);
+    const nurseId = (req as any).nurseId;
+    const deleted = await storage.deleteEmploymentHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
-    await storage.createAuditLog({ candidateId, action: "portal_employment_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
+    await storage.createAuditLog({ nurseId, action: "portal_employment_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
     res.json({ success: true });
   });
 
   app.get("/api/portal/:token/education-history", validatePortalToken, async (req, res) => {
-    const result = await storage.getEducationHistory((req as any).candidateId);
+    const result = await storage.getEducationHistory((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/education-history", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
+    const nurseId = (req as any).nurseId;
     const { institution, qualification } = req.body;
     if (!institution || !qualification) {
       return res.status(400).json({ message: "Institution and qualification are required" });
     }
-    const data = { ...req.body, candidateId };
+    const data = { ...req.body, nurseId };
     const result = await storage.createEducationHistory(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.profile = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_education_added", agentName: "nurse_portal", detail: { institution: result.institution, qualification: result.qualification } });
+    await storage.createAuditLog({ nurseId, action: "portal_education_added", agentName: "nurse_portal", detail: { institution: result.institution, qualification: result.qualification } });
     res.status(201).json(result);
   });
 
   app.delete("/api/portal/:token/education-history/:id", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const deleted = await storage.deleteEducationHistory(req.params.id, candidateId);
+    const nurseId = (req as any).nurseId;
+    const deleted = await storage.deleteEducationHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
-    await storage.createAuditLog({ candidateId, action: "portal_education_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
+    await storage.createAuditLog({ nurseId, action: "portal_education_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
     res.json({ success: true });
   });
 
@@ -195,15 +195,15 @@ export function registerPortalRoutes(app: Express) {
   });
 
   app.get("/api/portal/:token/documents", validatePortalToken, async (req, res) => {
-    const docs = await storage.getDocuments((req as any).candidateId);
+    const docs = await storage.getDocuments((req as any).nurseId);
     res.json(docs);
   });
 
   app.post("/api/portal/:token/documents", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId, uploadedBy: "nurse" };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId, uploadedBy: "nurse" };
     const result = await storage.createDocument(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       if (data.category === "right_to_work") statuses.right_to_work = "in_progress";
@@ -215,31 +215,31 @@ export function registerPortalRoutes(app: Express) {
       if (data.category === "training_certificate") statuses.training = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: result.type, category: data.category, filename: result.filename } });
+    await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: result.type, category: data.category, filename: result.filename } });
     if (result.filePath) {
-      triggerSharePointUpload(result.id, result.candidateId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
-      triggerEmailNotification(result.candidateId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'nurse', result.mimeType || undefined);
+      triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
+      triggerEmailNotification(result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'nurse', result.mimeType || undefined);
       triggerDocumentAnalysis(result.id, result.filePath, result.mimeType || '', data.category || '', result.type);
     }
     res.status(201).json(result);
   });
 
   app.get("/api/portal/:token/competency-declarations", validatePortalToken, async (req, res) => {
-    const result = await storage.getCompetencyDeclarations((req as any).candidateId);
+    const result = await storage.getCompetencyDeclarations((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/competency-declarations", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createCompetencyDeclaration(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.competency = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_competency_declared", agentName: "nurse_portal", detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
+    await storage.createAuditLog({ nurseId, action: "portal_competency_declared", agentName: "nurse_portal", detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
     res.status(201).json(result);
   });
 
@@ -261,27 +261,27 @@ export function registerPortalRoutes(app: Express) {
   });
 
   app.get("/api/portal/:token/mandatory-training", validatePortalToken, async (req, res) => {
-    const result = await storage.getMandatoryTraining((req as any).candidateId);
+    const result = await storage.getMandatoryTraining((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/mandatory-training", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createMandatoryTraining(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.training = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_training_recorded", agentName: "nurse_portal", detail: { module: result.moduleName, certificateDocumentId: result.certificateDocumentId } });
+    await storage.createAuditLog({ nurseId, action: "portal_training_recorded", agentName: "nurse_portal", detail: { module: result.moduleName, certificateDocumentId: result.certificateDocumentId } });
     res.status(201).json(result);
   });
 
   app.post("/api/portal/:token/training-cert-upload", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
-      const candidateId = (req as any).candidateId;
+      const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       if (req.file.mimetype !== "application/pdf") return res.status(400).json({ message: "Only PDF files are accepted" });
 
@@ -289,7 +289,7 @@ export function registerPortalRoutes(app: Express) {
       const parseResult = await parseTrainingCertificate(buffer);
 
       const doc = await storage.createDocument({
-        candidateId,
+        nurseId,
         type: "Training Certificate Bundle",
         filename: req.file.filename,
         originalFilename: req.file.originalname,
@@ -299,17 +299,17 @@ export function registerPortalRoutes(app: Express) {
         category: "training_certificate",
         uploadedBy: "nurse",
       });
-      triggerSharePointUpload(doc.id, candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
-      triggerEmailNotification(candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'nurse', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
+      triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'nurse', req.file.mimetype);
 
       const autoRecorded: string[] = [];
       for (const match of parseResult.matches) {
-        const existing = await storage.getMandatoryTraining(candidateId);
+        const existing = await storage.getMandatoryTraining(nurseId);
         const alreadyDone = existing.find((t: any) => t.moduleName === match.moduleName);
         if (!alreadyDone) {
           const mod = { name: match.moduleName, renewalFrequency: match.renewalFrequency };
           await storage.createMandatoryTraining({
-            candidateId,
+            nurseId,
             moduleName: mod.name,
             renewalFrequency: mod.renewalFrequency,
             completedDate: new Date().toISOString().split("T")[0],
@@ -325,7 +325,7 @@ export function registerPortalRoutes(app: Express) {
         }
       }
 
-      const state = await storage.getOnboardingState(candidateId);
+      const state = await storage.getOnboardingState(nurseId);
       if (state) {
         const statuses = (state.stepStatuses as Record<string, string>) || {};
         statuses.training = "in_progress";
@@ -333,7 +333,7 @@ export function registerPortalRoutes(app: Express) {
       }
 
       await storage.createAuditLog({
-        candidateId,
+        nurseId,
         action: "portal_training_cert_uploaded",
         agentName: "nurse_portal",
         detail: { matches: parseResult.matches.map(m => m.moduleName), autoRecorded, documentId: doc.id },
@@ -353,7 +353,7 @@ export function registerPortalRoutes(app: Express) {
 
   app.post("/api/portal/:token/training-cert-ai", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
-      const candidateId = (req as any).candidateId;
+      const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
       const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -362,7 +362,7 @@ export function registerPortalRoutes(app: Express) {
       }
 
       const doc = await storage.createDocument({
-        candidateId,
+        nurseId,
         type: "Training Certificate",
         filename: req.file.filename,
         originalFilename: req.file.originalname,
@@ -372,8 +372,8 @@ export function registerPortalRoutes(app: Express) {
         category: "training_certificate",
         uploadedBy: "nurse",
       });
-      triggerSharePointUpload(doc.id, candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
-      triggerEmailNotification(candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'nurse', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
+      triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'nurse', req.file.mimetype);
 
       const aiResult = await analyzeCertificateWithAI(req.file.path, req.file.mimetype);
 
@@ -386,7 +386,7 @@ export function registerPortalRoutes(app: Express) {
 
       for (const mod of aiResult.modules) {
         if (!mod.matchedModule) continue;
-        const existing = await storage.getMandatoryTraining(candidateId);
+        const existing = await storage.getMandatoryTraining(nurseId);
         const alreadyDone = existing.find((t: any) => t.moduleName === mod.matchedModule);
         if (alreadyDone) continue;
 
@@ -404,7 +404,7 @@ export function registerPortalRoutes(app: Express) {
         }
 
         await storage.createMandatoryTraining({
-          candidateId,
+          nurseId,
           moduleName: mod.matchedModule,
           renewalFrequency: moduleDef.renewalFrequency,
           completedDate,
@@ -417,7 +417,7 @@ export function registerPortalRoutes(app: Express) {
         autoRecorded.push(mod.matchedModule);
       }
 
-      const state = await storage.getOnboardingState(candidateId);
+      const state = await storage.getOnboardingState(nurseId);
       if (state) {
         const statuses = (state.stepStatuses as Record<string, string>) || {};
         statuses.training = "in_progress";
@@ -425,7 +425,7 @@ export function registerPortalRoutes(app: Express) {
       }
 
       await storage.createAuditLog({
-        candidateId,
+        nurseId,
         action: "training_cert_ai_analyzed",
         agentName: "certificate_ai",
         detail: {
@@ -450,7 +450,7 @@ export function registerPortalRoutes(app: Express) {
 
   app.post("/api/portal/:token/nmc-parse-pdf", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
-      const candidateId = (req as any).candidateId;
+      const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       if (req.file.mimetype !== "application/pdf") return res.status(400).json({ message: "Only PDF files are accepted" });
 
@@ -458,7 +458,7 @@ export function registerPortalRoutes(app: Express) {
       const result = await parseNmcPdfWithFallback(buffer);
 
       const doc = await storage.createDocument({
-        candidateId,
+        nurseId,
         type: "NMC Register PDF",
         filename: req.file.filename,
         originalFilename: req.file.originalname,
@@ -468,11 +468,11 @@ export function registerPortalRoutes(app: Express) {
         category: "nmc",
         uploadedBy: "nurse",
       });
-      triggerSharePointUpload(doc.id, candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc');
-      triggerEmailNotification(candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc', 'nurse', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc');
+      triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc', 'nurse', req.file.mimetype);
 
       await storage.createAuditLog({
-        candidateId,
+        nurseId,
         action: "portal_nmc_pdf_parsed",
         agentName: "nurse_portal",
         detail: { registeredName: result.registeredName, status: result.registrationStatus, extractionMethod: result.extractionMethod },
@@ -496,7 +496,7 @@ export function registerPortalRoutes(app: Express) {
 
   app.post("/api/portal/:token/passport-parse", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
-      const candidateId = (req as any).candidateId;
+      const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
       if (!allowedTypes.includes(req.file.mimetype)) {
@@ -506,7 +506,7 @@ export function registerPortalRoutes(app: Express) {
       const result = await parsePassportImage(req.file.path);
 
       const doc = await storage.createDocument({
-        candidateId,
+        nurseId,
         type: "Passport",
         filename: req.file.filename,
         originalFilename: req.file.originalname,
@@ -516,15 +516,15 @@ export function registerPortalRoutes(app: Express) {
         category: "identity",
         uploadedBy: "nurse",
       });
-      triggerSharePointUpload(doc.id, candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'identity');
-      triggerEmailNotification(candidateId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'identity', 'nurse', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'identity');
+      triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'identity', 'nurse', req.file.mimetype);
 
       if (result.passportNumber) {
-        await storage.updateCandidate(candidateId, { passportNumber: result.passportNumber });
+        await storage.updateCandidate(nurseId, { passportNumber: result.passportNumber });
       }
 
       await storage.createAuditLog({
-        candidateId,
+        nurseId,
         action: "passport_uploaded",
         agentName: "nurse_portal",
         detail: {
@@ -550,36 +550,36 @@ export function registerPortalRoutes(app: Express) {
   });
 
   app.get("/api/portal/:token/health-declaration", validatePortalToken, async (req, res) => {
-    const result = await storage.getHealthDeclaration((req as any).candidateId);
+    const result = await storage.getHealthDeclaration((req as any).nurseId);
     res.json(result || null);
   });
 
   app.post("/api/portal/:token/health-declaration", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createHealthDeclaration(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.health = result.completed ? "completed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_health_declared", agentName: "nurse_portal", detail: { ohReferral: result.ohReferralRequired } });
+    await storage.createAuditLog({ nurseId, action: "portal_health_declared", agentName: "nurse_portal", detail: { ohReferral: result.ohReferralRequired } });
     res.status(201).json(result);
 
     triageHealthDeclarationInBackground(result);
   });
 
   app.get("/api/portal/:token/references", validatePortalToken, async (req, res) => {
-    const result = await storage.getReferences((req as any).candidateId);
+    const result = await storage.getReferences((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/references", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createReference(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.references = "in_progress";
@@ -591,81 +591,81 @@ export function registerPortalRoutes(app: Express) {
       try {
         const refereeToken = crypto.randomBytes(32).toString("hex");
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await storage.createRefereeToken({ referenceId: result.id, candidateId, token: refereeToken, expiresAt });
+        await storage.createRefereeToken({ referenceId: result.id, nurseId, token: refereeToken, expiresAt });
 
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const refereeFormUrl = `${protocol}://${host}/referee/${refereeToken}`;
 
-        const candidate = await storage.getCandidate(candidateId);
+        const candidate = await storage.getCandidate(nurseId);
         const candidateName = candidate?.fullName || "the candidate";
 
         await sendReferenceRequestEmail(result.refereeEmail, result.refereeName, candidateName, refereeFormUrl, expiresAt);
         emailSent = true;
 
         await storage.updateReference(result.id, { outcome: "sent", emailSentAt: new Date() } as any);
-        await storage.createAuditLog({ candidateId, action: "reference_email_sent", agentName: "nurse_portal", detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName } });
+        await storage.createAuditLog({ nurseId, action: "reference_email_sent", agentName: "nurse_portal", detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName } });
       } catch (err: any) {
         console.error("Failed to send reference request email:", err?.message || err);
-        await storage.createAuditLog({ candidateId, action: "reference_email_failed", agentName: "nurse_portal", detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
+        await storage.createAuditLog({ nurseId, action: "reference_email_failed", agentName: "nurse_portal", detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
       }
     }
 
-    await storage.createAuditLog({ candidateId, action: "portal_reference_added", agentName: "nurse_portal", detail: { refereeName: result.refereeName, emailSent } });
+    await storage.createAuditLog({ nurseId, action: "portal_reference_added", agentName: "nurse_portal", detail: { refereeName: result.refereeName, emailSent } });
     res.status(201).json({ ...result, emailSent });
   });
 
   app.get("/api/portal/:token/induction-policies", validatePortalToken, async (req, res) => {
-    const result = await storage.getInductionPolicies((req as any).candidateId);
+    const result = await storage.getInductionPolicies((req as any).nurseId);
     res.json(result);
   });
 
   app.post("/api/portal/:token/induction-policies", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createInductionPolicy(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.induction = "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_policy_acknowledged", agentName: "nurse_portal", detail: { policy: result.policyName } });
+    await storage.createAuditLog({ nurseId, action: "portal_policy_acknowledged", agentName: "nurse_portal", detail: { policy: result.policyName } });
     res.status(201).json(result);
   });
 
   app.get("/api/portal/:token/professional-indemnity", validatePortalToken, async (req, res) => {
-    const result = await storage.getProfessionalIndemnity((req as any).candidateId);
+    const result = await storage.getProfessionalIndemnity((req as any).nurseId);
     res.json(result || null);
   });
 
   app.post("/api/portal/:token/professional-indemnity", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
-    const data = { ...req.body, candidateId };
+    const nurseId = (req as any).nurseId;
+    const data = { ...req.body, nurseId };
     const result = await storage.createProfessionalIndemnity(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.indemnity = result.verified ? "completed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_indemnity_recorded", agentName: "nurse_portal", detail: { provider: result.provider } });
+    await storage.createAuditLog({ nurseId, action: "portal_indemnity_recorded", agentName: "nurse_portal", detail: { provider: result.provider } });
     res.status(201).json(result);
   });
 
   app.get("/api/portal/:token/dbs-verification", validatePortalToken, async (req, res) => {
-    const result = await storage.getDbsVerification((req as any).candidateId);
+    const result = await storage.getDbsVerification((req as any).nurseId);
     res.json(result || null);
   });
 
   app.post("/api/portal/:token/dbs-verification", validatePortalToken, async (req, res) => {
-    const candidateId = (req as any).candidateId;
+    const nurseId = (req as any).nurseId;
     const { certificateNumber, issueDate, certificateType, updateServiceSubscribed } = req.body;
     if (!certificateNumber) {
       return res.status(400).json({ message: "certificateNumber is required" });
     }
     const data = {
-      candidateId,
+      nurseId,
       certificateNumber,
       issueDate: issueDate || null,
       certificateType: certificateType || null,
@@ -673,13 +673,13 @@ export function registerPortalRoutes(app: Express) {
       status: "pending" as const,
     };
     const result = await storage.createDbsVerification(data);
-    const state = await storage.getOnboardingState(candidateId);
+    const state = await storage.getOnboardingState(nurseId);
     if (state) {
       const statuses = (state.stepStatuses as Record<string, string>) || {};
       statuses.dbs = result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ candidateId, action: "portal_dbs_recorded", agentName: "nurse_portal", detail: { certificateNumber: result.certificateNumber } });
+    await storage.createAuditLog({ nurseId, action: "portal_dbs_recorded", agentName: "nurse_portal", detail: { certificateNumber: result.certificateNumber } });
     res.status(201).json(result);
   });
 }

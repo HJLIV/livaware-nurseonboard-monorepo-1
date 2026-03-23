@@ -17,7 +17,7 @@ export function registerRefereeRoutes(app: Express) {
       const reference = await storage.getReference(refereeTokenRecord.referenceId);
       if (!reference) return res.status(404).json({ message: "Reference not found" });
 
-      const candidate = await storage.getCandidate(refereeTokenRecord.candidateId);
+      const candidate = await storage.getCandidate(refereeTokenRecord.nurseId);
       if (!candidate) return res.status(404).json({ message: "Candidate not found" });
 
       res.json({
@@ -63,7 +63,7 @@ export function registerRefereeRoutes(app: Express) {
       await storage.markRefereeTokenCompleted(refereeTokenRecord.id);
 
       await storage.createAuditLog({
-        candidateId: refereeTokenRecord.candidateId,
+        nurseId: refereeTokenRecord.nurseId,
         action: "reference_form_submitted",
         agentName: "referee",
         detail: { referenceId: refereeTokenRecord.referenceId, redFlagTriggered },
