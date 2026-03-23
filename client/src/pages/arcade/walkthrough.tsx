@@ -47,8 +47,9 @@ export default function WalkthroughPage() {
             <Shield className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-walkthrough-title">Welcome to Skills Arcade</h1>
-            <p className="text-muted-foreground">Your guide to clinical competency assessment</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Getting Started</p>
+            <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-walkthrough-title">Welcome to Skills Arcade</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Your guide to clinical competency assessment</p>
           </div>
         </div>
       </div>

@@ -441,7 +441,8 @@ export default function AdminUsers() {
       <InviteNurseDialog open={showInviteDialog} onOpenChange={setShowInviteDialog} />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-admin-users-title">Users</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+          <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-admin-users-title">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">View user details and training progress</p>
         </div>
         <Button onClick={() => setShowInviteDialog(true)} data-testid="button-invite-nurse">
@@ -471,7 +472,7 @@ export default function AdminUsers() {
             <Card key={role}>
               <CardContent className="p-4 text-center">
                 <Icon className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-                <p className="text-2xl font-bold">{total}</p>
+                <p className="font-serif text-2xl font-light">{total}</p>
                 <p className="text-xs text-muted-foreground">{rc.label}s</p>
               </CardContent>
             </Card>

@@ -389,7 +389,8 @@ export default function TrainerRemediation() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-remediation-title">Remediation Queue</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+        <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-remediation-title">Remediation Queue</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Nurses requiring face-to-face training and sign-off
         </p>
@@ -399,13 +400,13 @@ export default function TrainerRemediation() {
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground font-medium">Open Cases</p>
-            <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400" data-testid="text-open-cases">{openCases.length}</p>
+            <p className="font-serif text-2xl font-light mt-1 text-amber-600 dark:text-amber-400" data-testid="text-open-cases">{openCases.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground font-medium">Completed</p>
-            <p className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400" data-testid="text-completed-cases">{completedCases.length}</p>
+            <p className="font-serif text-2xl font-light mt-1 text-emerald-600 dark:text-emerald-400" data-testid="text-completed-cases">{completedCases.length}</p>
           </CardContent>
         </Card>
       </div>

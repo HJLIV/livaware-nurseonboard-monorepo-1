@@ -43,7 +43,8 @@ export default function AdminReports() {
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-reports-title">Reports & Analytics</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+          <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-reports-title">Reports & Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1">Competency assessment overview</p>
         </div>
         <Button variant="outline" onClick={handleExport} data-testid="button-export-csv">
@@ -55,28 +56,28 @@ export default function AdminReports() {
         <Card>
           <CardContent className="p-4">
             <BarChart3 className="w-4 h-4 text-muted-foreground mb-1" />
-            <p className="text-2xl font-bold" data-testid="text-total-attempts">{data?.totalAttempts ?? 0}</p>
+            <p className="font-serif text-2xl font-light" data-testid="text-total-attempts">{data?.totalAttempts ?? 0}</p>
             <p className="text-xs text-muted-foreground">Total Attempts</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" />
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="text-pass-rate">{data?.passRate ?? 0}%</p>
+            <p className="font-serif text-2xl font-light text-emerald-600 dark:text-emerald-400" data-testid="text-pass-rate">{data?.passRate ?? 0}%</p>
             <p className="text-xs text-muted-foreground">Pass Rate</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <Users className="w-4 h-4 text-primary mb-1" />
-            <p className="text-2xl font-bold" data-testid="text-avg-attempts">{data?.avgAttemptsToPass?.toFixed(1) ?? "—"}</p>
+            <p className="font-serif text-2xl font-light" data-testid="text-avg-attempts">{data?.avgAttemptsToPass?.toFixed(1) ?? "—"}</p>
             <p className="text-xs text-muted-foreground">Avg Attempts to Pass</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <AlertTriangle className="w-4 h-4 text-amber-500 mb-1" />
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-locked">{data?.lockedCount ?? 0}</p>
+            <p className="font-serif text-2xl font-light text-amber-600 dark:text-amber-400" data-testid="text-locked">{data?.lockedCount ?? 0}</p>
             <p className="text-xs text-muted-foreground">Locked Modules</p>
           </CardContent>
         </Card>

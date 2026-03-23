@@ -1,30 +1,31 @@
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Home } from "lucide-react";
+import { Home, ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-4xl font-bold text-muted-foreground">
-            404
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-lg text-muted-foreground">Page Not Found</p>
-          <p className="text-sm text-muted-foreground">
-            The page you are looking for does not exist or has been moved.
-          </p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      <div className="text-center animate-fade-in-up max-w-md">
+        <p className="font-serif text-8xl font-light text-primary/30 mb-4">404</p>
+        <h1 className="font-serif text-2xl font-light tracking-tight text-foreground mb-2">
+          Page not found
+        </h1>
+        <p className="text-sm text-muted-foreground mb-8 max-w-xs mx-auto">
+          The page you are looking for does not exist or has been moved.
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="outline" onClick={() => window.history.back()} className="gap-2 font-semibold">
+            <ArrowLeft className="h-4 w-4" />
+            Go Back
+          </Button>
           <Link href="/">
-            <Button className="mt-4">
-              <Home className="mr-2 h-4 w-4" />
-              Back to Dashboard
+            <Button className="gap-2 font-semibold">
+              <Home className="h-4 w-4" />
+              Dashboard
             </Button>
           </Link>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

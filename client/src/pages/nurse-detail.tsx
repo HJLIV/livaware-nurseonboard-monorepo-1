@@ -517,13 +517,14 @@ export default function NurseDetail() {
             </Button>
           </Link>
           <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">Nurse Profile</p>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="font-serif text-2xl font-light tracking-tight">
                 {nurse.firstName} {nurse.lastName}
               </h1>
               <StatusBadge status={nurse.currentStage} />
             </div>
-            <p className="text-muted-foreground">{nurse.email}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{nurse.email}</p>
           </div>
         </div>
 

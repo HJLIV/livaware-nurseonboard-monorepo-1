@@ -125,7 +125,11 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 
 - **Colors**: Gold (#C8A96E) accent + deep navy dark theme / warm parchment light theme
 - **Fonts**: Fraunces (serif headings) + Be Vietnam Pro (sans body)
-- **Animations**: Staggered fade-in-up reveals, CSS transitions
+- **Page header pattern**: `text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60` eyebrow + `font-serif text-2xl/3xl font-light tracking-tight` heading — consistent across all pages
+- **Stat numbers**: Use `font-serif text-2xl font-light` (not bold) for elegant data display
+- **Animations**: Staggered fade-in-up reveals with `animate-delay-*` utility classes; `prefers-reduced-motion` fully supported
+- **Auth hook**: `client/src/lib/auth.ts` exports `useAuth()` for arcade nurse authentication
+- **Shared components**: `client/src/components/shared/step-progress.tsx` (pipeline stepper), `status-badge.tsx` (status pills)
 
 ## Deployment
 

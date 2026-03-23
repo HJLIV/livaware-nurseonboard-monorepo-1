@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,50 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import {
-  BookOpen,
-  CheckCircle2,
-  XCircle,
-  Lock,
-  Clock,
-  ArrowRight,
-  AlertTriangle,
-  Syringe,
-  Heart,
-  Droplets,
-  Wrench,
-  Stethoscope,
-  Activity,
-  Search,
-  ShieldAlert,
-  Info,
-  CircleDot,
-  Pill,
-  ClipboardList,
-  Timer,
-  Wind,
-  CloudFog,
-  BarChart3,
-  Thermometer,
-  Settings,
-  ShieldCheck,
-  FileText,
-  Scan,
-  Layers,
-  Scissors,
-  Gauge,
-  Footprints,
-  HeartHandshake,
-  MonitorCheck,
-  FileCheck,
-  Utensils,
-  Scale,
-  GlassWater,
-  PersonStanding,
-  Brain,
-  Shield,
-  Circle,
-  AlertCircle,
-  GraduationCap,
+  BookOpen, CheckCircle2, XCircle, Lock, Clock, ArrowRight, AlertTriangle,
+  Syringe, Heart, Droplets, Wrench, Stethoscope, Activity, Search, ShieldAlert,
+  Info, CircleDot, Pill, ClipboardList, Timer, Wind, CloudFog, BarChart3,
+  Thermometer, Settings, ShieldCheck, FileText, Scan, Layers, Scissors, Gauge,
+  Footprints, HeartHandshake, MonitorCheck, FileCheck, Utensils, Scale,
+  GlassWater, PersonStanding, Brain, Shield, Circle, AlertCircle, GraduationCap,
+  Trophy, Target,
 } from "lucide-react";
 
 const iconMap: Record<string, any> = {
@@ -65,12 +28,12 @@ const iconMap: Record<string, any> = {
   AlertCircle, GraduationCap,
 };
 
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  not_started: { label: "Not Started", color: "bg-muted text-muted-foreground", icon: CircleDot },
-  in_progress: { label: "In Progress", color: "bg-primary/10 text-primary", icon: BookOpen },
-  passed: { label: "Passed", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", icon: CheckCircle2 },
-  failed: { label: "Failed", color: "bg-destructive/10 text-destructive", icon: XCircle },
-  locked: { label: "Locked", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400", icon: Lock },
+const statusConfig: Record<string, { label: string; color: string; icon: any; dot: string }> = {
+  not_started: { label: "Not Started", color: "bg-muted text-muted-foreground", icon: CircleDot, dot: "bg-muted-foreground" },
+  in_progress: { label: "In Progress", color: "bg-primary/10 text-primary", icon: BookOpen, dot: "bg-primary" },
+  passed: { label: "Passed", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", icon: CheckCircle2, dot: "bg-emerald-400" },
+  failed: { label: "Failed", color: "bg-destructive/10 text-destructive", icon: XCircle, dot: "bg-destructive" },
+  locked: { label: "Locked", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400", icon: Lock, dot: "bg-amber-400" },
 };
 
 interface AssignmentItem {
@@ -90,23 +53,23 @@ interface AssignmentItem {
 
 interface DashboardData {
   assignments: AssignmentItem[];
-  stats: {
-    totalAssigned: number;
-    completed: number;
-    inProgress: number;
-    locked: number;
-  };
+  stats: { totalAssigned: number; completed: number; inProgress: number; locked: number };
 }
 
 type FilterCategory = "all" | "due_soon" | "locked" | "completed";
+
+const statCards = [
+  { key: "totalAssigned" as const, label: "Assigned", icon: Target, gradient: "from-blue-500/8", ring: "ring-blue-500/20", iconBg: "bg-blue-500/15", iconColor: "text-blue-400" },
+  { key: "completed" as const, label: "Completed", icon: Trophy, gradient: "from-emerald-500/8", ring: "ring-emerald-500/20", iconBg: "bg-emerald-500/15", iconColor: "text-emerald-400" },
+  { key: "inProgress" as const, label: "In Progress", icon: BookOpen, gradient: "from-primary/8", ring: "ring-primary/20", iconBg: "bg-primary/12", iconColor: "text-primary" },
+  { key: "locked" as const, label: "Locked", icon: Lock, gradient: "from-amber-500/8", ring: "ring-amber-500/20", iconBg: "bg-amber-500/15", iconColor: "text-amber-400" },
+];
 
 export default function NurseDashboard() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterCategory>("all");
-  const { data, isLoading } = useQuery<DashboardData>({
-    queryKey: ["/api/nurse/dashboard"],
-  });
+  const { data, isLoading } = useQuery<DashboardData>({ queryKey: ["/api/nurse/dashboard"] });
 
   const stats = data?.stats ?? { totalAssigned: 0, completed: 0, inProgress: 0, locked: 0 };
   const assignments = data?.assignments ?? [];
@@ -114,27 +77,15 @@ export default function NurseDashboard() {
 
   const filteredAssignments = useMemo(() => {
     let filtered = assignments;
-
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter((a) =>
-        a.moduleName.toLowerCase().includes(q) ||
-        a.moduleDescription.toLowerCase().includes(q)
-      );
+      filtered = filtered.filter((a) => a.moduleName.toLowerCase().includes(q) || a.moduleDescription.toLowerCase().includes(q));
     }
-
     switch (activeFilter) {
-      case "due_soon":
-        filtered = filtered.filter((a) => a.status !== "passed" && a.status !== "locked");
-        break;
-      case "locked":
-        filtered = filtered.filter((a) => a.status === "locked");
-        break;
-      case "completed":
-        filtered = filtered.filter((a) => a.status === "passed");
-        break;
+      case "due_soon": filtered = filtered.filter((a) => a.status !== "passed" && a.status !== "locked"); break;
+      case "locked": filtered = filtered.filter((a) => a.status === "locked"); break;
+      case "completed": filtered = filtered.filter((a) => a.status === "passed"); break;
     }
-
     return filtered;
   }, [assignments, searchQuery, activeFilter]);
 
@@ -145,38 +96,13 @@ export default function NurseDashboard() {
 
   if (isLoading) {
     return (
-      <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-40" />
-          <Skeleton className="h-4 w-56" />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-4 space-y-2">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-6 w-8" />
-              </CardContent>
-            </Card>
-          ))}
+      <div className="min-h-screen bg-background p-6 md:p-8 space-y-7 max-w-5xl mx-auto">
+        <div className="space-y-2"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-64" /></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <Card key={i}><CardContent className="p-5"><Skeleton className="h-16 w-full" /></CardContent></Card>)}
         </div>
         <Skeleton className="h-10 w-full" />
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Skeleton className="w-10 h-10 rounded-md" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-36" />
-                    <Skeleton className="h-3 w-48" />
-                    <Skeleton className="h-2 w-full mt-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <div className="space-y-3">{[1, 2, 3].map((i) => <Card key={i}><CardContent className="p-5"><Skeleton className="h-24 w-full" /></CardContent></Card>)}</div>
       </div>
     );
   }
@@ -189,72 +115,68 @@ export default function NurseDashboard() {
   ];
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">
-          Welcome back, {user?.name?.split(" ")[0]}
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Your clinical competency modules
+    <div className="min-h-screen bg-background p-6 md:p-8 space-y-7 max-w-5xl mx-auto">
+      <div className="animate-fade-in-up">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
+          Skills Arcade
         </p>
+        <h1 className="font-serif text-3xl font-light tracking-tight text-foreground" data-testid="text-dashboard-title">
+          Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">Your clinical competency modules</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground font-medium">Assigned</p>
-            <p className="text-2xl font-bold mt-1" data-testid="text-stat-assigned">{stats.totalAssigned}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground font-medium">Completed</p>
-            <p className="text-2xl font-bold mt-1 text-emerald-600 dark:text-emerald-400" data-testid="text-stat-completed">{stats.completed}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground font-medium">In Progress</p>
-            <p className="text-2xl font-bold mt-1 text-primary" data-testid="text-stat-progress">{stats.inProgress}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground font-medium">Locked</p>
-            <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400" data-testid="text-stat-locked">{stats.locked}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in-up animate-delay-50">
+        {statCards.map((config) => {
+          const Icon = config.icon;
+          const value = stats[config.key];
+          return (
+            <div key={config.key} className="stat-card-glow">
+              <Card className={`relative overflow-hidden border ring-1 ${config.ring} transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5`}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${config.gradient} to-transparent pointer-events-none`} />
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{config.label}</p>
+                      <p className="font-serif text-3xl font-light tracking-tight text-foreground mt-1 animate-count-in" data-testid={`text-stat-${config.key}`}>{value}</p>
+                    </div>
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${config.iconBg} ring-1 ${config.ring}`}>
+                      <Icon className={`h-4 w-4 ${config.iconColor}`} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })}
       </div>
 
-      <div>
+      <div className="animate-fade-in-up animate-delay-100">
         <div className="flex items-center justify-between gap-4 mb-2">
-          <p className="text-sm font-medium">Overall Progress</p>
-          <p className="text-sm text-muted-foreground">{completionPercent}%</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Overall Progress</p>
+          <p className="text-sm font-semibold text-primary tabular-nums">{completionPercent}%</p>
         </div>
-        <Progress value={completionPercent} className="h-2" />
+        <Progress value={completionPercent} className="h-2.5" />
       </div>
 
       {lockedAssignments.length > 0 && activeFilter !== "completed" && (
-        <Card className="border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/5">
+        <Card className="border-amber-500/25 bg-amber-500/5 animate-fade-in-up animate-delay-150">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-amber-500/10 shrink-0">
-                <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20 shrink-0">
+                <ShieldAlert className="w-5 h-5 text-amber-500" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                   {lockedAssignments.length} module{lockedAssignments.length > 1 ? "s" : ""} locked
                 </p>
-                <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                <p className="text-xs text-amber-700/70 dark:text-amber-400/70 mt-0.5">
                   You must not perform {lockedAssignments.length > 1 ? "these skills" : "this skill"} independently until cleared by your trainer.
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {lockedAssignments.map((a) => a.moduleName).join(", ")}
-                </p>
               </div>
-              <Link href="/remediation-info">
-                <Button size="sm" variant="outline" className="shrink-0 border-amber-500/30 text-amber-700 dark:text-amber-400" data-testid="button-book-signoff">
-                  Book face-to-face sign-off
+              <Link href="/arcade/trainer">
+                <Button size="sm" variant="outline" className="shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400" data-testid="button-book-signoff">
+                  Book sign-off
                 </Button>
               </Link>
             </div>
@@ -262,15 +184,15 @@ export default function NurseDashboard() {
         </Card>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-4 animate-fade-in-up animate-delay-200">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
             <Input
               placeholder="Search modules..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-9 h-10 bg-card border-border/60"
               data-testid="input-search-modules"
             />
           </div>
@@ -281,13 +203,11 @@ export default function NurseDashboard() {
                 variant={activeFilter === f.key ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveFilter(f.key)}
-                className="toggle-elevate"
+                className="font-semibold"
                 data-testid={`button-filter-${f.key}`}
               >
                 {f.label}
-                {f.count > 0 && (
-                  <span className="ml-1.5 text-xs opacity-70">{f.count}</span>
-                )}
+                {f.count > 0 && <span className="ml-1.5 text-[10px] opacity-60 tabular-nums">{f.count}</span>}
               </Button>
             ))}
           </div>
@@ -295,16 +215,16 @@ export default function NurseDashboard() {
 
         {filteredAssignments.length === 0 && (
           <Card>
-            <CardContent className="p-8 text-center">
-              <BookOpen className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
-                {assignments.length === 0
-                  ? "No modules assigned yet."
-                  : "No modules match your search or filter."}
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/8 mb-4">
+                <BookOpen className="h-7 w-7 text-primary/40" />
+              </div>
+              <p className="font-serif text-lg text-foreground mb-1">
+                {assignments.length === 0 ? "No modules assigned" : "No matching modules"}
               </p>
-              {assignments.length === 0 && (
-                <p className="text-xs text-muted-foreground mt-1">Your trainer will assign modules to you.</p>
-              )}
+              <p className="text-sm text-muted-foreground max-w-xs">
+                {assignments.length === 0 ? "Your trainer will assign modules to you." : "Try adjusting your search or filter."}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -312,33 +232,27 @@ export default function NurseDashboard() {
         {activeAssignments.length > 0 && (activeFilter === "all" || activeFilter === "due_soon") && (
           <div className="space-y-3">
             {activeFilter === "all" && (
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Active</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50">Active</p>
             )}
-            {activeAssignments.map((a) => (
-              <ModuleCard key={a.id} assignment={a} />
-            ))}
+            {activeAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
           </div>
         )}
 
         {lockedFiltered.length > 0 && (activeFilter === "all" || activeFilter === "locked") && (
           <div className="space-y-3">
             {activeFilter === "all" && (
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-4">Locked — Needs Sign-off</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500/70 mt-4">Locked — Needs Sign-off</p>
             )}
-            {lockedFiltered.map((a) => (
-              <ModuleCard key={a.id} assignment={a} />
-            ))}
+            {lockedFiltered.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
           </div>
         )}
 
         {passedAssignments.length > 0 && (activeFilter === "all" || activeFilter === "completed") && (
           <div className="space-y-3">
             {activeFilter === "all" && (
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-4">Completed</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/70 mt-4">Completed</p>
             )}
-            {passedAssignments.map((a) => (
-              <ModuleCard key={a.id} assignment={a} />
-            ))}
+            {passedAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
           </div>
         )}
       </div>
@@ -346,7 +260,7 @@ export default function NurseDashboard() {
   );
 }
 
-function ModuleCard({ assignment: a }: { assignment: AssignmentItem }) {
+function ModuleCard({ assignment: a, index }: { assignment: AssignmentItem; index: number }) {
   const Icon = iconMap[a.moduleIcon] || BookOpen;
   const sc = statusConfig[a.status] || statusConfig.not_started;
   const StatusIcon = sc.icon;
@@ -355,98 +269,86 @@ function ModuleCard({ assignment: a }: { assignment: AssignmentItem }) {
   const maxFails = 4;
 
   return (
-    <Card className={isLocked ? "opacity-80 border-amber-500/20" : isPassed ? "opacity-90" : "hover-elevate"} data-testid={`card-module-${a.moduleId}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
-          <div className={`flex items-center justify-center w-11 h-11 rounded-md shrink-0 ${
-            isLocked ? "bg-amber-500/10" : isPassed ? "bg-emerald-500/10" : "bg-primary/10"
-          }`}>
-            {isLocked ? (
-              <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            ) : isPassed ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Icon className="w-5 h-5 text-primary" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-sm" data-testid={`text-module-name-${a.moduleId}`}>{a.moduleName}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.moduleDescription}</p>
+    <div className="animate-fade-in-up" style={{ animationDelay: `${Math.min(index * 40, 300)}ms` }}>
+      <Card
+        className={`group relative overflow-hidden border transition-all duration-300 ${
+          isLocked ? "opacity-80 border-amber-500/20" : isPassed ? "opacity-90" : "hover:shadow-lg hover:-translate-y-0.5"
+        }`}
+        data-testid={`card-module-${a.moduleId}`}
+      >
+        <CardContent className="p-5">
+          <div className="flex items-start gap-4">
+            <div className={`flex items-center justify-center w-11 h-11 rounded-xl ring-1 shrink-0 ${
+              isLocked ? "bg-amber-500/10 ring-amber-500/20" : isPassed ? "bg-emerald-500/10 ring-emerald-500/20" : "bg-primary/10 ring-primary/20"
+            }`}>
+              {isLocked ? <Lock className="w-5 h-5 text-amber-500" /> : isPassed ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <Icon className="w-5 h-5 text-primary" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm group-hover:text-primary transition-colors" data-testid={`text-module-name-${a.moduleId}`}>{a.moduleName}</h3>
+                  <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-2">{a.moduleDescription}</p>
+                </div>
+                <Badge variant="secondary" className={`${sc.color} shrink-0`} data-testid={`badge-status-${a.moduleId}`}>
+                  <StatusIcon className="w-3 h-3 mr-1" />
+                  {sc.label}
+                </Badge>
               </div>
-              <Badge variant="secondary" className={sc.color} data-testid={`badge-status-${a.moduleId}`}>
-                <StatusIcon className="w-3 h-3 mr-1" />
-                {sc.label}
-              </Badge>
-            </div>
 
-            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground flex-wrap">
-              <span data-testid={`text-attempts-${a.moduleId}`}>
-                Attempts: {a.attemptCount}
-              </span>
-              {a.failedAttempts > 0 && (
-                <span className={`font-medium ${a.failedAttempts >= maxFails ? "text-amber-600 dark:text-amber-400" : "text-destructive"}`} data-testid={`text-fails-${a.moduleId}`}>
-                  Fails: {a.failedAttempts}/{maxFails}
-                </span>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="inline-flex items-center gap-1 text-muted-foreground" data-testid={`button-rules-info-${a.moduleId}`}>
-                    <Info className="w-3 h-3" />
-                    <span>Scoring rules</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[250px]">
-                  <p className="text-xs font-medium mb-1">Pass criteria:</p>
-                  <ul className="text-xs space-y-0.5">
-                    <li>0 Major errors</li>
-                    <li>3 or fewer Minor errors</li>
-                  </ul>
-                  <p className="text-xs mt-1.5 text-muted-foreground">Module locks after 4 failed attempts.</p>
-                </TooltipContent>
-              </Tooltip>
-              {a.dueAt && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Due {new Date(a.dueAt).toLocaleDateString()}
-                </span>
-              )}
-            </div>
+              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground/60 flex-wrap">
+                <span data-testid={`text-attempts-${a.moduleId}`}>Attempts: {a.attemptCount}</span>
+                {a.failedAttempts > 0 && (
+                  <span className={`font-semibold ${a.failedAttempts >= maxFails ? "text-amber-500" : "text-destructive"}`} data-testid={`text-fails-${a.moduleId}`}>
+                    Fails: {a.failedAttempts}/{maxFails}
+                  </span>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="inline-flex items-center gap-1 hover:text-foreground transition-colors" data-testid={`button-rules-info-${a.moduleId}`}>
+                      <Info className="w-3 h-3" /><span>Scoring</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[250px]">
+                    <p className="text-xs font-medium mb-1">Pass criteria:</p>
+                    <ul className="text-xs space-y-0.5"><li>0 Major errors</li><li>3 or fewer Minor errors</li></ul>
+                    <p className="text-xs mt-1.5 text-muted-foreground">Module locks after 4 failed attempts.</p>
+                  </TooltipContent>
+                </Tooltip>
+                {a.dueAt && (
+                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Due {new Date(a.dueAt).toLocaleDateString()}</span>
+                )}
+              </div>
 
-            {isLocked && (
-              <div className="mt-3 p-2.5 rounded-md bg-amber-500/5 border border-amber-500/15">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                      You must not perform this skill independently until cleared
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Contact your trainer to book a face-to-face sign-off session.
-                    </p>
+              {isLocked && (
+                <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-600 dark:text-amber-400">You must not perform this skill independently until cleared</p>
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">Contact your trainer to book a face-to-face sign-off session.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 mt-3">
-              {isLocked ? (
-                <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-700 dark:text-amber-400" data-testid={`button-signoff-${a.moduleId}`}>
-                  Book sign-off
-                </Button>
-              ) : (
-                <Link href={`/scenario/${a.id}`}>
-                  <Button size="sm" variant={isPassed ? "outline" : "default"} data-testid={`button-start-${a.moduleId}`}>
-                    {a.status === "not_started" ? "Start" : isPassed ? "Review" : "Continue"}
-                    <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </Link>
               )}
+
+              <div className="flex items-center justify-end gap-2 mt-3">
+                {isLocked ? (
+                  <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-600 dark:text-amber-400 font-semibold" data-testid={`button-signoff-${a.moduleId}`}>
+                    Book sign-off
+                  </Button>
+                ) : (
+                  <Link href={`/arcade/scenario/${a.id}`}>
+                    <Button size="sm" variant={isPassed ? "outline" : "default"} className="gap-1 font-semibold" data-testid={`button-start-${a.moduleId}`}>
+                      {a.status === "not_started" ? "Start" : isPassed ? "Review" : "Continue"}
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

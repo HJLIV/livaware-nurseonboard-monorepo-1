@@ -997,12 +997,12 @@ function ResultsScreen({
           </div>
           <div className="flex items-center justify-center gap-6">
             <div className="text-center">
-              <p className="text-2xl font-bold text-destructive" data-testid="text-major-count">{result.majorCount}</p>
+              <p className="font-serif text-2xl font-light text-destructive" data-testid="text-major-count">{result.majorCount}</p>
               <p className="text-xs text-muted-foreground">Major Errors</p>
             </div>
             <div className="h-8 w-px bg-border" />
             <div className="text-center">
-              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-minor-count">{result.minorCount}</p>
+              <p className="font-serif text-2xl font-light text-amber-600 dark:text-amber-400" data-testid="text-minor-count">{result.minorCount}</p>
               <p className="text-xs text-muted-foreground">Minor Errors</p>
             </div>
           </div>
