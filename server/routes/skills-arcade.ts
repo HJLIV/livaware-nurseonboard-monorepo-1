@@ -153,9 +153,46 @@ export async function registerRoutes(
 
   app.get("/api/nurse/dashboard", requireAuth, async (req, res) => {
     try {
+      const allModules = await storage.getAllModules();
+
+      if (isPlatformAdmin(req)) {
+        const moduleData = await Promise.all(
+          allModules.map(async (mod) => {
+            const mv = await storage.getLatestModuleVersion(mod.id);
+            const scenarioCount = mv ? await storage.getScenarioCount(mv.id) : 0;
+            const assignmentCount = await storage.getAssignmentCount(mod.id);
+            return {
+              id: mod.id,
+              moduleId: mod.id,
+              moduleName: mod.name,
+              moduleDescription: mod.description ?? "",
+              moduleIcon: mod.icon ?? "BookOpen",
+              moduleColor: mod.color ?? "blue",
+              status: "available",
+              dueAt: null,
+              attemptCount: 0,
+              failedAttempts: 0,
+              lastAttemptResult: null,
+              moduleVersionId: mv?.id ?? "",
+              scenarioCount,
+              assignmentCount,
+            };
+          })
+        );
+        return res.json({
+          isAdmin: true,
+          assignments: moduleData,
+          stats: {
+            totalAssigned: allModules.length,
+            completed: 0,
+            inProgress: 0,
+            locked: 0,
+          },
+        });
+      }
+
       const userId = req.session.userId!;
       const userAssignments = await storage.getAssignmentsByUser(userId);
-      const allModules = await storage.getAllModules();
 
       const assignmentData = await Promise.all(
         userAssignments.map(async (a) => {
