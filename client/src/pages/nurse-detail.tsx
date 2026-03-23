@@ -1,12 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
   ClipboardCheck,
@@ -18,13 +22,17 @@ import {
   Calendar,
   Mail,
   User,
+  ChevronRight,
+  Copy,
+  Check,
+  Link2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface NurseDetail {
-  id: number;
-  firstName: string;
-  lastName: string;
+  id: string;
+  fullName: string;
   email: string;
   currentStage: string;
   preboardStatus: string;
@@ -60,22 +68,22 @@ interface ArcadeAssignment {
 }
 
 interface AuditLog {
-  id: number;
+  id: string;
   module: string;
   action: string;
-  detail?: string;
-  agent?: string;
-  createdAt: string;
+  detail?: Record<string, unknown> | string;
+  agentName?: string;
+  timestamp: string;
 }
 
 const journeyStages = [
   { key: "preboard", label: "Preboard", icon: ClipboardCheck },
   { key: "onboard", label: "Onboard", icon: ShieldCheck },
-  { key: "skills-arcade", label: "Skills Arcade", icon: Gamepad2 },
+  { key: "skills_arcade", label: "Skills Arcade", icon: Gamepad2 },
 ];
 
 function JourneyStepper({ currentStage }: { currentStage: string }) {
-  const stageOrder = ["preboard", "onboard", "skills-arcade", "completed"];
+  const stageOrder = ["preboard", "onboard", "skills_arcade", "completed"];
   const currentIndex = stageOrder.indexOf(currentStage);
 
   return (
@@ -122,6 +130,52 @@ function JourneyStepper({ currentStage }: { currentStage: string }) {
 }
 
 function OverviewTab({ nurse }: { nurse: NurseDetail }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const advanceMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/nurses/${nurse.id}/advance-stage`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/nurses/${nurse.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Stage advanced", description: `Nurse moved to ${data.currentStage.replace("_", " ")} stage.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Cannot advance", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const portalLinkMutation = useMutation({
+    mutationFn: async (module: string) => {
+      const res = await apiRequest("POST", `/api/nurses/${nurse.id}/portal-link`, { module });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setPortalUrl(data.url);
+      toast({ title: "Portal link generated", description: `Link for ${data.module} module created.` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleCopy = async () => {
+    if (portalUrl) {
+      await navigator.clipboard.writeText(portalUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const stageOrder = ["preboard", "onboard", "skills_arcade", "completed"];
+  const isAtFinalStage = stageOrder.indexOf(nurse.currentStage) >= stageOrder.length - 1;
+
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <Card>
@@ -132,9 +186,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
           <div className="flex items-center gap-3">
             <User className="h-4 w-4 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">
-                {nurse.firstName} {nurse.lastName}
-              </p>
+              <p className="text-sm font-medium">{nurse.fullName}</p>
               <p className="text-xs text-muted-foreground">Full Name</p>
             </div>
           </div>
@@ -150,9 +202,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
             <div>
               <p className="text-sm font-medium">
                 {new Date(nurse.createdAt).toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
+                  month: "long", day: "numeric", year: "numeric",
                 })}
               </p>
               <p className="text-xs text-muted-foreground">Registered</p>
@@ -182,18 +232,39 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
             <span className="text-sm text-muted-foreground">Skills Arcade</span>
             <StatusBadge status={nurse.arcadeStatus} />
           </div>
-          {nurse.portalToken && (
-            <div className="pt-2 border-t">
-              <Button variant="outline" size="sm" className="w-full" asChild>
-                <a
-                  href={`/portal/${nurse.portalToken}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                  Open Nurse Portal
-                </a>
+          <div className="pt-3 border-t space-y-2">
+            {!isAtFinalStage && (
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full gap-2"
+                onClick={() => advanceMutation.mutate()}
+                disabled={advanceMutation.isPending}
+              >
+                {advanceMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Advance to Next Stage
               </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => portalLinkMutation.mutate(nurse.currentStage === "preboard" ? "preboard" : nurse.currentStage === "onboard" ? "onboard" : "hub")}
+              disabled={portalLinkMutation.isPending}
+            >
+              {portalLinkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              Generate Portal Link
+            </Button>
+          </div>
+          {portalUrl && (
+            <div className="rounded-lg bg-muted/30 border p-3 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Portal Link</p>
+              <div className="flex items-center gap-2">
+                <Input value={portalUrl} readOnly className="text-xs font-mono h-8 bg-card" />
+                <Button size="icon" variant="ghost" onClick={handleCopy} className="shrink-0 h-8 w-8">
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
@@ -202,7 +273,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
   );
 }
 
-function PreboardTab({ nurseId }: { nurseId: number }) {
+function PreboardTab({ nurseId }: { nurseId: string }) {
   const { data: results, isLoading } = useQuery<PreboardResult[]>({
     queryKey: [`/api/nurses/${nurseId}/preboard`],
   });
@@ -276,7 +347,7 @@ function PreboardTab({ nurseId }: { nurseId: number }) {
   );
 }
 
-function OnboardTab({ nurseId }: { nurseId: number }) {
+function OnboardTab({ nurseId }: { nurseId: string }) {
   const { data: steps, isLoading } = useQuery<OnboardStep[]>({
     queryKey: [`/api/nurses/${nurseId}/onboard`],
   });
@@ -345,7 +416,7 @@ function OnboardTab({ nurseId }: { nurseId: number }) {
   );
 }
 
-function ArcadeTab({ nurseId }: { nurseId: number }) {
+function ArcadeTab({ nurseId }: { nurseId: string }) {
   const { data: assignments, isLoading } = useQuery<ArcadeAssignment[]>({
     queryKey: [`/api/nurses/${nurseId}/arcade`],
   });
@@ -408,9 +479,9 @@ function ArcadeTab({ nurseId }: { nurseId: number }) {
   );
 }
 
-function AuditTab({ nurseId }: { nurseId: number }) {
+function AuditTab({ nurseId }: { nurseId: string }) {
   const { data: logs, isLoading } = useQuery<AuditLog[]>({
-    queryKey: [`/api/audit-logs?nurseId=${nurseId}`],
+    queryKey: [`/api/nurses/${nurseId}/audit-log`],
   });
 
   if (isLoading) {
@@ -447,15 +518,15 @@ function AuditTab({ nurseId }: { nurseId: number }) {
             {log.action}
           </Badge>
           <span className="flex-1 truncate text-sm text-muted-foreground">
-            {log.detail}
+            {typeof log.detail === "object" ? JSON.stringify(log.detail) : log.detail}
           </span>
-          {log.agent && (
+          {log.agentName && (
             <span className="text-xs text-muted-foreground shrink-0">
-              by {log.agent}
+              by {log.agentName}
             </span>
           )}
           <time className="text-xs text-muted-foreground shrink-0">
-            {new Date(log.createdAt).toLocaleDateString("en-US", {
+            {new Date(log.timestamp).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
               hour: "2-digit",
@@ -470,7 +541,7 @@ function AuditTab({ nurseId }: { nurseId: number }) {
 
 export default function NurseDetail() {
   const [, params] = useRoute("/nurses/:id");
-  const nurseId = Number(params?.id);
+  const nurseId = params?.id || "";
 
   const { data: nurse, isLoading } = useQuery<NurseDetail>({
     queryKey: [`/api/nurses/${nurseId}`],
@@ -520,7 +591,7 @@ export default function NurseDetail() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">Nurse Profile</p>
             <div className="flex items-center gap-3">
               <h1 className="font-serif text-2xl font-light tracking-tight">
-                {nurse.firstName} {nurse.lastName}
+                {nurse.fullName}
               </h1>
               <StatusBadge status={nurse.currentStage} />
             </div>

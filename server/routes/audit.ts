@@ -9,6 +9,8 @@ export function registerAuditRoutes(app: Express) {
     const module = req.query.module as string | undefined;
     const nurseId = req.query.nurseId as string | undefined;
     const action = req.query.action as string | undefined;
+    const limitParam = parseInt(req.query.limit as string) || 500;
+    const maxLimit = Math.max(1, Math.min(limitParam, 1000));
 
     const conditions = [];
     if (module) conditions.push(eq(auditLogs.module, module as any));
@@ -17,9 +19,9 @@ export function registerAuditRoutes(app: Express) {
 
     let query;
     if (conditions.length > 0) {
-      query = db.select().from(auditLogs).where(and(...conditions)).orderBy(desc(auditLogs.timestamp)).limit(500);
+      query = db.select().from(auditLogs).where(and(...conditions)).orderBy(desc(auditLogs.timestamp)).limit(maxLimit);
     } else {
-      query = db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(500);
+      query = db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(maxLimit);
     }
 
     const result = await query;

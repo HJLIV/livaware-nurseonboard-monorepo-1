@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { RegisterNurseDialog } from "./nurses";
 import {
   Users,
   ClipboardCheck,
@@ -33,21 +34,20 @@ interface DashboardStats {
 }
 
 interface AuditLog {
-  id: number;
+  id: string;
   module: string;
   action: string;
-  nurseId?: number;
-  nurseName?: string;
-  detail?: string;
-  agent?: string;
-  createdAt: string;
+  nurseId?: string;
+  agentName?: string;
+  detail?: Record<string, unknown> | string;
+  timestamp: string;
 }
 
 const moduleColors: Record<string, string> = {
   admin:          "bg-purple-500/12 text-purple-400 border-purple-500/20",
   preboard:       "bg-blue-500/12 text-blue-400 border-blue-500/20",
   onboard:        "bg-emerald-500/12 text-emerald-400 border-emerald-500/20",
-  "skills-arcade": "bg-amber-500/12 text-amber-400 border-amber-500/20",
+  skills_arcade:  "bg-amber-500/12 text-amber-400 border-amber-500/20",
   portal:         "bg-cyan-500/12 text-cyan-400 border-cyan-500/20",
 };
 
@@ -248,15 +248,17 @@ function RecentActivity({ logs, isLoading }: { logs?: AuditLog[]; isLoading: boo
                   {log.action}
                 </Badge>
                 <span className="flex-1 truncate text-sm text-muted-foreground">
-                  {log.nurseName && (
-                    <span className="font-medium text-foreground">{log.nurseName}</span>
+                  {log.agentName && (
+                    <span className="font-medium text-foreground">{log.agentName}</span>
                   )}
                   {log.detail && (
-                    <span className="ml-1.5 text-muted-foreground/70">{log.detail}</span>
+                    <span className="ml-1.5 text-muted-foreground/70">
+                      {typeof log.detail === "object" ? Object.values(log.detail).join(", ") : log.detail}
+                    </span>
                   )}
                 </span>
                 <time className="shrink-0 text-[11px] text-muted-foreground/50 tabular-nums">
-                  {new Date(log.createdAt).toLocaleDateString("en-US", {
+                  {new Date(log.timestamp).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
@@ -285,13 +287,13 @@ function QuickActions() {
         <CardDescription className="text-xs mt-0.5">Common tasks at a glance</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 pt-4">
-        <Link href="/nurses">
+        <RegisterNurseDialog trigger={
           <Button className="w-full justify-start gap-3 h-10 font-medium" variant="default">
             <UserPlus className="h-4 w-4" />
             Register New Nurse
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />
           </Button>
-        </Link>
+        } />
         <Link href="/preboard">
           <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline">
             <ClipboardCheck className="h-4 w-4" />

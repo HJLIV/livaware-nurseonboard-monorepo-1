@@ -46,6 +46,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
+  if (!status) return null;
   const config = statusConfig[status] || {
     label: status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     className: "bg-gray-500/15 text-gray-400 border-gray-500/20",

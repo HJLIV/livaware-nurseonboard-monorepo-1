@@ -15,21 +15,20 @@ import {
 import { Search, ScrollText, Clock, User2 } from "lucide-react";
 
 interface AuditLog {
-  id: number;
+  id: string;
   module: string;
   action: string;
-  nurseId?: number;
-  nurseName?: string;
-  detail?: string;
-  agent?: string;
-  createdAt: string;
+  nurseId?: string;
+  agentName?: string;
+  detail?: Record<string, unknown> | string;
+  timestamp: string;
 }
 
 const moduleStyles: Record<string, { badge: string; dot: string }> = {
   admin:          { badge: "bg-purple-500/10 text-purple-400 border-purple-500/15", dot: "bg-purple-400" },
   preboard:       { badge: "bg-blue-500/10 text-blue-400 border-blue-500/15",     dot: "bg-blue-400" },
   onboard:        { badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/15", dot: "bg-emerald-400" },
-  "skills-arcade": { badge: "bg-amber-500/10 text-amber-400 border-amber-500/15",   dot: "bg-amber-400" },
+  skills_arcade: { badge: "bg-amber-500/10 text-amber-400 border-amber-500/15",   dot: "bg-amber-400" },
   portal:         { badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/15",       dot: "bg-cyan-400" },
 };
 
@@ -38,7 +37,7 @@ const moduleOptions = [
   { value: "admin", label: "Admin" },
   { value: "preboard", label: "Preboard" },
   { value: "onboard", label: "Onboard" },
-  { value: "skills-arcade", label: "Skills Arcade" },
+  { value: "skills_arcade", label: "Skills Arcade" },
   { value: "portal", label: "Portal" },
 ];
 
@@ -83,10 +82,10 @@ export default function AuditPage() {
     if (actionFilter !== "all" && log.action !== actionFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
+      const detailStr = typeof log.detail === "object" ? JSON.stringify(log.detail) : (log.detail || "");
       return (
-        (log.nurseName?.toLowerCase().includes(q) ?? false) ||
-        (log.detail?.toLowerCase().includes(q) ?? false) ||
-        (log.agent?.toLowerCase().includes(q) ?? false) ||
+        (log.agentName?.toLowerCase().includes(q) ?? false) ||
+        detailStr.toLowerCase().includes(q) ||
         log.module.toLowerCase().includes(q) ||
         log.action.toLowerCase().includes(q)
       );
@@ -176,25 +175,24 @@ export default function AuditPage() {
                       </Badge>
 
                       <div className="flex-1 min-w-0 flex items-center gap-2">
-                        {log.nurseName && (
-                          <span className="text-sm font-medium text-foreground truncate">{log.nurseName}</span>
-                        )}
                         {log.detail && (
-                          <span className="text-sm text-muted-foreground/70 truncate">{log.detail}</span>
+                          <span className="text-sm text-muted-foreground/70 truncate">
+                            {typeof log.detail === "object" ? Object.entries(log.detail).map(([k, v]) => `${k}: ${v}`).join(", ") : log.detail}
+                          </span>
                         )}
                       </div>
 
-                      {log.agent && (
+                      {log.agentName && (
                         <div className="flex items-center gap-1 shrink-0">
                           <User2 className="h-3 w-3 text-muted-foreground/30" />
-                          <span className="text-[11px] text-muted-foreground/50">{log.agent}</span>
+                          <span className="text-[11px] text-muted-foreground/50">{log.agentName}</span>
                         </div>
                       )}
 
                       <div className="flex items-center gap-1 shrink-0 min-w-[80px] justify-end">
                         <Clock className="h-3 w-3 text-muted-foreground/30" />
                         <time className="text-[11px] text-muted-foreground/50 tabular-nums">
-                          {formatTimeAgo(log.createdAt)}
+                          {formatTimeAgo(log.timestamp)}
                         </time>
                       </div>
                     </div>

@@ -62,12 +62,12 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 ## Frontend Pages
 
 ### Core
-- `/` — Dashboard with stats, pipeline funnel, activity
+- `/` — Dashboard with stats, pipeline funnel, recent activity, inline nurse registration
 - `/candidates` — Candidate list (Nurse-Onboard)
 - `/candidates/:id` — Full candidate detail with AI tools
-- `/pipeline` — Kanban pipeline view
-- `/nurses` — Legacy nurse list
-- `/nurses/:id` — Legacy nurse detail
+- `/pipeline` — Kanban pipeline view (uses `/api/candidates`, `status` field for stage columns)
+- `/nurses` — Nurse registry with Register & Invite dialog (auto-generates preboard portal link)
+- `/nurses/:id` — Nurse detail with overview, preboard, onboard, arcade, and audit tabs
 
 ### Portal (public)
 - `/portal/:token` — Portal hub (token-gated)
@@ -92,7 +92,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 
 ## Server Routes
 
-- `server/routes/admin.ts` — Legacy simple nurse CRUD
+- `server/routes/admin.ts` — Nurse CRUD with preboard invite generation, advance-stage, detail sub-routes (preboard/onboard/arcade/audit-log)
 - `server/routes/onboard.ts` — Full Nurse-Onboard admin (786 lines, all AI integrations)
 - `server/routes/portal.ts` — Nurse-facing portal (686 lines)
 - `server/routes/referee.ts` — Referee token form

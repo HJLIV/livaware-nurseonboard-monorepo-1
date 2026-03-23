@@ -20,12 +20,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check } from "lucide-react";
 
 interface Nurse {
-  id: number;
-  firstName: string;
-  lastName: string;
+  id: string;
+  fullName: string;
   email: string;
   currentStage: string;
   preboardStatus: string;
@@ -37,36 +36,52 @@ interface Nurse {
 const stageConfig: Record<string, { bg: string; text: string; dot: string }> = {
   preboard:       { bg: "bg-blue-500/8",    text: "text-blue-400",    dot: "bg-blue-400" },
   onboard:        { bg: "bg-emerald-500/8",  text: "text-emerald-400", dot: "bg-emerald-400" },
+  skills_arcade:  { bg: "bg-amber-500/8",   text: "text-amber-400",   dot: "bg-amber-400" },
   "skills-arcade": { bg: "bg-amber-500/8",   text: "text-amber-400",   dot: "bg-amber-400" },
   completed:      { bg: "bg-primary/8",      text: "text-primary",     dot: "bg-primary" },
 };
 
-function RegisterNurseDialog() {
+export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/nurses", { firstName, lastName, email });
+      const res = await apiRequest("POST", "/api/nurses", {
+        fullName: `${firstName.trim()} ${lastName.trim()}`,
+        email: email.trim(),
+      });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      setOpen(false);
-      setFirstName("");
-      setLastName("");
-      setEmail("");
-      toast({ title: "Nurse registered", description: `${firstName} ${lastName} has been added to the platform.` });
+      if (data.preboardInviteUrl) {
+        setInviteUrl(data.preboardInviteUrl);
+      } else {
+        resetAndClose();
+        toast({ title: "Nurse registered", description: `${firstName} ${lastName} has been added to the platform.` });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Registration failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const resetAndClose = () => {
+    setOpen(false);
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setInviteUrl(null);
+    setCopied(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,43 +89,82 @@ function RegisterNurseDialog() {
     registerMutation.mutate();
   };
 
+  const handleCopy = async () => {
+    if (inviteUrl) {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      toast({ title: "Link copied", description: "Preboard invite link copied to clipboard." });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) resetAndClose(); else setOpen(true); }}>
       <DialogTrigger asChild>
-        <Button className="gap-2 font-semibold shadow-md">
-          <UserPlus className="h-4 w-4" />
-          Register Nurse
-        </Button>
+        {trigger || (
+          <Button className="gap-2 font-semibold shadow-md">
+            <UserPlus className="h-4 w-4" />
+            Register Nurse
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-serif text-xl font-light">Register New Nurse</DialogTitle>
-          <DialogDescription>Add a new nurse to the platform. They will begin at the Preboard stage.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="firstName" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">First Name</Label>
-              <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" className="h-10" />
+        {inviteUrl ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl font-light">Nurse Registered</DialogTitle>
+              <DialogDescription>
+                {firstName} {lastName} has been registered. Share the preboard assessment link below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Preboard Invite Link</p>
+                <div className="flex items-center gap-2">
+                  <Input value={inviteUrl} readOnly className="text-xs font-mono bg-card" />
+                  <Button size="icon" variant="outline" onClick={handleCopy} className="shrink-0">
+                    {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">This link expires in 30 days. Send it to the nurse to begin their preboard assessment.</p>
+              </div>
+              <DialogFooter>
+                <Button onClick={resetAndClose} className="w-full">Done</Button>
+              </DialogFooter>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lastName" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Last Name</Label>
-              <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" className="h-10" />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane.doe@example.com" className="h-10" />
-          </div>
-          <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={registerMutation.isPending || !firstName.trim() || !lastName.trim() || !email.trim()} className="gap-2">
-              {registerMutation.isPending ? (
-                <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-              ) : "Register"}
-            </Button>
-          </DialogFooter>
-        </form>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl font-light">Register New Nurse</DialogTitle>
+              <DialogDescription>Add a new nurse to the platform. A preboard assessment invite will be generated automatically.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="firstName" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">First Name</Label>
+                  <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" className="h-10" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastName" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Last Name</Label>
+                  <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" className="h-10" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Email</Label>
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane.doe@example.com" className="h-10" />
+              </div>
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={resetAndClose}>Cancel</Button>
+                <Button type="submit" disabled={registerMutation.isPending || !firstName.trim() || !lastName.trim() || !email.trim()} className="gap-2">
+                  {registerMutation.isPending ? (
+                    <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  ) : "Register & Invite"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -118,7 +172,10 @@ function RegisterNurseDialog() {
 
 function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => void; index: number }) {
   const stage = stageConfig[nurse.currentStage] || stageConfig.preboard;
-  const initials = `${nurse.firstName?.[0] || ""}${nurse.lastName?.[0] || ""}`.toUpperCase();
+  const nameParts = nurse.fullName.split(" ");
+  const initials = nameParts.length >= 2
+    ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+    : (nurse.fullName[0] || "?").toUpperCase();
 
   return (
     <div
@@ -139,7 +196,7 @@ function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => voi
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                    {nurse.firstName} {nurse.lastName}
+                    {nurse.fullName}
                   </h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <Mail className="h-3 w-3 text-muted-foreground/40" />
@@ -152,7 +209,7 @@ function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => voi
               <div className="flex items-center gap-2 flex-wrap">
                 <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${stage.bg}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${stage.dot}`} />
-                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.text}`}>{nurse.currentStage}</span>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.text}`}>{nurse.currentStage.replace("_", " ")}</span>
                 </div>
                 <StatusBadge status={nurse.preboardStatus} />
                 <StatusBadge status={nurse.onboardStatus} />
@@ -175,16 +232,15 @@ export default function NursesPage() {
   const [search, setSearch] = useState("");
   const [, setLocation] = useLocation();
 
-  const { data: nurses, isLoading } = useQuery<Nurse[]>({
+  const { data: nursesList, isLoading } = useQuery<Nurse[]>({
     queryKey: ["/api/nurses"],
   });
 
-  const filtered = nurses?.filter((nurse) => {
+  const filtered = nursesList?.filter((nurse) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
-      nurse.firstName.toLowerCase().includes(q) ||
-      nurse.lastName.toLowerCase().includes(q) ||
+      nurse.fullName.toLowerCase().includes(q) ||
       nurse.email.toLowerCase().includes(q)
     );
   });
@@ -217,9 +273,9 @@ export default function NursesPage() {
               className="pl-9 h-10 bg-card border-border/60"
             />
           </div>
-          {nurses && (
+          {nursesList && (
             <Badge variant="secondary" className="shrink-0 font-semibold tabular-nums">
-              {filtered?.length ?? 0} of {nurses.length}
+              {filtered?.length ?? 0} of {nursesList.length}
             </Badge>
           )}
         </div>
