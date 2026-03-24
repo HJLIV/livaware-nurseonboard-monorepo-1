@@ -104,7 +104,7 @@ export default function NurseDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-6 md:p-8 space-y-7 max-w-5xl mx-auto">
+      <div className="space-y-7 max-w-5xl mx-auto">
         <div className="space-y-2"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-64" /></div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <Card key={i}><CardContent className="p-5"><Skeleton className="h-16 w-full" /></CardContent></Card>)}
@@ -127,7 +127,7 @@ export default function NurseDashboard() {
       ];
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-8 space-y-7 max-w-5xl mx-auto">
+    <div className="space-y-7 max-w-5xl mx-auto">
       <div className="animate-fade-in-up">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
           Skills Arcade

@@ -15,6 +15,7 @@ import AdminPreboard from "@/pages/preboard/admin-preboard";
 import PortalHub from "@/pages/portal/portal-hub";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import { AppLayout } from "@/components/layout/app-layout";
 
 // Lazy-load heavier pages for better initial load
 const CandidateDetail = lazy(() => import("@/pages/candidate-detail"));
@@ -89,13 +90,13 @@ function AuthenticatedRouter() {
               <Route path="/preboard/assessment" component={PreboardAssessment} />
 
               {/* Clinical Skills Arcade */}
-              <Route path="/arcade" component={ArcadeNurseDashboard} />
-              <Route path="/arcade/scenario/:id" component={ArcadeScenarioPlayer} />
-              <Route path="/arcade/walkthrough/:id" component={ArcadeWalkthrough} />
-              <Route path="/arcade/trainer" component={ArcadeTrainerRemediation} />
-              <Route path="/arcade/admin/modules" component={ArcadeAdminModules} />
-              <Route path="/arcade/admin/reports" component={ArcadeAdminReports} />
-              <Route path="/arcade/admin/users" component={ArcadeAdminUsers} />
+              <Route path="/arcade">{() => <AppLayout><ArcadeNurseDashboard /></AppLayout>}</Route>
+              <Route path="/arcade/scenario/:id">{() => <AppLayout><ArcadeScenarioPlayer /></AppLayout>}</Route>
+              <Route path="/arcade/walkthrough/:id">{() => <AppLayout><ArcadeWalkthrough /></AppLayout>}</Route>
+              <Route path="/arcade/trainer">{() => <AppLayout><ArcadeTrainerRemediation /></AppLayout>}</Route>
+              <Route path="/arcade/admin/modules">{() => <AppLayout><ArcadeAdminModules /></AppLayout>}</Route>
+              <Route path="/arcade/admin/reports">{() => <AppLayout><ArcadeAdminReports /></AppLayout>}</Route>
+              <Route path="/arcade/admin/users">{() => <AppLayout><ArcadeAdminUsers /></AppLayout>}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />
