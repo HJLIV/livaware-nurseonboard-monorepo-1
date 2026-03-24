@@ -67,7 +67,7 @@ const introStages = [
   {
     number: 1,
     title: "Preboard Assessment",
-    description: "A short screening questionnaire to confirm your eligibility and readiness. This covers your professional background, availability, and basic compliance requirements.",
+    description: "Your first step. A short clinical and situational assessment so we can understand how you think and approach care. This helps us decide whether to move forward with your placement.",
     icon: ClipboardCheck,
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
@@ -77,7 +77,7 @@ const introStages = [
   {
     number: 2,
     title: "Onboarding",
-    description: "Upload your professional documents — NMC PIN, DBS certificate, right-to-work evidence, training certificates, and references. Our AI-assisted verification speeds things up.",
+    description: "Once you pass the preboard, we'll ask you to upload your professional documents — NMC PIN, DBS certificate, right-to-work evidence, training certificates, and references. Our AI-assisted verification speeds things up.",
     icon: ShieldCheck,
     color: "text-emerald-400",
     bgColor: "bg-emerald-500/10",
@@ -87,7 +87,7 @@ const introStages = [
   {
     number: 3,
     title: "Skills Arcade",
-    description: "Interactive clinical scenarios that assess your competency across key nursing skills — medication administration, wound care, IV therapy, and more.",
+    description: "Interactive clinical scenarios that assess your hands-on competency across key nursing skills — medication administration, wound care, IV therapy, and more.",
     icon: Gamepad2,
     color: "text-amber-400",
     bgColor: "bg-amber-500/10",
@@ -124,7 +124,7 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
             Welcome, {firstName}
           </h2>
           <p className="text-muted-foreground leading-relaxed max-w-md mx-auto">
-            We're excited to have you join us. This portal will guide you through everything needed to get you placement-ready — at your own pace.
+            Thank you for your interest in joining us. Before we begin onboarding, we'd like to start with a short assessment to understand how you approach clinical care. Here's what to expect.
           </p>
         </div>
 
@@ -195,7 +195,7 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
 
         <div className="mt-8 text-center animate-fade-in-up" style={{ animationDelay: "500ms" }}>
           <Button size="lg" onClick={onContinue} className="gap-2 px-8 font-semibold">
-            Get Started
+            Begin Assessment
             <ArrowRight className="w-4 h-4" />
           </Button>
           <p className="text-[11px] text-muted-foreground mt-3">
