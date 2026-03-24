@@ -168,7 +168,8 @@ export function registerNurseRoutes(app: Express) {
       const [nurse] = await db.select().from(nurses).where(eq(nurses.id, link.nurseId));
       if (!nurse) return res.status(404).json({ message: "Nurse not found" });
 
-      if (!link.usedAt) {
+      const isFirstVisit = !link.usedAt;
+      if (isFirstVisit) {
         await db.update(portalLinks).set({ usedAt: new Date() }).where(eq(portalLinks.id, link.id));
         await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
       }
@@ -204,6 +205,7 @@ export function registerNurseRoutes(app: Express) {
         },
         journey,
         token: link.token,
+        firstVisit: isFirstVisit,
       });
     } catch (err) {
       console.error("Portal token error:", err);
