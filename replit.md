@@ -91,6 +91,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 
 ### System
 - `/audit` — Audit trail (admin only)
+- `/guide` — Admin Guide with walkthroughs & SOPs (step-by-step procedures for all platform features)
 
 ## Server Routes
 

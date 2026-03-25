@@ -11,6 +11,7 @@ import Dashboard from "@/pages/dashboard";
 import NursesPage from "@/pages/nurses";
 import NurseDetail from "@/pages/nurse-detail";
 import AuditPage from "@/pages/audit";
+import AdminGuidePage from "@/pages/admin-guide";
 import AdminPreboard from "@/pages/preboard/admin-preboard";
 import PortalHub from "@/pages/portal/portal-hub";
 import LoginPage from "@/pages/login";
@@ -100,6 +101,9 @@ function AuthenticatedRouter() {
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />
+
+              {/* Admin Guide */}
+              <Route path="/guide" component={AdminGuidePage} />
 
               <Route component={NotFound} />
             </Switch>

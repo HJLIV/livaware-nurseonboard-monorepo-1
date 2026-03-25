@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Gamepad2,
   ScrollText,
+  BookOpen,
   Sun,
   Moon,
   LogOut,
@@ -50,6 +51,7 @@ const arcadeItems: NavItem[] = [
 
 const systemItems: NavItem[] = [
   { label: "Audit Trail", href: "/audit", icon: ScrollText, adminOnly: true },
+  { label: "Admin Guide", href: "/guide", icon: BookOpen },
 ];
 
 function NavSection({
