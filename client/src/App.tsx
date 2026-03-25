@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,7 +9,11 @@ import { lazy, Suspense } from "react";
 
 import Dashboard from "@/pages/dashboard";
 import NursesPage from "@/pages/nurses";
-import NurseDetail from "@/pages/nurse-detail";
+
+function NurseDetailRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Redirect to={`/candidates/${id}`} />;
+}
 import AuditPage from "@/pages/audit";
 import AdminGuidePage from "@/pages/admin-guide";
 import AdminPreboard from "@/pages/preboard/admin-preboard";
@@ -81,7 +85,7 @@ function AuthenticatedRouter() {
 
               {/* Nurse management */}
               <Route path="/nurses" component={NursesPage} />
-              <Route path="/nurses/:id" component={NurseDetail} />
+              <Route path="/nurses/:id" component={NurseDetailRedirect} />
               <Route path="/candidates" component={CandidatesPage} />
               <Route path="/candidates/:id" component={CandidateDetail} />
               <Route path="/pipeline" component={PipelinePage} />

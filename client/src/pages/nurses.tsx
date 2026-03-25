@@ -293,7 +293,7 @@ export default function NursesPage() {
               <NurseCard
                 key={nurse.id}
                 nurse={nurse}
-                onClick={() => setLocation(`/nurses/${nurse.id}`)}
+                onClick={() => setLocation(`/candidates/${nurse.id}`)}
                 index={i}
               />
             ))}
