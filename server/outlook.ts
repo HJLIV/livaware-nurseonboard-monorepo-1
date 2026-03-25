@@ -1,50 +1,48 @@
-// Outlook integration via Replit connector
-import { Client } from '@microsoft/microsoft-graph-client';
+import { ConfidentialClientApplication } from "@azure/msal-node";
+import { Client } from "@microsoft/microsoft-graph-client";
 
-let connectionSettings: any;
+const TENANT_ID = process.env.AZURE_AD_TENANT_ID;
+const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID;
+const CLIENT_SECRET = process.env.AZURE_AD_CLIENT_SECRET;
+const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboard@livaware.co.uk";
 
-async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
-  }
+let msalApp: ConfidentialClientApplication | null = null;
 
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? 'repl ' + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X-Replit-Token not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=outlook',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
+function getMsalApp(): ConfidentialClientApplication {
+  if (!msalApp) {
+    if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
+      throw new Error("Azure AD credentials not configured (AZURE_AD_TENANT_ID, AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)");
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
-    throw new Error('Outlook not connected');
+    msalApp = new ConfidentialClientApplication({
+      auth: {
+        clientId: CLIENT_ID,
+        authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+        clientSecret: CLIENT_SECRET,
+      },
+    });
   }
-  return accessToken;
+  return msalApp;
 }
 
-async function getUncachableOutlookClient() {
-  const accessToken = await getAccessToken();
+async function getGraphClient(): Promise<Client> {
+  const app = getMsalApp();
+  const result = await app.acquireTokenByClientCredential({
+    scopes: ["https://graph.microsoft.com/.default"],
+  });
+
+  if (!result?.accessToken) {
+    throw new Error("Failed to acquire access token for Microsoft Graph");
+  }
 
   return Client.initWithMiddleware({
     authProvider: {
-      getAccessToken: async () => accessToken
-    }
+      getAccessToken: async () => result.accessToken,
+    },
   });
+}
+
+export function isOutlookConfigured(): boolean {
+  return !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET);
 }
 
 export async function sendPortalInviteEmail(
@@ -53,7 +51,7 @@ export async function sendPortalInviteEmail(
   portalUrl: string,
   expiresAt: Date
 ) {
-  const client = await getUncachableOutlookClient();
+  const client = await getGraphClient();
 
   const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -124,7 +122,7 @@ export async function sendPortalInviteEmail(
     </div>
   `;
 
-  await client.api('/me/sendMail').post({
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject: `Livaware Ltd — Complete Your Nurse Onboarding`,
       body: {
@@ -152,7 +150,7 @@ export async function sendDocumentUploadNotification(
   fileBuffer: Buffer,
   mimeType: string,
 ) {
-  const client = await getUncachableOutlookClient();
+  const client = await getGraphClient();
 
   const timestamp = new Date().toLocaleString("en-GB", {
     day: "numeric",
@@ -182,7 +180,7 @@ export async function sendDocumentUploadNotification(
 
   const base64Content = fileBuffer.toString('base64');
 
-  await client.api('/me/sendMail').post({
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject: `Document Upload — ${candidateName} — ${category}`,
       body: {
@@ -192,7 +190,7 @@ export async function sendDocumentUploadNotification(
       toRecipients: [
         {
           emailAddress: {
-            address: 'onboard@livaware.co.uk',
+            address: SENDER_EMAIL,
             name: 'Livaware Onboarding',
           },
         },
@@ -289,7 +287,7 @@ export async function sendReferenceRequestEmail(
   customSubject?: string,
   customBody?: string
 ) {
-  const client = await getUncachableOutlookClient();
+  const client = await getGraphClient();
 
   const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -301,7 +299,7 @@ export async function sendReferenceRequestEmail(
   const subject = customSubject || `Livaware Ltd — Reference Request for ${candidateName}`;
   const htmlBody = buildReferenceRequestHtml(bodyText, refereeFormUrl, expiryFormatted);
 
-  await client.api('/me/sendMail').post({
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject,
       body: {

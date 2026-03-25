@@ -16,6 +16,7 @@ import {
   Shield,
   Clock,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
@@ -319,7 +320,22 @@ export default function PortalHub() {
               data.status === "cleared" ||
               data.status === "competent";
             const isActive = data.status === "in_progress";
+            const isLocked = data.status === "not_started" || data.status === "locked";
             const Icon = stage.icon;
+
+            const preboardCompleted =
+              journey.preboard.status === "completed" ||
+              journey.preboard.status === "cleared" ||
+              journey.preboard.status === "competent";
+
+            const lockReason =
+              isLocked && stage.key === "onboard" && !preboardCompleted
+                ? "Complete Preboard Assessment first"
+                : isLocked && stage.key === "skillsArcade" && !preboardCompleted
+                  ? "Complete Preboard Assessment first"
+                  : isLocked && stage.key === "skillsArcade"
+                    ? "Complete Onboarding first"
+                    : null;
 
             return (
               <Card
@@ -327,6 +343,7 @@ export default function PortalHub() {
                 className={cn(
                   "transition-all",
                   isActive && "ring-1 ring-primary/30 border-primary/20",
+                  isLocked && "opacity-60",
                 )}
               >
                 <CardContent className="flex items-center gap-4 py-5">
@@ -342,6 +359,8 @@ export default function PortalHub() {
                   >
                     {isCompleted ? (
                       <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                    ) : isLocked ? (
+                      <Lock className="h-5 w-5 text-muted-foreground/50" />
                     ) : (
                       <Icon
                         className={cn(
@@ -354,11 +373,17 @@ export default function PortalHub() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">{stage.label}</p>
-                      <StatusBadge status={data.status} />
+                      <p className={cn("text-sm font-medium", isLocked && "text-muted-foreground")}>{stage.label}</p>
+                      {isLocked ? (
+                        <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wider bg-muted/50 text-muted-foreground/60 border-border/40">
+                          Locked
+                        </Badge>
+                      ) : (
+                        <StatusBadge status={data.status} />
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {stage.description}
+                      {lockReason || stage.description}
                     </p>
                   </div>
 
