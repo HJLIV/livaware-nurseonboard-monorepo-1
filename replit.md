@@ -30,6 +30,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - **Production build**: `npm run build`
 - **Production start**: `npm start`
 - **DB schema push**: `npm run db:push`
+- **Tests**: `npm test` — runs 100 Vitest API tests across all modules
 
 ## Modules
 
