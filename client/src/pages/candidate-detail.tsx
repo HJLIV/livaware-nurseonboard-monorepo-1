@@ -292,6 +292,104 @@ function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string
   );
 }
 
+function VerificationBanner({
+  status,
+  type,
+  verifiedAt,
+  candidateId,
+  children,
+}: {
+  status: "verified" | "pending" | "escalated" | string;
+  type: "NMC" | "DBS";
+  verifiedAt?: Date | string | null;
+  candidateId: string;
+  children?: React.ReactNode;
+}) {
+  const isVerified = status === "verified";
+  const isFailed = status === "failed";
+  const isEscalated = status === "escalated";
+  const auditAction = type === "NMC" ? "nmc_verification_created" : "dbs_verification_created";
+  const { data: auditLogs } = useQuery<AuditLog[]>({
+    queryKey: ["/api/candidates", candidateId, "audit-log"],
+  });
+
+  const relevantLogs = (auditLogs || [])
+    .filter(log => log.action === auditAction || (type === "NMC" && log.action === "nurse_updated" && (log.detail as any)?.nmcPin))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const lastVerification = relevantLogs.find(l => l.action === auditAction);
+  const lastPinEntry = type === "NMC" ? relevantLogs.find(l => l.action === "nurse_updated" && (l.detail as any)?.nmcPin) : null;
+
+  const bannerStyle = isVerified
+    ? "border-emerald-500/50 bg-emerald-950/20"
+    : isFailed
+    ? "border-red-500/50 bg-red-950/20"
+    : isEscalated
+    ? "border-orange-500/50 bg-orange-950/20"
+    : "border-amber-500/50 bg-amber-950/20";
+
+  const iconColor = isVerified ? "text-emerald-400" : isFailed ? "text-red-400" : isEscalated ? "text-orange-400" : "text-amber-400";
+  const textColor = isVerified ? "text-emerald-300" : isFailed ? "text-red-300" : isEscalated ? "text-orange-300" : "text-amber-300";
+  const statusLabel = isVerified ? "Verified" : isFailed ? "Failed" : isEscalated ? "Escalated — Review Required" : "Pending Verification";
+  const badgeStatus = isVerified ? "cleared" : isFailed ? "blocked" : "escalated";
+
+  return (
+    <div className={`rounded-lg border p-4 space-y-3 ${bannerStyle}`} data-testid={`verification-banner-${type.toLowerCase()}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isVerified ? (
+            <CheckCircle className="h-5 w-5 text-emerald-400" />
+          ) : (
+            <AlertTriangle className={`h-5 w-5 ${iconColor}`} />
+          )}
+          <span className={`text-sm font-semibold ${textColor}`}>
+            {type} {statusLabel}
+          </span>
+        </div>
+        <StatusBadge status={badgeStatus} />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+        {verifiedAt && (
+          <div>
+            <span className="text-muted-foreground">Verified Date</span>
+            <p className="font-medium text-foreground">
+              {new Date(verifiedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+            </p>
+          </div>
+        )}
+        {lastVerification && (
+          <>
+            <div>
+              <span className="text-muted-foreground">Checked By</span>
+              <p className="font-medium text-foreground">{lastVerification.agentName || "Admin"}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Logged At</span>
+              <p className="font-medium text-foreground">
+                {new Date(lastVerification.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                {" "}
+                {new Date(lastVerification.timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </div>
+          </>
+        )}
+        {lastPinEntry && (
+          <div>
+            <span className="text-muted-foreground">PIN Entered</span>
+            <p className="font-medium text-foreground">
+              {new Date(lastPinEntry.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              {" by "}{lastPinEntry.agentName || "Admin"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
 interface NmcRawResponse {
   pdfVerification?: boolean;
   evidenceFilename?: string | null;
@@ -406,21 +504,22 @@ function NmcTab({ candidateId }: { candidateId: string }) {
   if (isLoading) return <Skeleton className="h-40" />;
 
   if (verification && !showRecheck && !parsedData) {
-    const statusOk = verification.status === "verified";
     return (
       <div className="space-y-4" data-testid="tab-nmc">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={statusOk ? "cleared" : "escalated"} />
-          <span className="text-sm text-muted-foreground">
-            {verification.verifiedAt ? `Verified ${new Date(verification.verifiedAt).toLocaleDateString("en-GB")}` : ""}
-          </span>
+        <VerificationBanner
+          status={verification.status}
+          type="NMC"
+          verifiedAt={verification.verifiedAt}
+          candidateId={candidateId}
+        >
           {getNmcExtractionMethod(verification) === "ai-extracted" && (
             <Badge variant="outline" className="text-[10px] bg-purple-950/60 text-purple-300 border-purple-800/50" data-testid="badge-ai-extracted-verified">
               <Sparkles className="h-3 w-3 mr-1" />
               AI-extracted
             </Badge>
           )}
-        </div>
+        </VerificationBanner>
+
         <div className="grid grid-cols-2 gap-4">
           <InfoRow label="NMC PIN" value={verification.pin} />
           <InfoRow label="Registered Name" value={verification.registeredName} />
@@ -733,9 +832,12 @@ function DbsTab({ candidateId }: { candidateId: string }) {
   if (verification) {
     return (
       <div className="space-y-4" data-testid="tab-dbs">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={verification.status === "verified" ? "cleared" : "escalated"} />
-        </div>
+        <VerificationBanner
+          status={verification.status}
+          type="DBS"
+          verifiedAt={verification.verifiedAt}
+          candidateId={candidateId}
+        />
         <div className="grid grid-cols-2 gap-4">
           <InfoRow label="Certificate Number" value={verification.certificateNumber} />
           <InfoRow label="Issue Date" value={verification.issueDate} />
