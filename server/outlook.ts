@@ -4,7 +4,7 @@ import { Client } from "@microsoft/microsoft-graph-client";
 const TENANT_ID = process.env.AZURE_AD_TENANT_ID;
 const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID;
 const CLIENT_SECRET = process.env.AZURE_AD_CLIENT_SECRET;
-const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboard@livaware.co.uk";
+const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
 
 let msalApp: ConfidentialClientApplication | null = null;
 

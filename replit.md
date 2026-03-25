@@ -130,7 +130,8 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 
 - `DATABASE_URL` — PostgreSQL connection string (Replit)
 - `SESSION_SECRET` — Session signing secret
-- `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET` — Microsoft SSO
+- `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET` — Microsoft SSO + email
+- `AZURE_AD_SENDER_EMAIL` — Sender mailbox for outgoing emails (default: onboarding@livaware.co.uk)
 - `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` — For AI services
 - `ANTHROPIC_API_KEY` — For Anthropic AI services (compliance checks)
 - `REPORT_EMAIL` — Recipient for preboard assessment reports
