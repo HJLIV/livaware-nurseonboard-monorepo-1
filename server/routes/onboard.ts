@@ -82,7 +82,7 @@ export function registerAdminRoutes(app: Express) {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
-        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
+        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, "preboard");
         emailSent = true;
         await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
@@ -701,10 +701,12 @@ export function registerAdminRoutes(app: Express) {
     const host = req.headers["host"] || "localhost:5000";
     const portalUrl = `${protocol}://${host}/portal/${link.token}`;
 
+    const stage = (candidate.currentStage === "skills_arcade" ? "skills_arcade" : candidate.currentStage === "onboard" ? "onboard" : "preboard") as "preboard" | "onboard" | "skills_arcade";
+
     let emailSent = false;
     if (candidate.email) {
       try {
-        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
+        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, stage);
         emailSent = true;
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
       } catch (err: any) {
