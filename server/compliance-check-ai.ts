@@ -93,7 +93,7 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
   );
 
   const candidateData = {
-    fullName: candidate.fullName,
+    fullName: `Candidate-${candidateId.slice(0, 8)}`,
     email: candidate.email ? "Provided" : "Missing",
     phone: candidate.phone ? "Provided" : "Missing",
     dateOfBirth: candidate.dateOfBirth ? "Provided" : "Missing",
@@ -107,7 +107,7 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
     status: candidate.status,
 
     nmcVerification: nmcVerification ? {
-      pin: nmcVerification.pin,
+      pin: nmcVerification.pin ? "Provided" : "Missing",
       status: nmcVerification.status,
       registrationStatus: nmcVerification.registrationStatus,
       conditions: nmcVerification.conditions,
@@ -154,8 +154,8 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
       received: receivedRefs.length,
       flagged: flaggedRefs.length,
       pending: refs.filter(r => r.outcome === "pending" || r.outcome === "sent").length,
-      details: refs.map(r => ({
-        refereeName: r.refereeName,
+      details: refs.map((r, i) => ({
+        refereeName: `Referee ${i + 1}`,
         organisation: r.refereeOrg || "Not specified",
         role: r.refereeRole || "Not specified",
         relationship: r.relationshipToCandidate || "Not specified",
