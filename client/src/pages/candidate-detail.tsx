@@ -2159,6 +2159,56 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
       return false;
     },
   });
+  const { toast } = useToast();
+  const [uploading, setUploading] = useState(false);
+  const [lastClassification, setLastClassification] = useState<{
+    detectedCategory: string;
+    detectedType: string;
+    matchedTrainingModules: string[];
+    autoRecorded: string[];
+    confidence: string;
+    summary: string;
+  } | null>(null);
+
+  const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setLastClassification(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/candidates/${candidateId}/smart-document-upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(err.message);
+      }
+      const result = await res.json();
+      setLastClassification({
+        detectedCategory: result.classification.detectedCategory,
+        detectedType: result.classification.detectedType,
+        matchedTrainingModules: result.classification.matchedTrainingModules,
+        autoRecorded: result.autoRecorded,
+        confidence: result.classification.confidence,
+        summary: result.classification.summary,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      toast({
+        title: "Document Uploaded & Classified",
+        description: `Identified as: ${result.classification.detectedType}${result.autoRecorded.length > 0 ? ` — ${result.autoRecorded.length} training module(s) auto-recorded` : ""}`,
+      });
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message || "Could not process document", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   if (isLoading) return <Skeleton className="h-40" />;
 
@@ -2182,17 +2232,79 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
     return acc;
   }, {});
 
-  if (allDocs.length === 0) {
-    return (
-      <div className="text-center py-8" data-testid="tab-documents">
-        <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-sm text-muted-foreground">No documents uploaded yet</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6" data-testid="tab-documents">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-blue-400" />
+          <p className="text-sm font-medium">Smart Document Upload</p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Upload any document — AI will identify what it is, categorise it, and automatically match it against training requirements.
+        </p>
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            accept=".pdf,application/pdf,image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={handleSmartUpload}
+            disabled={uploading}
+            data-testid="input-smart-upload"
+          />
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={uploading}>
+            <span>
+              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {uploading ? "Analysing document..." : "Upload Document"}
+            </span>
+          </Button>
+        </label>
+      </div>
+
+      {lastClassification && (
+        <div className="rounded-md border border-emerald-800/50 bg-emerald-950/30 p-4 space-y-2" data-testid="smart-upload-result">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-emerald-300">Document Classified</p>
+              <p className="text-xs text-muted-foreground">{lastClassification.summary}</p>
+              <div className="flex flex-wrap gap-2 mt-1">
+                <Badge variant="outline" className="text-[10px]">
+                  Type: {lastClassification.detectedType}
+                </Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  Category: {categories[lastClassification.detectedCategory] || lastClassification.detectedCategory}
+                </Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  Confidence: {lastClassification.confidence}
+                </Badge>
+              </div>
+              {lastClassification.matchedTrainingModules.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground">Training modules matched:</p>
+                  <ul className="mt-1 list-disc list-inside text-xs text-emerald-300/80">
+                    {lastClassification.matchedTrainingModules.map(m => (
+                      <li key={m}>
+                        {m}
+                        {lastClassification.autoRecorded.includes(m) && (
+                          <span className="text-emerald-400 ml-1">(auto-recorded)</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {allDocs.length === 0 ? (
+        <div className="text-center py-8">
+          <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No documents uploaded yet — use the smart upload above</p>
+        </div>
+      ) : (
+      <>
       <p className="text-sm text-muted-foreground">{allDocs.length} document{allDocs.length !== 1 ? "s" : ""} uploaded</p>
       {Object.entries(grouped).map(([cat, catDocs]) => (
         <div key={cat} className="space-y-2">
@@ -2245,6 +2357,8 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
           ))}
         </div>
       ))}
+      </>
+      )}
     </div>
   );
 }
@@ -2639,7 +2753,6 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsTrigger value="right_to_work" className="text-xs gap-1.5"><Globe className="h-3 w-3" />Right to Work</TabsTrigger>
             <TabsTrigger value="profile" className="text-xs gap-1.5"><Briefcase className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="competency" className="text-xs gap-1.5"><Stethoscope className="h-3 w-3" />Competency</TabsTrigger>
-            <TabsTrigger value="training" className="text-xs gap-1.5"><BookOpen className="h-3 w-3" />Training</TabsTrigger>
             <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health</TabsTrigger>
             <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References</TabsTrigger>
             <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity</TabsTrigger>
@@ -2651,7 +2764,6 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="right_to_work"><RightToWorkTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="profile"><ProfileTab candidate={candidate} candidateId={candidateId} /></TabsContent>
             <TabsContent value="competency"><CompetencyTab candidateId={candidateId} /></TabsContent>
-            <TabsContent value="training"><TrainingTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="health"><HealthTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="references"><ReferencesTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} /></TabsContent>

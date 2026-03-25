@@ -8,7 +8,9 @@ import { isNmcAgentAvailable, validatePin, parseNmcPdfWithFallback, NmcVerificat
 import { parseTrainingCertificate } from "../training-cert-service";
 import { triggerSharePointUpload, triggerEmailNotification } from "../sharepoint-helper";
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
+import { classifyDocumentSmart } from "../document-ai";
 import type { HealthDeclaration } from "@shared/schema";
+import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 import { generateAuditSummary, isAuditSummaryAvailable } from "../audit-summary-ai";
 import { generateCandidatePDF } from "../pdf-generator";
 import { runComplianceCheck, isComplianceCheckAvailable } from "../compliance-check-ai";
@@ -561,6 +563,88 @@ export function registerAdminRoutes(app: Express) {
     } catch (err: any) {
       console.error("[Training Cert Upload] Error:", err.message);
       res.status(500).json({ message: "Failed to parse training certificate" });
+    }
+  });
+
+  app.post("/api/candidates/:id/smart-document-upload", uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      const nurseId = param(req, "id");
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+      const supportedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
+      if (!supportedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: "Only PDF and image files are accepted" });
+      }
+
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const absolutePath = path.join(uploadsDir, req.file.filename);
+      const moduleNames = MANDATORY_TRAINING_MODULES.map(m => m.name);
+
+      const classification = await classifyDocumentSmart(absolutePath, req.file.mimetype, moduleNames);
+
+      const doc = await storage.createDocument({
+        nurseId,
+        type: classification.detectedType,
+        filename: req.file.filename,
+        originalFilename: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: classification.detectedCategory,
+        uploadedBy: "admin",
+      });
+
+      triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, classification.detectedCategory);
+      triggerEmailNotification(nurseId, filePath, req.file.originalname, classification.detectedCategory, 'admin', req.file.mimetype);
+
+      const autoRecorded: string[] = [];
+      if (classification.matchedTrainingModules.length > 0) {
+        const existing = await storage.getMandatoryTraining(nurseId);
+        for (const moduleName of classification.matchedTrainingModules) {
+          const alreadyDone = existing.find((t: any) => t.moduleName === moduleName);
+          if (!alreadyDone) {
+            const modDef = MANDATORY_TRAINING_MODULES.find(m => m.name === moduleName);
+            const renewalFreq = modDef?.renewalFrequency || "Annual";
+            await storage.createMandatoryTraining({
+              nurseId,
+              moduleName,
+              renewalFrequency: renewalFreq,
+              completedDate: new Date().toISOString().split("T")[0],
+              expiryDate: renewalFreq === "Annual"
+                ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+                : new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+              issuingBody: "Auto-detected from document",
+              certificateUploaded: true,
+              certificateDocumentId: doc.id,
+              status: "completed",
+            });
+            autoRecorded.push(moduleName);
+          }
+        }
+      }
+
+      await storage.createAuditLog({
+        nurseId,
+        action: "smart_document_uploaded",
+        agentName: agentFor(req),
+        detail: {
+          detectedCategory: classification.detectedCategory,
+          detectedType: classification.detectedType,
+          matchedTrainingModules: classification.matchedTrainingModules,
+          autoRecorded,
+          confidence: classification.confidence,
+          documentId: doc.id,
+        },
+      });
+
+      res.json({
+        document: doc,
+        classification,
+        autoRecorded,
+      });
+    } catch (err: any) {
+      console.error("[Smart Document Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to process document" });
     }
   });
 

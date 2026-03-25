@@ -82,6 +82,117 @@ Extract: documentType, patientName, date`,
 Extract: competencyArea, assessedName, assessorName, date`,
 };
 
+export interface SmartClassificationResult {
+  detectedCategory: string;
+  detectedType: string;
+  matchedTrainingModules: string[];
+  confidence: "high" | "medium" | "low";
+  summary: string;
+}
+
+export async function classifyDocumentSmart(
+  filePath: string,
+  mimeType: string,
+  trainingModules: string[]
+): Promise<SmartClassificationResult> {
+  const absolutePath = path.resolve(filePath);
+  if (!fs.existsSync(absolutePath)) {
+    throw new Error(`File not found: ${absolutePath}`);
+  }
+
+  const fileBuffer = fs.readFileSync(absolutePath);
+  const base64Data = fileBuffer.toString("base64");
+
+  const isImage = mimeType.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+
+  if (!isImage && !isPdf) {
+    return {
+      detectedCategory: "other",
+      detectedType: "Unknown Document",
+      matchedTrainingModules: [],
+      confidence: "low",
+      summary: "File type not supported for AI analysis",
+    };
+  }
+
+  const systemPrompt = `You are a document classifier for a UK healthcare staffing company. Your job is to examine an uploaded document and determine:
+1. What category it belongs to (identity, right_to_work, training_certificate, competency_evidence, health, indemnity, dbs, nmc, profile, other)
+2. What specific type of document it is (e.g. "Basic Life Support Certificate", "DBS Certificate", "Passport", etc.)
+3. Whether it matches any of these mandatory training modules: ${trainingModules.join(", ")}
+
+Respond ONLY with valid JSON:
+{
+  "detectedCategory": "one of: identity, right_to_work, training_certificate, competency_evidence, health, indemnity, dbs, nmc, profile, other",
+  "detectedType": "specific document type name",
+  "matchedTrainingModules": ["list of matched training module names from the provided list, empty if none match"],
+  "confidence": "high | medium | low",
+  "summary": "brief one-sentence description of what this document is"
+}
+
+Be precise about training module matching — only match if the document clearly evidences completion of that specific module.`;
+
+  const userContent: Anthropic.MessageCreateParams["messages"][0]["content"] = [];
+
+  if (isImage) {
+    userContent.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: getMediaType(mimeType),
+        data: base64Data,
+      },
+    });
+  } else if (isPdf) {
+    userContent.push({
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: "application/pdf",
+        data: base64Data,
+      },
+    });
+  }
+
+  userContent.push({
+    type: "text",
+    text: "Classify this document. Identify what type of document it is, which category it belongs to, and whether it matches any mandatory training modules.",
+  });
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userContent }],
+  });
+
+  const responseText = message.content[0]?.type === "text" ? message.content[0].text : "";
+
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON found in AI response");
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    return {
+      detectedCategory: parsed.detectedCategory || "other",
+      detectedType: parsed.detectedType || "Unknown Document",
+      matchedTrainingModules: Array.isArray(parsed.matchedTrainingModules)
+        ? parsed.matchedTrainingModules.filter((m: string) => trainingModules.includes(m))
+        : [],
+      confidence: parsed.confidence || "medium",
+      summary: parsed.summary || "Document classified",
+    };
+  } catch {
+    return {
+      detectedCategory: "other",
+      detectedType: "Unknown Document",
+      matchedTrainingModules: [],
+      confidence: "low",
+      summary: "AI classification could not be completed",
+    };
+  }
+}
+
 function getMediaType(mimeType: string): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
   const map: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
     "image/jpeg": "image/jpeg",

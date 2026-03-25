@@ -39,7 +39,9 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - DBS certificate checking (`server/dbs-service.ts`) — step-by-step walkthrough with external links to gov.uk
 - Editable Identity tab with edit-mode toggle, PATCH save to `/api/nurses/:id` with automatic audit trail logging
 - AI compliance checks (`server/compliance-check-ai.ts`, `server/audit-summary-ai.ts`)
-- Document AI analysis (`server/document-ai.ts`, `server/certificate-ai.ts`)
+- Document AI analysis (`server/document-ai.ts`, `server/certificate-ai.ts`) — includes smart document classification
+- Smart document upload in compliance Documents tab: AI identifies document type, category, and matches against training modules
+- Training management is in the compliance section only (removed from onboarding tabs)
 - Reference AI (`server/reference-ai.ts`)
 - Health triage (`server/health-triage-ai.ts`)
 - Passport parsing (`server/passport-parser.ts`)
