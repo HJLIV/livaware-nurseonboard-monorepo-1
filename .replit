@@ -44,3 +44,7 @@ build = ["npm", "run", "build"]
 [userenv.shared]
 AZURE_AD_TENANT_ID = "9cfee145-5ed6-4c9a-aa8e-0d0365a27984"
 AZURE_AD_CLIENT_ID = "e52a64ff-991e-4e28-834e-88e2ad2d54da"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
