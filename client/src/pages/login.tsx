@@ -219,9 +219,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 variant="outline"
                 className="w-full h-11 gap-3 font-medium"
                 onClick={() => {
-                  window.top
-                    ? (window.top.location.href = "/api/auth/microsoft/login")
-                    : (window.location.href = "/api/auth/microsoft/login");
+                  window.open("/api/auth/microsoft/login", "_blank");
                 }}
               >
                 <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
