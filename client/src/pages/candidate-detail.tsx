@@ -28,7 +28,8 @@ import {
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { Pencil, Save, X } from "lucide-react";
 import { ONBOARDING_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES, INDUCTION_POLICIES, REFERENCE_QUESTIONS } from "@shared/schema";
 import type {
   Candidate, OnboardingState, NmcVerification, DbsVerification,
@@ -76,30 +77,203 @@ function PortalBadge() {
 }
 
 function IdentityTab({ candidate }: { candidate: Candidate }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6" data-testid="tab-identity">
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
-        <div className="space-y-3">
-          <InfoRow icon={<User className="h-4 w-4" />} label="Full Name" value={candidate.fullName} />
-          <InfoRow icon={<Mail className="h-4 w-4" />} label="Email" value={candidate.email} />
-          <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone" value={candidate.phone} />
-          <InfoRow icon={<Calendar className="h-4 w-4" />} label="Date of Birth" value={candidate.dateOfBirth} />
-          <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address" value={candidate.address} />
-          <InfoRow label="Preferred Pronouns" value={candidate.preferredPronouns} />
-          <InfoRow label="Next of Kin" value={candidate.nextOfKin} />
+  const [editing, setEditing] = useState(false);
+  const { toast } = useToast();
+  const [form, setForm] = useState({
+    fullName: candidate.fullName || "",
+    email: candidate.email || "",
+    phone: candidate.phone || "",
+    dateOfBirth: candidate.dateOfBirth || "",
+    address: candidate.address || "",
+    preferredPronouns: candidate.preferredPronouns || "",
+    nextOfKin: candidate.nextOfKin || "",
+    passportNumber: candidate.passportNumber || "",
+    nmcPin: candidate.nmcPin || "",
+    dbsNumber: candidate.dbsNumber || "",
+    band: candidate.band?.toString() || "",
+    currentEmployer: candidate.currentEmployer || "",
+    yearsQualified: candidate.yearsQualified?.toString() || "",
+  });
+
+  const startEditing = useCallback(() => {
+    setForm({
+      fullName: candidate.fullName || "",
+      email: candidate.email || "",
+      phone: candidate.phone || "",
+      dateOfBirth: candidate.dateOfBirth || "",
+      address: candidate.address || "",
+      preferredPronouns: candidate.preferredPronouns || "",
+      nextOfKin: candidate.nextOfKin || "",
+      passportNumber: candidate.passportNumber || "",
+      nmcPin: candidate.nmcPin || "",
+      dbsNumber: candidate.dbsNumber || "",
+      band: candidate.band?.toString() || "",
+      currentEmployer: candidate.currentEmployer || "",
+      yearsQualified: candidate.yearsQualified?.toString() || "",
+    });
+    setEditing(true);
+  }, [candidate]);
+
+  const updateField = (field: string, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, any> = {};
+      if (form.fullName !== (candidate.fullName || "")) payload.fullName = form.fullName;
+      if (form.email !== (candidate.email || "")) payload.email = form.email;
+      if (form.phone !== (candidate.phone || "")) payload.phone = form.phone || null;
+      if (form.dateOfBirth !== (candidate.dateOfBirth || "")) payload.dateOfBirth = form.dateOfBirth || null;
+      if (form.address !== (candidate.address || "")) payload.address = form.address || null;
+      if (form.preferredPronouns !== (candidate.preferredPronouns || "")) payload.preferredPronouns = form.preferredPronouns || null;
+      if (form.nextOfKin !== (candidate.nextOfKin || "")) payload.nextOfKin = form.nextOfKin || null;
+      if (form.passportNumber !== (candidate.passportNumber || "")) payload.passportNumber = form.passportNumber || null;
+      if (form.nmcPin !== (candidate.nmcPin || "")) payload.nmcPin = form.nmcPin || null;
+      if (form.dbsNumber !== (candidate.dbsNumber || "")) payload.dbsNumber = form.dbsNumber || null;
+      if (form.band !== (candidate.band?.toString() || "")) payload.band = form.band ? parseInt(form.band) : null;
+      if (form.currentEmployer !== (candidate.currentEmployer || "")) payload.currentEmployer = form.currentEmployer || null;
+      if (form.yearsQualified !== (candidate.yearsQualified?.toString() || "")) payload.yearsQualified = form.yearsQualified ? parseInt(form.yearsQualified) : null;
+      if (Object.keys(payload).length === 0) {
+        setEditing(false);
+        return;
+      }
+      const res = await apiRequest("PATCH", `/api/nurses/${candidate.id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidate.id] });
+      setEditing(false);
+      toast({ title: "Profile Updated", description: "Changes saved and logged to audit trail." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Update Failed", description: err.message || "Could not save changes.", variant: "destructive" });
+    },
+  });
+
+  if (!editing) {
+    return (
+      <div data-testid="tab-identity">
+        <div className="flex items-center justify-between mb-4">
+          <div />
+          <Button variant="outline" size="sm" onClick={startEditing} data-testid="button-edit-identity">
+            <Pencil className="h-3.5 w-3.5 mr-1.5" />
+            Edit Details
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
+            <div className="space-y-3">
+              <InfoRow icon={<User className="h-4 w-4" />} label="Full Name" value={candidate.fullName} />
+              <InfoRow icon={<Mail className="h-4 w-4" />} label="Email" value={candidate.email} />
+              <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone" value={candidate.phone} />
+              <InfoRow icon={<Calendar className="h-4 w-4" />} label="Date of Birth" value={candidate.dateOfBirth} />
+              <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address" value={candidate.address} />
+              <InfoRow label="Preferred Pronouns" value={candidate.preferredPronouns} />
+              <InfoRow label="Next of Kin" value={candidate.nextOfKin} />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
+            <div className="space-y-3">
+              <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
+              <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
+              <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
+              <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
+              <InfoRow label="Current Employer" value={candidate.currentEmployer} />
+              <InfoRow label="Years Qualified" value={candidate.yearsQualified?.toString()} />
+              <InfoRow label="Specialisms" value={candidate.specialisms?.join(", ")} />
+            </div>
+          </div>
         </div>
       </div>
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
-        <div className="space-y-3">
-          <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
-          <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
-          <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
-          <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
-          <InfoRow label="Current Employer" value={candidate.currentEmployer} />
-          <InfoRow label="Years Qualified" value={candidate.yearsQualified?.toString()} />
-          <InfoRow label="Specialisms" value={candidate.specialisms?.join(", ")} />
+    );
+  }
+
+  return (
+    <div data-testid="tab-identity-edit">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/20">
+            <Pencil className="h-3 w-3 mr-1" />
+            Editing
+          </Badge>
+          <span className="text-xs text-muted-foreground">Changes will be logged in the audit trail</span>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditing(false)} data-testid="button-cancel-edit">
+            <X className="h-3.5 w-3.5 mr-1.5" />
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-edit">
+            <Save className="h-3.5 w-3.5 mr-1.5" />
+            {saveMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={form.fullName} onChange={e => updateField("fullName", e.target.value)} data-testid="input-edit-fullName" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Email</Label>
+              <Input type="email" value={form.email} onChange={e => updateField("email", e.target.value)} data-testid="input-edit-email" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Phone</Label>
+              <Input value={form.phone} onChange={e => updateField("phone", e.target.value)} placeholder="e.g. 07700 900123" data-testid="input-edit-phone" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Date of Birth</Label>
+              <Input type="date" value={form.dateOfBirth} onChange={e => updateField("dateOfBirth", e.target.value)} data-testid="input-edit-dob" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Address</Label>
+              <Textarea value={form.address} onChange={e => updateField("address", e.target.value)} rows={2} data-testid="input-edit-address" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Preferred Pronouns</Label>
+              <Input value={form.preferredPronouns} onChange={e => updateField("preferredPronouns", e.target.value)} placeholder="e.g. she/her" data-testid="input-edit-pronouns" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Next of Kin</Label>
+              <Input value={form.nextOfKin} onChange={e => updateField("nextOfKin", e.target.value)} data-testid="input-edit-nok" />
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Passport Number</Label>
+              <Input value={form.passportNumber} onChange={e => updateField("passportNumber", e.target.value)} data-testid="input-edit-passport" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">NMC PIN</Label>
+              <Input value={form.nmcPin} onChange={e => updateField("nmcPin", e.target.value)} placeholder="e.g. 12A3456B" data-testid="input-edit-nmc" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">DBS Number</Label>
+              <Input value={form.dbsNumber} onChange={e => updateField("dbsNumber", e.target.value)} placeholder="e.g. 001234567890" data-testid="input-edit-dbs" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Band</Label>
+              <Input type="number" min="1" max="9" value={form.band} onChange={e => updateField("band", e.target.value)} placeholder="e.g. 5" data-testid="input-edit-band" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Current Employer</Label>
+              <Input value={form.currentEmployer} onChange={e => updateField("currentEmployer", e.target.value)} data-testid="input-edit-employer" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Years Qualified</Label>
+              <Input type="number" min="0" value={form.yearsQualified} onChange={e => updateField("yearsQualified", e.target.value)} data-testid="input-edit-years" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -530,10 +704,50 @@ function DbsTab({ candidateId }: { candidateId: string }) {
     );
   }
 
+  const DBS_URL = "https://www.gov.uk/request-copy-criminal-record";
+  const DBS_UPDATE_URL = "https://www.gov.uk/dbs-update-service";
+
   return (
-    <div className="space-y-4 max-w-lg" data-testid="tab-dbs">
-      <p className="text-sm text-muted-foreground">Enter DBS certificate details for verification.</p>
-      <div className="space-y-3">
+    <div className="space-y-4" data-testid="tab-dbs">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-4 space-y-3">
+        <p className="text-sm font-medium">DBS Certificate Verification</p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">1</span>
+            Obtain the candidate's DBS certificate number (12 digits, found top-right of the certificate)
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">2</span>
+            If subscribed to the Update Service, check the certificate status online
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">3</span>
+            Enter the certificate details below and record the verification
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(DBS_UPDATE_URL, "_blank")}
+            data-testid="button-open-dbs-update"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />
+            DBS Update Service
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(DBS_URL, "_blank")}
+            data-testid="button-open-dbs-info"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />
+            DBS Certificate Info
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3 max-w-lg">
         <div className="space-y-2">
           <Label>Certificate Number</Label>
           <Input value={certNum} onChange={e => setCertNum(e.target.value)} placeholder="e.g. 001234567890" data-testid="input-dbs-number" />
