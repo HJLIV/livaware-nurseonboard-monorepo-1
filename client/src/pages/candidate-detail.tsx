@@ -313,10 +313,51 @@ function NmcTab({ candidateId }: { candidateId: string }) {
   const [parsedData, setParsedData] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [showRecheck, setShowRecheck] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSaved, setPinSaved] = useState(false);
   const { toast } = useToast();
 
   const resolvedPin = (candidate?.nmcPin || "").trim();
   const NMC_URL = "https://www.nmc.org.uk/registration/search-the-register/";
+
+  const NMC_PIN_REGEX = /^\d{2}[A-Z]\d{4}[A-Z]$/;
+
+  const validateNmcPin = (pin: string): string | null => {
+    if (!pin) return "NMC PIN is required";
+    const upper = pin.toUpperCase().trim();
+    if (upper.length !== 8) return "NMC PIN must be exactly 8 characters (e.g. 12A3456B)";
+    if (!NMC_PIN_REGEX.test(upper)) return "Invalid format — must be 2 digits, 1 letter, 4 digits, 1 letter (e.g. 12A3456B)";
+    return null;
+  };
+
+  const handlePinChange = (value: string) => {
+    const upper = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    setPinInput(upper);
+    setPinSaved(false);
+    if (upper.length > 0) {
+      setPinError(validateNmcPin(upper));
+    } else {
+      setPinError(null);
+    }
+  };
+
+  const savePinMutation = useMutation({
+    mutationFn: async () => {
+      const error = validateNmcPin(pinInput);
+      if (error) throw new Error(error);
+      const res = await apiRequest("PATCH", `/api/nurses/${candidate?.id}`, { nmcPin: pinInput });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      setPinSaved(true);
+      toast({ title: "NMC PIN Saved", description: `PIN ${pinInput} saved to candidate record.` });
+    },
+    onError: (err: any) => {
+      toast({ title: "Save Failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -514,15 +555,18 @@ function NmcTab({ candidateId }: { candidateId: string }) {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">1</span>
-            Search the NMC register for the candidate's PIN
-            {resolvedPin && <Badge variant="outline" className="ml-1 text-[10px]">{resolvedPin}</Badge>}
+            Enter or confirm the candidate's NMC PIN below
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">2</span>
-            Download the registration page as PDF
+            Search the NMC register using the PIN
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">3</span>
+            Download the registration page as PDF
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-900/50 text-blue-300 text-[10px] font-bold">4</span>
             Upload the PDF below — details will be extracted automatically
           </div>
         </div>
@@ -535,6 +579,53 @@ function NmcTab({ candidateId }: { candidateId: string }) {
           <ExternalLink className="h-4 w-4 mr-2" />
           Open NMC Register
         </Button>
+      </div>
+
+      <div className="space-y-3 max-w-lg">
+        <Label className="text-sm font-medium">NMC PIN</Label>
+        <div className="space-y-1.5">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input
+                value={pinInput || resolvedPin}
+                onChange={e => handlePinChange(e.target.value)}
+                placeholder="e.g. 12A3456B"
+                maxLength={8}
+                className={`font-mono tracking-wider uppercase ${pinError && pinInput.length > 0 ? "border-red-500 focus-visible:ring-red-500" : ""} ${pinSaved || (resolvedPin && !pinInput) ? "border-emerald-500/50" : ""}`}
+                data-testid="input-nmc-pin"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => savePinMutation.mutate()}
+              disabled={!pinInput || !!pinError || savePinMutation.isPending || pinInput === resolvedPin}
+              data-testid="button-save-nmc-pin"
+            >
+              {savePinMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+          {pinError && pinInput.length > 0 && (
+            <p className="text-xs text-red-400 flex items-center gap-1" data-testid="nmc-pin-error">
+              <AlertCircle className="h-3 w-3" />
+              {pinError}
+            </p>
+          )}
+          {pinSaved && (
+            <p className="text-xs text-emerald-400 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              PIN saved to candidate record
+            </p>
+          )}
+          {resolvedPin && !pinInput && (
+            <p className="text-xs text-muted-foreground">
+              Current PIN on file: <span className="font-mono font-medium">{resolvedPin}</span>
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Format: 2 digits + 1 letter + 4 digits + 1 letter (e.g. 12A3456B)
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3 max-w-lg">
