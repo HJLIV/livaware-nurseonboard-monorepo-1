@@ -214,21 +214,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 </div>
               </div>
 
-              <a href="/api/auth/microsoft/login" target="_top" rel="noopener noreferrer" className="block">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-11 gap-3 font-medium"
-                >
-                  <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
-                    <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
-                    <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
-                    <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
-                  </svg>
-                  Sign in with Microsoft 365
-                </Button>
-              </a>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 gap-3 font-medium"
+                onClick={() => {
+                  window.top
+                    ? (window.top.location.href = "/api/auth/microsoft/login")
+                    : (window.location.href = "/api/auth/microsoft/login");
+                }}
+              >
+                <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                  <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                  <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                </svg>
+                Sign in with Microsoft 365
+              </Button>
             </>
           )}
 
