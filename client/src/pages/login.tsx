@@ -214,7 +214,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 </div>
               </div>
 
-              <a href="/api/auth/microsoft/login" className="block">
+              <a href="/api/auth/microsoft/login" target="_top" rel="noopener noreferrer" className="block">
                 <Button
                   type="button"
                   variant="outline"
