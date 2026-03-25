@@ -8,10 +8,13 @@ const CLIENT_SECRET = process.env.AZURE_AD_CLIENT_SECRET;
 
 const SCOPES = ["openid", "profile", "email", "User.Read"];
 
-function getRedirectUri(req: Request): string {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host || req.hostname;
-  return `${proto}://${host}/api/auth/microsoft/callback`;
+function getRedirectUri(_req: Request): string {
+  const replitDomains = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN;
+  if (replitDomains) {
+    const domain = replitDomains.split(",")[0].trim();
+    return `https://${domain}/api/auth/microsoft/callback`;
+  }
+  return `https://localhost:5000/api/auth/microsoft/callback`;
 }
 
 function isConfigured(): boolean {
