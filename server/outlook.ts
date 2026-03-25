@@ -6,26 +6,21 @@ const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID;
 const CLIENT_SECRET = process.env.AZURE_AD_CLIENT_SECRET;
 const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
 
-let msalApp: ConfidentialClientApplication | null = null;
-
-function getMsalApp(): ConfidentialClientApplication {
-  if (!msalApp) {
-    if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
-      throw new Error("Azure AD credentials not configured (AZURE_AD_TENANT_ID, AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)");
-    }
-    msalApp = new ConfidentialClientApplication({
-      auth: {
-        clientId: CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-        clientSecret: CLIENT_SECRET,
-      },
-    });
+function createMsalApp(): ConfidentialClientApplication {
+  if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET) {
+    throw new Error("Azure AD credentials not configured (AZURE_AD_TENANT_ID, AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET)");
   }
-  return msalApp;
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId: CLIENT_ID,
+      authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+      clientSecret: CLIENT_SECRET,
+    },
+  });
 }
 
 async function getGraphClient(): Promise<Client> {
-  const app = getMsalApp();
+  const app = createMsalApp();
   const result = await app.acquireTokenByClientCredential({
     scopes: ["https://graph.microsoft.com/.default"],
   });
