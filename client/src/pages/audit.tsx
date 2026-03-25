@@ -47,6 +47,7 @@ const actionOptions = [
   { value: "update", label: "Update" },
   { value: "delete", label: "Delete" },
   { value: "login", label: "Login" },
+  { value: "microsoft_sso_login", label: "Microsoft SSO Login" },
   { value: "logout", label: "Logout" },
   { value: "submit", label: "Submit" },
   { value: "complete", label: "Complete" },
@@ -79,7 +80,11 @@ export default function AuditPage() {
 
   const filtered = logs?.filter((log) => {
     if (moduleFilter !== "all" && log.module !== moduleFilter) return false;
-    if (actionFilter !== "all" && log.action !== actionFilter) return false;
+    if (actionFilter !== "all") {
+      if (actionFilter === "login") {
+        if (log.action !== "login" && log.action !== "microsoft_sso_login") return false;
+      } else if (log.action !== actionFilter) return false;
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       const detailStr = typeof log.detail === "object" ? JSON.stringify(log.detail) : (log.detail || "");
@@ -175,11 +180,16 @@ export default function AuditPage() {
                       </Badge>
 
                       <div className="flex-1 min-w-0 flex items-center gap-2">
-                        {log.detail && (
+                        {log.action === "microsoft_sso_login" && typeof log.detail === "object" ? (
+                          <span className="text-sm text-muted-foreground/70 truncate inline-flex items-center gap-1.5">
+                            <svg viewBox="0 0 21 21" className="h-3 w-3 shrink-0"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+                            {(log.detail as any).displayName || (log.detail as any).email || "Microsoft user"} signed in via Microsoft 365
+                          </span>
+                        ) : log.detail ? (
                           <span className="text-sm text-muted-foreground/70 truncate">
                             {typeof log.detail === "object" ? Object.entries(log.detail).map(([k, v]) => `${k}: ${v}`).join(", ") : log.detail}
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       {log.agentName && (

@@ -108,13 +108,16 @@ export function registerMicrosoftAuthRoutes(app: Express) {
       req.session.authMethod = "microsoft";
 
       try {
-        await logAction({
-          module: "admin",
-          action: "microsoft_sso_login",
-          agentName: displayName,
-          detail: { email, method: "microsoft", tenantId: TENANT_ID },
-        });
-      } catch {}
+        await logAction(
+          null,
+          "admin",
+          "microsoft_sso_login",
+          displayName,
+          { email, displayName, method: "microsoft", tenantId: TENANT_ID }
+        );
+      } catch (auditErr: any) {
+        console.error("[MSAL] Audit log error:", auditErr.message);
+      }
 
       return res.redirect("/");
     } catch (err: any) {
