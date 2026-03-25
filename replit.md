@@ -132,7 +132,7 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 - **Animations**: Staggered fade-in-up reveals with `animate-delay-*` utility classes; `prefers-reduced-motion` fully supported
 - **Design system tokens**: `client/src/lib/design-system.ts` — BRAND colors, FONT families, DOMAIN_COLORS, GLOBAL_STYLES, GRADIENTS, GRAIN_TEXTURE (used by preboard assessment)
 - **Auth hook**: `client/src/lib/auth.ts` exports `useAuth()` for arcade nurse authentication
-- **Shared components**: `client/src/components/shared/step-progress.tsx` (pipeline stepper), `status-badge.tsx` (status pills)
+- **Shared components**: `client/src/components/shared/step-progress.tsx` (pipeline stepper), `status-badge.tsx` (status pills), `file-upload.tsx` (drag-and-drop document upload with progress)
 
 ## Portal Flow (Nurse-Facing)
 

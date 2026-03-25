@@ -1,8 +1,6 @@
 import { PORTAL_STEPS } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { Check, ChevronRight } from "lucide-react";
-import logoPath from "@assets/Livaware-new-logotype-1-white_1773243160929.png";
-
 interface PortalLayoutProps {
   candidateName: string;
   stepStatuses: Record<string, string>;
@@ -30,7 +28,7 @@ export function PortalLayout({
         data-testid="portal-header"
       >
         <div className="max-w-4xl mx-auto flex items-center gap-3 px-4 py-3 sm:px-6">
-          <img src={logoPath} alt="Livaware" className="h-6 w-auto" />
+          <span className="text-lg font-bold text-primary-foreground tracking-tight">Livaware</span>
           <div className="h-5 w-px bg-border mx-1" />
           <div className="min-w-0">
             <p className="text-xs font-medium tracking-[0.14em] uppercase text-primary" data-testid="text-portal-title">

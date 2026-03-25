@@ -17,7 +17,6 @@ import {
   CheckCircle, AlertTriangle, Shield, Star, Users, Loader2, FileText
 } from "lucide-react";
 import { REFERENCE_QUESTIONS, COMPETENCY_MATRIX } from "@shared/schema";
-import logoPath from "@assets/Livaware-new-logotype-1-white_1773243160929.png";
 
 const RATING_LABELS = [
   { value: "1", label: "1 — Poor" },
@@ -141,7 +140,7 @@ export default function RefereeFormPage() {
     <div className="min-h-screen bg-[#020121]">
       <header className="bg-[#0a0a2e] border-b border-[#1e1e5a] px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <img src={logoPath} alt="Livaware Ltd" className="h-8 opacity-90" />
+          <span className="text-xl font-bold text-white tracking-tight">Livaware</span>
           <div>
             <h1 className="text-lg font-semibold text-[#F0ECE4] font-serif">Professional Reference Form</h1>
             <p className="text-xs text-[#8A8A94] tracking-wider uppercase">Livaware Ltd — CQC Regulation 19 / Schedule 3</p>
