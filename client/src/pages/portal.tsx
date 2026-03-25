@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle, AlertCircle, Loader2, User, Shield, FileCheck,
   Stethoscope, BookOpen, Heart, Users, FileText, ShieldCheck,
-  Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb
+  Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb, Equal
 } from "lucide-react";
 import {
   PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES
@@ -1860,6 +1860,184 @@ function IndemnityStep({ token, status }: { token: string; status?: string }) {
   );
 }
 
+const EO_GENDER_OPTIONS = ["Female", "Male", "Non-binary", "Other", "Prefer not to say"];
+const EO_ETHNICITY_OPTIONS = [
+  "White — English, Welsh, Scottish, Northern Irish, or British",
+  "White — Irish",
+  "White — Gypsy or Irish Traveller",
+  "White — Any other White background",
+  "Mixed — White and Black Caribbean",
+  "Mixed — White and Black African",
+  "Mixed — White and Asian",
+  "Mixed — Any other Mixed or multiple ethnic background",
+  "Asian — Indian",
+  "Asian — Pakistani",
+  "Asian — Bangladeshi",
+  "Asian — Chinese",
+  "Asian — Any other Asian background",
+  "Black — African",
+  "Black — Caribbean",
+  "Black — Any other Black, African, or Caribbean background",
+  "Arab",
+  "Any other ethnic group",
+  "Prefer not to say",
+];
+const EO_DISABILITY_OPTIONS = ["Yes", "No", "Prefer not to say"];
+const EO_RELIGION_OPTIONS = ["No religion", "Christian", "Buddhist", "Hindu", "Jewish", "Muslim", "Sikh", "Other", "Prefer not to say"];
+const EO_ORIENTATION_OPTIONS = ["Heterosexual / Straight", "Gay or Lesbian", "Bisexual", "Other", "Prefer not to say"];
+const EO_AGE_BAND_OPTIONS = ["16–24", "25–34", "35–44", "45–54", "55–64", "65+", "Prefer not to say"];
+
+interface EqualOpportunitiesData {
+  id: string;
+  candidateRef: string;
+  gender: string | null;
+  ethnicity: string | null;
+  disabilityStatus: string | null;
+  religionBelief: string | null;
+  sexualOrientation: string | null;
+  ageBand: string | null;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+function EqualOpportunitiesStep({ token, status }: { token: string; status?: string }) {
+  const { data: existing } = useQuery<EqualOpportunitiesData | null>({
+    queryKey: ["/api/portal", token, "equal-opportunities"],
+  });
+
+  const [gender, setGender] = useState(existing?.gender || "Prefer not to say");
+  const [ethnicity, setEthnicity] = useState(existing?.ethnicity || "Prefer not to say");
+  const [disabilityStatus, setDisabilityStatus] = useState(existing?.disabilityStatus || "Prefer not to say");
+  const [religionBelief, setReligionBelief] = useState(existing?.religionBelief || "Prefer not to say");
+  const [sexualOrientation, setSexualOrientation] = useState(existing?.sexualOrientation || "Prefer not to say");
+  const [ageBand, setAgeBand] = useState(existing?.ageBand || "Prefer not to say");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (existing) {
+      setGender(existing.gender || "Prefer not to say");
+      setEthnicity(existing.ethnicity || "Prefer not to say");
+      setDisabilityStatus(existing.disabilityStatus || "Prefer not to say");
+      setReligionBelief(existing.religionBelief || "Prefer not to say");
+      setSexualOrientation(existing.sexualOrientation || "Prefer not to say");
+      setAgeBand(existing.ageBand || "Prefer not to say");
+    }
+  }, [existing]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/portal/${token}/equal-opportunities`, {
+        gender, ethnicity, disabilityStatus, religionBelief, sexualOrientation, ageBand,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "equal-opportunities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      toast({ title: "Equal opportunities form saved", description: "Thank you for completing this form." });
+    },
+  });
+
+  return (
+    <SectionWrapper title="Equal Opportunities" icon={<Equal className="h-5 w-5" />} status={status}>
+      <div className="space-y-5">
+        <div className="rounded-md border border-blue-800/40 bg-blue-950/20 p-4 text-sm" data-testid="eq-opps-confidentiality">
+          <div className="flex items-start gap-2.5">
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-400" />
+            <div className="space-y-1.5">
+              <p className="font-medium text-blue-300">Confidentiality Notice</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                This information is collected for equal opportunities monitoring purposes only, in line with the Equality Act 2010.
+                Your responses are confidential, stored separately from your application, used only for aggregate reporting,
+                and will <span className="font-semibold">not</span> affect your application or any hiring decisions.
+                All fields are optional — you may select "Prefer not to say" for any question.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 max-w-lg">
+          <div className="space-y-2">
+            <Label>Gender</Label>
+            <Select value={gender} onValueChange={setGender}>
+              <SelectTrigger data-testid="select-eq-gender">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_GENDER_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Ethnicity</Label>
+            <Select value={ethnicity} onValueChange={setEthnicity}>
+              <SelectTrigger data-testid="select-eq-ethnicity">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_ETHNICITY_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Disability Status</Label>
+            <Select value={disabilityStatus} onValueChange={setDisabilityStatus}>
+              <SelectTrigger data-testid="select-eq-disability">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_DISABILITY_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Religion or Belief</Label>
+            <Select value={religionBelief} onValueChange={setReligionBelief}>
+              <SelectTrigger data-testid="select-eq-religion">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_RELIGION_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Sexual Orientation</Label>
+            <Select value={sexualOrientation} onValueChange={setSexualOrientation}>
+              <SelectTrigger data-testid="select-eq-orientation">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_ORIENTATION_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Age Band</Label>
+            <Select value={ageBand} onValueChange={setAgeBand}>
+              <SelectTrigger data-testid="select-eq-ageband">
+                <SelectValue placeholder="Prefer not to say" />
+              </SelectTrigger>
+              <SelectContent>
+                {EO_AGE_BAND_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-eq-opps">
+          {saveMutation.isPending ? "Saving..." : "Save Equal Opportunities Form"}
+        </Button>
+      </div>
+    </SectionWrapper>
+  );
+}
+
 export default function PortalPage() {
   const params = useParams<{ token: string }>();
   const token = params.token || "";
@@ -1934,7 +2112,10 @@ export default function PortalPage() {
     8: <HealthStep token={token} status={stepStatuses.health} />,
     9: <ReferencesStep token={token} status={stepStatuses.references} />,
     10: <IndemnityStep token={token} status={stepStatuses.indemnity} />,
+    11: <EqualOpportunitiesStep token={token} status={stepStatuses.equal_opportunities} />,
   };
+
+  const totalSteps = PORTAL_STEPS.length;
 
   return (
     <PortalLayout
@@ -1952,7 +2133,7 @@ export default function PortalPage() {
               Previous Step
             </Button>
           )}
-          {currentStep < 11 && (
+          {currentStep < totalSteps && (
             <Button onClick={() => setCurrentStep(currentStep + 1)} className="ml-auto" data-testid="button-next-step">
               Next Step
             </Button>

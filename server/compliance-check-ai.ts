@@ -456,6 +456,11 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
   const candidate = await storage.getCandidate(candidateId);
   if (!candidate) throw new Error("Candidate not found");
 
+  // AI FIREWALL: Equal opportunities data is NEVER fetched or included in any AI payload.
+  // This is a deliberate exclusion to comply with Equality Act 2010 requirements.
+  // Protected characteristics must not influence compliance or hiring decisions.
+  // DO NOT add storage.getEqualOpportunities() to this list.
+  const EXCLUDED_FROM_AI = ["equal_opportunities"] as const;
   const [
     nmcVerification, dbsVerification, competencies, documents,
     refs, training, healthDeclaration, indemnity,
@@ -510,6 +515,28 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
     onboardingStep: onboardingState?.currentStep || 0,
   };
 
+  // AI FIREWALL — code-level enforcement: strip any protected characteristics
+  // from the payload before sending to external AI. These fields must never
+  // appear in data sent to Anthropic or any other external AI provider.
+  const PROTECTED_CHARACTERISTIC_KEYS = new Set([
+    "gender", "ethnicity", "disabilityStatus", "disability_status",
+    "religionBelief", "religion_belief", "sexualOrientation", "sexual_orientation",
+    "ageBand", "age_band", "equalOpportunities", "equal_opportunities",
+  ]);
+  function sanitizeForAI(obj: Record<string, unknown>): Record<string, unknown> {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (PROTECTED_CHARACTERISTIC_KEYS.has(key)) continue;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        sanitized[key] = sanitizeForAI(value as Record<string, unknown>);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  }
+  const sanitizedSummary = sanitizeForAI(complianceSummary as Record<string, unknown>);
+
   const systemPrompt = `You are a CQC compliance officer for Livaware Ltd, a UK healthcare staffing company. You are producing a structured compliance report for a nurse candidate against **CQC Regulation 19 (Fit and Proper Persons Employed)** and **Schedule 3** of the Health and Social Care Act 2008 (Regulated Activities) Regulations 2014.
 
 You will receive a pre-computed compliance status summary. Each of the 12 Schedule 3 requirements has already been evaluated server-side with a status (met / partially_met / not_met), identified gaps, and supporting indicators. Your role is to interpret these statuses and produce a well-formatted, actionable compliance report.
@@ -563,7 +590,7 @@ Bullet list of recommended actions for the compliance team, ordered by priority.
     messages: [
       {
         role: "user",
-        content: `Produce a CQC Regulation 19 / Schedule 3 compliance report based on the following pre-computed compliance status summary:\n\n${JSON.stringify(complianceSummary, null, 2)}`,
+        content: `Produce a CQC Regulation 19 / Schedule 3 compliance report based on the following pre-computed compliance status summary:\n\n${JSON.stringify(sanitizedSummary, null, 2)}`,
       },
     ],
   });

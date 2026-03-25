@@ -503,6 +503,27 @@ export type User = ArcadeUser;
 export type InsertUser = z.infer<typeof insertArcadeUserSchema>;
 export type Module = ArcadeModule;
 
+// ==================== EQUAL OPPORTUNITIES MONITORING ====================
+
+export const equalOpportunities = pgTable("equal_opportunities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateRef: varchar("candidate_ref").notNull(),
+  gender: text("gender"),
+  ethnicity: text("ethnicity"),
+  disabilityStatus: text("disability_status"),
+  religionBelief: text("religion_belief"),
+  sexualOrientation: text("sexual_orientation"),
+  ageBand: text("age_band"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("equal_opportunities_candidate_ref_idx").on(table.candidateRef),
+]);
+
+export const insertEqualOpportunitiesSchema = createInsertSchema(equalOpportunities).omit({ id: true, submittedAt: true, updatedAt: true });
+export type EqualOpportunities = typeof equalOpportunities.$inferSelect;
+export type InsertEqualOpportunities = z.infer<typeof insertEqualOpportunitiesSchema>;
+
 // ==================== NURSE-ONBOARD COMPATIBILITY ALIASES ====================
 // The Nurse-Onboard app used "candidates" naming; monorepo uses "nurses"
 export const candidates = nurses;
@@ -545,6 +566,7 @@ export const ONBOARDING_STEPS = [
   { step: 9, name: "References", key: "references" },
   { step: 10, name: "Induction & Policies", key: "induction" },
   { step: 11, name: "Professional Indemnity", key: "indemnity" },
+  { step: 12, name: "Equal Opportunities", key: "equal_opportunities" },
 ] as const;
 
 export const MANDATORY_TRAINING_MODULES = [
@@ -576,6 +598,7 @@ export const PORTAL_STEPS = [
   { step: 8, name: "Health Declaration", key: "health" },
   { step: 9, name: "References", key: "references" },
   { step: 10, name: "Professional Indemnity", key: "indemnity" },
+  { step: 11, name: "Equal Opportunities", key: "equal_opportunities" },
 ] as const;
 
 export const COMPETENCY_MATRIX = [

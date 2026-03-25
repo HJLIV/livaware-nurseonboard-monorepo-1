@@ -682,4 +682,50 @@ export function registerPortalRoutes(app: Express) {
     await storage.createAuditLog({ nurseId, action: "portal_dbs_recorded", agentName: "nurse_portal", detail: { certificateNumber: result.certificateNumber } });
     res.status(201).json(result);
   });
+
+  app.get("/api/portal/:token/equal-opportunities", validatePortalToken, async (req, res) => {
+    const nurseId = (req as any).nurseId;
+    const result = await storage.getEqualOpportunities(nurseId);
+    res.json(result || null);
+  });
+
+  app.post("/api/portal/:token/equal-opportunities", validatePortalToken, async (req, res) => {
+    const nurseId = (req as any).nurseId;
+    const { gender, ethnicity, disabilityStatus, religionBelief, sexualOrientation, ageBand } = req.body;
+    const existing = await storage.getEqualOpportunities(nurseId);
+    let result;
+    if (existing) {
+      result = await storage.updateEqualOpportunities(existing.id, {
+        gender: gender ?? existing.gender,
+        ethnicity: ethnicity ?? existing.ethnicity,
+        disabilityStatus: disabilityStatus ?? existing.disabilityStatus,
+        religionBelief: religionBelief ?? existing.religionBelief,
+        sexualOrientation: sexualOrientation ?? existing.sexualOrientation,
+        ageBand: ageBand ?? existing.ageBand,
+      });
+    } else {
+      result = await storage.createEqualOpportunities({
+        candidateRef: nurseId,
+        gender: gender || "Prefer not to say",
+        ethnicity: ethnicity || "Prefer not to say",
+        disabilityStatus: disabilityStatus || "Prefer not to say",
+        religionBelief: religionBelief || "Prefer not to say",
+        sexualOrientation: sexualOrientation || "Prefer not to say",
+        ageBand: ageBand || "Prefer not to say",
+      });
+    }
+    const state = await storage.getOnboardingState(nurseId);
+    if (state) {
+      const statuses = (state.stepStatuses as Record<string, string>) || {};
+      statuses.equal_opportunities = "completed";
+      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
+    }
+    await storage.createAuditLog({
+      nurseId,
+      action: "equal_opportunities_submitted",
+      agentName: "nurse_portal",
+      detail: { submitted: true },
+    });
+    res.status(existing ? 200 : 201).json(result);
+  });
 }

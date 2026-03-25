@@ -69,7 +69,7 @@ export function registerAdminRoutes(app: Express) {
     await storage.createOnboardingState({
       nurseId: candidate.id,
       currentStep: 1,
-      stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending" },
+      stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
     });
     await storage.createAuditLog({ nurseId: candidate.id, action: "candidate_created", agentName: agentFor(req), detail: { name: candidate.fullName } });
 
@@ -783,5 +783,10 @@ export function registerAdminRoutes(app: Express) {
       console.error("[Compliance Check] Error:", error);
       res.status(500).json({ error: "Failed to run compliance check" });
     }
+  });
+
+  app.get("/api/admin/equal-opportunities-report", requireAdmin, async (_req, res) => {
+    const aggregate = await storage.getEqualOpportunitiesAggregate();
+    res.json(aggregate);
   });
 }

@@ -4,7 +4,7 @@ import {
   candidates, nmcVerifications, dbsVerifications, competencyDeclarations,
   documents, references, mandatoryTraining, healthDeclarations,
   inductionPolicies, professionalIndemnity, onboardingStates, auditLogs, magicLinks, refereeTokens,
-  employmentHistory, educationHistory,
+  employmentHistory, educationHistory, equalOpportunities,
   type Candidate, type InsertCandidate,
   type NmcVerification, type InsertNmcVerification,
   type DbsVerification, type InsertDbsVerification,
@@ -21,6 +21,7 @@ import {
   type RefereeToken, type InsertRefereeToken,
   type EmploymentHistory, type InsertEmploymentHistory,
   type EducationHistory, type InsertEducationHistory,
+  type EqualOpportunities, type InsertEqualOpportunities,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -98,6 +99,14 @@ export interface IStorage {
   createEducationHistory(data: InsertEducationHistory): Promise<EducationHistory>;
   updateEducationHistory(id: string, data: Partial<InsertEducationHistory>): Promise<EducationHistory | undefined>;
   deleteEducationHistory(id: string, candidateId?: string): Promise<boolean>;
+
+  getEqualOpportunities(candidateRef: string): Promise<EqualOpportunities | undefined>;
+  createEqualOpportunities(data: InsertEqualOpportunities): Promise<EqualOpportunities>;
+  updateEqualOpportunities(id: string, data: Partial<InsertEqualOpportunities>): Promise<EqualOpportunities | undefined>;
+  getEqualOpportunitiesAggregate(): Promise<{
+    total: number;
+    fields: Record<string, { counts: Record<string, number>; percentages: Record<string, number> }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -385,6 +394,46 @@ export class DatabaseStorage implements IStorage {
     }
     await db.delete(educationHistory).where(eq(educationHistory.id, id));
     return true;
+  }
+
+  async getEqualOpportunities(candidateRef: string): Promise<EqualOpportunities | undefined> {
+    const [result] = await db.select().from(equalOpportunities).where(eq(equalOpportunities.candidateRef, candidateRef)).limit(1);
+    return result;
+  }
+
+  async createEqualOpportunities(data: InsertEqualOpportunities): Promise<EqualOpportunities> {
+    const [result] = await db.insert(equalOpportunities).values(data).returning();
+    return result;
+  }
+
+  async updateEqualOpportunities(id: string, data: Partial<InsertEqualOpportunities>): Promise<EqualOpportunities | undefined> {
+    const [result] = await db.update(equalOpportunities).set({ ...data, updatedAt: new Date() }).where(eq(equalOpportunities.id, id)).returning();
+    return result;
+  }
+
+  async getEqualOpportunitiesAggregate(): Promise<{
+    total: number;
+    fields: Record<string, { counts: Record<string, number>; percentages: Record<string, number> }>;
+  }> {
+    const allRecords = await db.select().from(equalOpportunities);
+    const total = allRecords.length;
+    const fieldNames = ["gender", "ethnicity", "disabilityStatus", "religionBelief", "sexualOrientation", "ageBand"] as const;
+    const fields: Record<string, { counts: Record<string, number>; percentages: Record<string, number> }> = {};
+    for (const field of fieldNames) {
+      const counts: Record<string, number> = {};
+      for (const record of allRecords) {
+        const value = record[field] || "Not provided";
+        counts[value] = (counts[value] || 0) + 1;
+      }
+      const percentages: Record<string, number> = {};
+      if (total > 0) {
+        for (const [key, count] of Object.entries(counts)) {
+          percentages[key] = Math.round((count / total) * 1000) / 10;
+        }
+      }
+      fields[field] = { counts, percentages };
+    }
+    return { total, fields };
   }
 }
 
