@@ -2218,6 +2218,7 @@ export default function CandidateDetail() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold text-foreground" data-testid="text-candidate-name">{candidate.fullName}</h1>
+                <StatusBadge status={candidate.currentStage} isStage />
                 <StatusBadge status={candidate.status} />
               </div>
               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
