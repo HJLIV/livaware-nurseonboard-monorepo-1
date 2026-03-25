@@ -110,13 +110,13 @@ export default function AdminPreboard() {
       <div className="space-y-7">
         <div className="animate-fade-in-up">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
-            Module
+            Applicants
           </p>
           <h1 className="font-serif text-3xl font-light tracking-tight text-foreground">
-            Preboard Admin
+            Assessment Admin
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage and review preboard assessments
+            Manage and review applicant assessments
           </p>
         </div>
 

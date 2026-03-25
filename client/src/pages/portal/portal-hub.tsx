@@ -40,7 +40,7 @@ interface PortalData {
 const journeyConfig = [
   {
     key: "preboard" as const,
-    label: "Preboard Assessment",
+    label: "Applicant Assessment",
     description: "Complete your initial assessment and screening",
     icon: ClipboardCheck,
     color: "text-blue-400",
@@ -48,7 +48,7 @@ const journeyConfig = [
   },
   {
     key: "onboard" as const,
-    label: "Onboarding",
+    label: "Candidate Onboarding",
     description: "Complete orientation and compliance training",
     icon: ShieldCheck,
     color: "text-emerald-400",
@@ -67,7 +67,7 @@ const journeyConfig = [
 const introStages = [
   {
     number: 1,
-    title: "Preboard Assessment",
+    title: "Applicant Assessment",
     description: "Your first step. A short clinical and situational assessment so we can understand how you think and approach care. This helps us decide whether to move forward with your placement.",
     icon: ClipboardCheck,
     color: "text-blue-400",
@@ -77,8 +77,8 @@ const introStages = [
   },
   {
     number: 2,
-    title: "Onboarding",
-    description: "Once you pass the preboard, we'll ask you to upload your professional documents — NMC PIN, DBS certificate, right-to-work evidence, training certificates, and references. Our AI-assisted verification speeds things up.",
+    title: "Candidate Onboarding",
+    description: "Once you pass the assessment, we'll ask you to upload your professional documents — NMC PIN, DBS certificate, right-to-work evidence, training certificates, and references. Our AI-assisted verification speeds things up.",
     icon: ShieldCheck,
     color: "text-emerald-400",
     bgColor: "bg-emerald-500/10",
@@ -121,7 +121,7 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
             Welcome, {firstName}
           </h2>
           <p className="text-muted-foreground leading-relaxed max-w-md mx-auto">
-            Thank you for your interest in joining us. Before we begin onboarding, we'd like to start with a short assessment to understand how you approach clinical care. Here's what to expect.
+            Thank you for your interest in joining us. We'd like to start with a short assessment to understand how you approach clinical care. Here's what to expect.
           </p>
         </div>
 
@@ -284,7 +284,7 @@ export default function PortalHub() {
             <div>
               <p className="text-sm font-medium">Portal</p>
               <p className="text-xs text-muted-foreground">
-                Nurse Onboarding Journey
+                Onboarding Journey
               </p>
             </div>
           </div>
@@ -303,7 +303,7 @@ export default function PortalHub() {
           </h2>
           <div className="mt-2 flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Current stage:</span>
-            <StatusBadge status={nurse.currentStage} />
+            <StatusBadge status={nurse.currentStage} isStage />
           </div>
         </div>
 
@@ -330,11 +330,11 @@ export default function PortalHub() {
 
             const lockReason =
               isLocked && stage.key === "onboard" && !preboardCompleted
-                ? "Complete Preboard Assessment first"
+                ? "Complete Applicant Assessment first"
                 : isLocked && stage.key === "skillsArcade" && !preboardCompleted
-                  ? "Complete Preboard Assessment first"
+                  ? "Complete Applicant Assessment first"
                   : isLocked && stage.key === "skillsArcade"
-                    ? "Complete Onboarding first"
+                    ? "Complete Candidate Onboarding first"
                     : null;
 
             return (

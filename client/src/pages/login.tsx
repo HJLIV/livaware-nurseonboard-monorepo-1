@@ -13,8 +13,8 @@ interface LoginPageProps {
 }
 
 const features = [
-  { icon: ClipboardCheck, label: "Preboard Assessments", desc: "AI-powered credential verification" },
-  { icon: ShieldCheck,   label: "Onboard Compliance",   desc: "Document checks & compliance tracking" },
+  { icon: ClipboardCheck, label: "Applicant Assessment", desc: "AI-powered credential verification" },
+  { icon: ShieldCheck,   label: "Candidate Onboarding", desc: "Document checks & compliance tracking" },
   { icon: Gamepad2,      label: "Skills Arcade",         desc: "Gamified competency assessments" },
   { icon: Activity,      label: "Audit Trail",           desc: "Full lifecycle activity logging" },
 ];

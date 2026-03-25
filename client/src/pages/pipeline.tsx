@@ -57,13 +57,13 @@ export default function PipelinePage() {
       <div className="space-y-7">
         <div className="animate-fade-in-up">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
-            Onboard
+            Candidates
           </p>
           <h1 className="font-serif text-3xl font-light tracking-tight text-foreground" data-testid="text-page-title">
             Pipeline
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Kanban view of the onboarding pipeline
+            Kanban view of the candidate onboarding pipeline
           </p>
         </div>
 

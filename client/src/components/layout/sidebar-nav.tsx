@@ -36,8 +36,8 @@ const platformItems: NavItem[] = [
 ];
 
 const moduleItems: NavItem[] = [
-  { label: "Preboard",        href: "/preboard",           icon: ClipboardCheck },
-  { label: "Onboard",         href: "/nurses",             icon: ShieldCheck },
+  { label: "Applicants",      href: "/preboard",           icon: ClipboardCheck },
+  { label: "Candidates",      href: "/nurses",             icon: ShieldCheck },
   { label: "Skills Arcade",   href: "/arcade",             icon: Gamepad2 },
 ];
 

@@ -10,6 +10,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - **Backend**: Express 5 (Node.js), `server/`
 - **Shared schema**: Drizzle ORM + unified types, `shared/schema.ts` (uses `nurseId` throughout; `candidates`/`magicLinks` are aliases for `nurses`/`portalLinks`)
 - **Naming convention**: Schema uses `nurseId` for FK columns. Storage/route code uses `nurseId` consistently. Legacy `candidateId` naming was fully migrated.
+- **Stage terminology**: DB enum values are unchanged (`preboard`, `onboard`, `skills_arcade`, `completed`), but the UI uses display names: **Applicant** (preboard), **Candidate** (onboard), **Skills Arcade**, **Nurse** (completed). Mapping is defined in `shared/schema.ts` via `STAGE_DISPLAY_NAMES` and `getStageDisplayName()`.
 - **Build System**: `npm` with `tsx` (dev) and `esbuild` (production)
 
 ## Key Technologies

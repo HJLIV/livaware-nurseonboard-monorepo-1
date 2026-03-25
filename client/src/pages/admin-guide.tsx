@@ -61,17 +61,17 @@ const SOP_SECTIONS: SOPSection[] = [
     icon: LayoutDashboard,
     color: "text-blue-400",
     overview:
-      "The dashboard is your command centre. It shows real-time statistics about your nurse workforce pipeline, from initial registration through preboard, onboard, and skills competency.",
+      "The dashboard is your command centre. It shows real-time statistics about your workforce pipeline, from initial registration through applicant assessment, candidate onboarding, and skills competency.",
     steps: [
       {
         action: "View pipeline statistics",
         detail:
-          "The top row of cards shows total nurses, preboard completions, onboard clearances, and skills competency counts. Click any card to navigate to the relevant section.",
+          "The top row of cards shows totals for applicants, candidates, and nurses at each stage. Click any card to navigate to the relevant section.",
       },
       {
         action: "Check the pipeline funnel",
         detail:
-          "The funnel chart visualises how many nurses are at each stage: Preboard, Onboard, Skills Arcade, and Completed. This helps identify bottlenecks.",
+          "The funnel chart visualises how many people are at each stage: Applicant, Candidate, Skills Arcade, and Nurse. This helps identify bottlenecks.",
       },
       {
         action: "Review recent activity",
@@ -79,9 +79,9 @@ const SOP_SECTIONS: SOPSection[] = [
           "The activity feed shows the latest actions across the platform — nurse registrations, portal link generations, stage advances, and document uploads.",
       },
       {
-        action: "Register a new nurse directly",
+        action: "Register a new applicant directly",
         detail:
-          'Click the "Register New Nurse" button to open the quick-registration form without leaving the dashboard.',
+          'Click the "Register" button to open the quick-registration form without leaving the dashboard.',
       },
     ],
     quickLink: "/",
@@ -97,71 +97,71 @@ const SOP_SECTIONS: SOPSection[] = [
     icon: UserPlus,
     color: "text-emerald-400",
     overview:
-      'This is the first step in the nurse onboarding journey. When you register a nurse, the system automatically creates their profile and generates a preboard portal link.',
+      'This is the first step in the onboarding journey. When you register an applicant, the system automatically creates their profile and generates an assessment portal link.',
     steps: [
       {
-        action: 'Navigate to the Nurses page or click "Register New Nurse" on the Dashboard',
-        detail: 'The Onboard section in the sidebar takes you to the Nurses page.',
+        action: 'Navigate to the Onboarding page or click "Register New Applicant" on the Dashboard',
+        detail: 'The Candidates section in the sidebar takes you to the Onboarding page.',
       },
       {
-        action: 'Click "Register & Invite Nurse"',
+        action: 'Click "Register Applicant"',
         detail: "This opens the registration dialog.",
       },
       {
-        action: "Fill in the nurse details",
+        action: "Fill in the applicant details",
         detail:
-          "Enter the nurse's full name, email address, and optionally their phone number. The email must be unique.",
-        tip: "Double-check the email address — this is how the nurse receives their portal link.",
+          "Enter the applicant's full name, email address, and optionally their phone number. The email must be unique.",
+        tip: "Double-check the email address — this is how the applicant receives their portal link.",
       },
       {
-        action: 'Click "Register Nurse"',
+        action: 'Click "Register & Invite"',
         detail:
-          "The system creates the nurse profile, sets their stage to Preboard, and automatically generates a portal invitation link.",
+          "The system creates the applicant profile, sets their stage to Applicant, and automatically generates a portal invitation link.",
       },
       {
         action: "Copy and send the portal link",
         detail:
           "After registration, you'll see a success dialog with the portal link. Copy this link and send it to the nurse via email or your preferred communication channel.",
-        tip: "Portal links expire after 30 days. You can regenerate them from the nurse detail page.",
+        tip: "Portal links expire after 30 days. You can regenerate them from the profile detail page.",
       },
     ],
     quickLink: "/nurses",
-    quickLinkLabel: "Go to Nurses",
+    quickLinkLabel: "Go to Onboarding",
     warnings: [
-      "Always verify the nurse's email address before sending the portal link.",
-      "Each nurse must have a unique email address in the system.",
+      "Always verify the applicant's email address before sending the portal link.",
+      "Each applicant must have a unique email address in the system.",
     ],
   },
   {
     id: "nurse-management",
-    title: "Managing Nurses & Candidates",
+    title: "Managing Applicants & Candidates",
     icon: Users,
     color: "text-violet-400",
     overview:
-      "The Nurses page and Candidates page give you complete oversight of every nurse in the system. You can search, filter, view details, and manage each nurse's journey.",
+      "The Onboarding page and Candidates page give you complete oversight of everyone in the system. You can search, filter, view details, and manage each person's journey.",
     steps: [
       {
-        action: "Search and filter nurses",
+        action: "Search and filter",
         detail:
-          "Use the search bar at the top to find nurses by name or email. Results filter in real time as you type.",
+          "Use the search bar at the top to find people by name or email. Results filter in real time as you type.",
       },
       {
-        action: "Click on a nurse to view their profile",
+        action: "Click on a person to view their profile",
         detail:
-          "The detail page shows five tabs: Overview, Preboard, Onboard, Skills Arcade, and Audit Trail. Each tab gives you deep visibility into that stage.",
+          "The detail page shows five tabs: Overview, Applicant, Candidate, Skills Arcade, and Audit Trail. Each tab gives you deep visibility into that stage.",
       },
       {
         action: "Review the Overview tab",
         detail:
-          "Shows the nurse's current stage, contact details, and a journey stepper visualising their progress through all stages.",
+          "Shows the current stage, contact details, and a journey stepper visualising progress through all stages.",
       },
       {
-        action: "Check the Preboard tab",
+        action: "Check the Applicant tab",
         detail:
-          "View whether the nurse has completed their preboard assessment, their score, and any flagged domains.",
+          "View whether the applicant has completed their assessment, their score, and any flagged domains.",
       },
       {
-        action: "Check the Onboard tab",
+        action: "Check the Candidate tab",
         detail:
           "See which onboarding documents have been submitted, verified, or are still pending. This includes identity, NMC, DBS, references, and training records.",
       },
@@ -175,7 +175,7 @@ const SOP_SECTIONS: SOPSection[] = [
     quickLinkLabel: "Go to Nurses",
     tips: [
       "Use the Candidates view (/candidates) for the full onboarding detail with AI compliance tools.",
-      'The Pipeline view gives you a Kanban-style board of all nurses grouped by stage.',
+      'The Pipeline view gives you a Kanban-style board of everyone grouped by stage.',
     ],
   },
   {
@@ -184,7 +184,7 @@ const SOP_SECTIONS: SOPSection[] = [
     icon: GitBranch,
     color: "text-amber-400",
     overview:
-      "The Pipeline page provides a Kanban-style board view of your entire nurse workforce, organised by onboarding stage. Drag-and-drop style visibility into where every nurse sits in the process.",
+      "The Pipeline page provides a Kanban-style board view of your entire workforce, organised by onboarding stage. Drag-and-drop style visibility into where every person sits in the process.",
     steps: [
       {
         action: "Navigate to Pipeline from the sidebar",
@@ -194,64 +194,64 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Review each column",
         detail:
-          "Each card shows the nurse's name and how long they've been in that stage. Use this to identify nurses who may be stuck or need follow-up.",
+          "Each card shows the person's name and how long they've been in that stage. Use this to identify anyone who may be stuck or need follow-up.",
       },
       {
-        action: "Click a nurse card to view their detail",
-        detail: "Opens the full nurse profile where you can take action on their onboarding.",
+        action: "Click a card to view their detail",
+        detail: "Opens the full profile where you can take action on their onboarding.",
       },
     ],
     quickLink: "/pipeline",
     quickLinkLabel: "Go to Pipeline",
     tips: [
-      "Check the pipeline daily to identify nurses who've been in a stage for too long.",
+      "Check the pipeline daily to identify people who've been in a stage for too long.",
       "The time indicator on each card helps you enforce SLA targets for onboarding completion.",
     ],
   },
   {
     id: "preboard",
-    title: "Preboard Assessment (Admin View)",
+    title: "Applicant Assessment (Admin View)",
     icon: ClipboardCheck,
     color: "text-rose-400",
     overview:
-      "Preboard is a clinical screening gate — a timed assessment that evaluates how nurses think through real-world clinical scenarios. As an admin, you review submitted assessments and decide whether to advance nurses to the onboarding stage.",
+      "The applicant assessment is a clinical screening gate — a timed assessment that evaluates how applicants think through real-world clinical scenarios. As an admin, you review submitted assessments and decide whether to advance applicants to the candidate onboarding stage.",
     steps: [
       {
-        action: "Navigate to Preboard in the sidebar",
+        action: "Navigate to Applicants in the sidebar",
         detail:
-          "The admin preboard page shows all submitted assessments with scores and timestamps.",
+          "The assessment admin page shows all submitted assessments with scores and timestamps.",
       },
       {
         action: "Review an assessment",
         detail:
-          "Click on an assessment to see the nurse's responses, domain scores (clinical reasoning, medication safety, communication, etc.), and overall result.",
+          "Click on an assessment to see the applicant's responses, domain scores (clinical reasoning, medication safety, communication, etc.), and overall result.",
       },
       {
-        action: "Advance or hold a nurse",
+        action: "Advance or hold an applicant",
         detail:
-          'If the assessment meets your standards, advance the nurse to the Onboard stage from their profile page. If not, you can leave them at the Preboard stage for re-assessment.',
-        tip: "The preboard is designed to be completed in 10-15 minutes. Nurses access it through their portal link.",
+          'If the assessment meets your standards, advance the applicant to the Candidate stage from their profile page. If not, you can leave them at the Applicant stage for re-assessment.',
+        tip: "The assessment is designed to be completed in 10-15 minutes. Applicants access it through their portal link.",
       },
     ],
     quickLink: "/preboard",
-    quickLinkLabel: "Go to Preboard",
+    quickLinkLabel: "Go to Assessments",
     warnings: [
-      "Nurses can only access the preboard assessment through their unique portal link.",
-      "Assessment responses are time-limited — the timer is visible to the nurse during the assessment.",
+      "Applicants can only access the assessment through their unique portal link.",
+      "Assessment responses are time-limited — the timer is visible to the applicant during the assessment.",
     ],
   },
   {
     id: "portal",
-    title: "Nurse Portal & Onboarding",
+    title: "Portal & Onboarding",
     icon: ShieldCheck,
     color: "text-cyan-400",
     overview:
-      "The nurse-facing portal is where nurses complete their entire onboarding journey. They access it through a unique token link. The portal guides them through preboard assessment, document uploads, and compliance checks.",
+      "The portal is where applicants and candidates complete their entire onboarding journey. They access it through a unique token link. The portal guides them through applicant assessment, document uploads, and compliance checks.",
     steps: [
       {
-        action: "Understanding the nurse's portal experience",
+        action: "Understanding the portal experience",
         detail:
-          'When a nurse clicks their portal link, they see a journey hub with three stages: Preboard Assessment, Onboarding, and Skills Arcade. They must complete each stage in order.',
+          'When someone clicks their portal link, they see a journey hub with three stages: Applicant Assessment, Candidate Onboarding, and Skills Arcade. They must complete each stage in order.',
       },
       {
         action: "First visit vs return visit",
@@ -269,9 +269,9 @@ const SOP_SECTIONS: SOPSection[] = [
           'If a nurse\'s link has expired or they\'ve lost it, go to their profile page and click "Send Portal Link" to generate a new one.',
       },
       {
-        action: "Onboarding data entry",
+        action: "Candidate onboarding data entry",
         detail:
-          "Nurses fill in 10 sections on the onboarding page: Identity & Contact, NMC PIN, DBS, Health & Disability, Competencies, Employment History, References, Training & Certs, Uniform & Equipment, and Policies & Agreements.",
+          "Candidates fill in 10 sections on the onboarding page: Identity & Contact, NMC PIN, DBS, Health & Disability, Competencies, Employment History, References, Training & Certs, Uniform & Equipment, and Policies & Agreements.",
       },
     ],
     tips: [
@@ -339,7 +339,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Filter by module",
         detail:
-          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Preboard, or Arcade.',
+          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Applicant, or Arcade.',
       },
       {
         action: "Search for specific actions",
@@ -558,8 +558,8 @@ export default function AdminGuidePage() {
             Walkthroughs & SOPs
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Step-by-step procedures for managing the Livaware NurseOnboard platform.
-            Follow these standard operating procedures to ensure consistent, compliant nurse onboarding.
+            Step-by-step procedures for managing the Livaware platform.
+            Follow these standard operating procedures to ensure consistent, compliant onboarding.
           </p>
         </div>
 

@@ -15,7 +15,7 @@ import {
 } from "@/lib/design-system";
 
 const INTRO = {
-  tagline: "Nurse Pre-Onboarding · Community Complex Care",
+  tagline: "Applicant Assessment · Community Complex Care",
   title: "Before we meet you,\nwe'd like to know you.",
   body: [
     "Livaware works exclusively in the home. No ward. No crash team behind the door. No senior nurse three bays down. Just you, your patient, their family — and what you bring into that room.",

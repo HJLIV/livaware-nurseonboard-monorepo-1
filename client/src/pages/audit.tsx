@@ -35,8 +35,8 @@ const moduleStyles: Record<string, { badge: string; dot: string }> = {
 const moduleOptions = [
   { value: "all", label: "All Modules" },
   { value: "admin", label: "Admin" },
-  { value: "preboard", label: "Preboard" },
-  { value: "onboard", label: "Onboard" },
+  { value: "preboard", label: "Applicant" },
+  { value: "onboard", label: "Candidate" },
   { value: "skills_arcade", label: "Skills Arcade" },
   { value: "portal", label: "Portal" },
 ];

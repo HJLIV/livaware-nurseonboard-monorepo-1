@@ -524,6 +524,18 @@ export const insertEqualOpportunitiesSchema = createInsertSchema(equalOpportunit
 export type EqualOpportunities = typeof equalOpportunities.$inferSelect;
 export type InsertEqualOpportunities = z.infer<typeof insertEqualOpportunitiesSchema>;
 
+// ==================== STAGE DISPLAY NAMES ====================
+export const STAGE_DISPLAY_NAMES: Record<string, string> = {
+  preboard: "Applicant",
+  onboard: "Candidate",
+  skills_arcade: "Skills Arcade",
+  completed: "Nurse",
+};
+
+export function getStageDisplayName(stage: string): string {
+  return STAGE_DISPLAY_NAMES[stage] || stage.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // ==================== NURSE-ONBOARD COMPATIBILITY ALIASES ====================
 // The Nurse-Onboard app used "candidates" naming; monorepo uses "nurses"
 export const candidates = nurses;

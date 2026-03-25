@@ -29,6 +29,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getStageDisplayName } from "@shared/schema";
 
 interface NurseDetail {
   id: string;
@@ -77,8 +78,8 @@ interface AuditLog {
 }
 
 const journeyStages = [
-  { key: "preboard", label: "Preboard", icon: ClipboardCheck },
-  { key: "onboard", label: "Onboard", icon: ShieldCheck },
+  { key: "preboard", label: "Applicant", icon: ClipboardCheck },
+  { key: "onboard", label: "Candidate", icon: ShieldCheck },
   { key: "skills_arcade", label: "Skills Arcade", icon: Gamepad2 },
 ];
 
@@ -144,7 +145,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
       queryClient.invalidateQueries({ queryKey: [`/api/nurses/${nurse.id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      toast({ title: "Stage advanced", description: `Nurse moved to ${data.currentStage.replace("_", " ")} stage.` });
+      toast({ title: "Stage advanced", description: `Moved to ${getStageDisplayName(data.currentStage)} stage.` });
     },
     onError: (error: Error) => {
       toast({ title: "Cannot advance", description: error.message, variant: "destructive" });
@@ -180,7 +181,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Nurse Information</CardTitle>
+          <CardTitle className="text-base">Personal Information</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
@@ -218,14 +219,14 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Current Stage</span>
-            <StatusBadge status={nurse.currentStage} />
+            <StatusBadge status={nurse.currentStage} isStage />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Preboard</span>
+            <span className="text-sm text-muted-foreground">Applicant Stage</span>
             <StatusBadge status={nurse.preboardStatus} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Onboard</span>
+            <span className="text-sm text-muted-foreground">Candidate Stage</span>
             <StatusBadge status={nurse.onboardStatus} />
           </div>
           <div className="flex items-center justify-between">
@@ -565,11 +566,11 @@ export default function NurseDetail() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-20">
           <p className="text-lg font-medium text-muted-foreground">
-            Nurse not found
+            Record not found
           </p>
           <Link href="/nurses">
             <Button variant="ghost" className="mt-2">
-              Back to Nurses
+              Back to Onboarding
             </Button>
           </Link>
         </div>
@@ -588,12 +589,12 @@ export default function NurseDetail() {
             </Button>
           </Link>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">Nurse Profile</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">Profile</p>
             <div className="flex items-center gap-3">
               <h1 className="font-serif text-2xl font-light tracking-tight">
                 {nurse.fullName}
               </h1>
-              <StatusBadge status={nurse.currentStage} />
+              <StatusBadge status={nurse.currentStage} isStage />
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">{nurse.email}</p>
           </div>
@@ -610,8 +611,8 @@ export default function NurseDetail() {
         <Tabs defaultValue="overview">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="preboard">Preboard</TabsTrigger>
-            <TabsTrigger value="onboard">Onboard</TabsTrigger>
+            <TabsTrigger value="preboard">Applicant</TabsTrigger>
+            <TabsTrigger value="onboard">Candidate</TabsTrigger>
             <TabsTrigger value="arcade">Skills Arcade</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>

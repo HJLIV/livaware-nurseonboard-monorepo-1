@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check } from "lucide-react";
+import { getStageDisplayName } from "@shared/schema";
 
 interface Nurse {
   id: string;
@@ -66,7 +67,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
         setInviteUrl(data.preboardInviteUrl);
       } else {
         resetAndClose();
-        toast({ title: "Nurse registered", description: `${firstName} ${lastName} has been added to the platform.` });
+        toast({ title: "Applicant registered", description: `${firstName} ${lastName} has been added to the platform.` });
       }
     },
     onError: (error: Error) => {
@@ -93,7 +94,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
     if (inviteUrl) {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
-      toast({ title: "Link copied", description: "Preboard invite link copied to clipboard." });
+      toast({ title: "Link copied", description: "Assessment invite link copied to clipboard." });
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -104,7 +105,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
         {trigger || (
           <Button className="gap-2 font-semibold shadow-md">
             <UserPlus className="h-4 w-4" />
-            Register Nurse
+            Register Applicant
           </Button>
         )}
       </DialogTrigger>
@@ -112,21 +113,21 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
         {inviteUrl ? (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl font-light">Nurse Registered</DialogTitle>
+              <DialogTitle className="font-serif text-xl font-light">Applicant Registered</DialogTitle>
               <DialogDescription>
-                {firstName} {lastName} has been registered. Share the preboard assessment link below.
+                {firstName} {lastName} has been registered. Share the assessment link below.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Preboard Invite Link</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Assessment Invite Link</p>
                 <div className="flex items-center gap-2">
                   <Input value={inviteUrl} readOnly className="text-xs font-mono bg-card" />
                   <Button size="icon" variant="outline" onClick={handleCopy} className="shrink-0">
                     {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">This link expires in 30 days. Send it to the nurse to begin their preboard assessment.</p>
+                <p className="text-xs text-muted-foreground">This link expires in 30 days. Send it to the applicant to begin their assessment.</p>
               </div>
               <DialogFooter>
                 <Button onClick={resetAndClose} className="w-full">Done</Button>
@@ -136,8 +137,8 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="font-serif text-xl font-light">Register New Nurse</DialogTitle>
-              <DialogDescription>Add a new nurse to the platform. A preboard assessment invite will be generated automatically.</DialogDescription>
+              <DialogTitle className="font-serif text-xl font-light">Register New Applicant</DialogTitle>
+              <DialogDescription>Add a new applicant to the platform. An assessment invite will be generated automatically.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 pt-2">
               <div className="grid grid-cols-2 gap-4">
@@ -209,7 +210,7 @@ function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => voi
               <div className="flex items-center gap-2 flex-wrap">
                 <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${stage.bg}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${stage.dot}`} />
-                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.text}`}>{nurse.currentStage.replace("_", " ")}</span>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.text}`}>{getStageDisplayName(nurse.currentStage)}</span>
                 </div>
                 <StatusBadge status={nurse.preboardStatus} />
                 <StatusBadge status={nurse.onboardStatus} />
@@ -251,13 +252,13 @@ export default function NursesPage() {
         <div className="flex items-end justify-between animate-fade-in-up">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
-              Onboard
+              Candidates
             </p>
             <h1 className="font-serif text-3xl font-light tracking-tight text-foreground">
-              Nurses
+              Onboarding
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage registrations and lifecycle progress
+              Manage candidate onboarding and compliance
             </p>
           </div>
           <RegisterNurseDialog />
@@ -304,10 +305,10 @@ export default function NursesPage() {
                 <Users className="h-7 w-7 text-primary/40" />
               </div>
               <p className="font-serif text-lg text-foreground mb-1">
-                {search ? "No nurses found" : "No nurses registered"}
+                {search ? "No results found" : "No applicants registered"}
               </p>
               <p className="text-sm text-muted-foreground max-w-xs">
-                {search ? "Try adjusting your search terms" : "Register your first nurse to begin their onboarding journey"}
+                {search ? "Try adjusting your search terms" : "Register your first applicant to begin the onboarding journey"}
               </p>
             </CardContent>
           </Card>

@@ -54,8 +54,8 @@ const moduleColors: Record<string, string> = {
 const statCards = [
   {
     key: "totalNurses" as keyof DashboardStats,
-    title: "Total Nurses",
-    desc: "Registered in platform",
+    title: "Total Registered",
+    desc: "All applicants in platform",
     icon: Users,
     accent: "blue",
     gradient: "from-blue-500/8 to-transparent",
@@ -65,8 +65,8 @@ const statCards = [
   },
   {
     key: "preboardComplete" as keyof DashboardStats,
-    title: "Preboard Complete",
-    desc: "Assessments finished",
+    title: "Applicants Cleared",
+    desc: "Assessment completed",
     icon: ClipboardCheck,
     accent: "primary",
     gradient: "from-primary/8 to-transparent",
@@ -76,7 +76,7 @@ const statCards = [
   },
   {
     key: "onboardCleared" as keyof DashboardStats,
-    title: "Onboard Cleared",
+    title: "Candidates Cleared",
     desc: "Compliance confirmed",
     icon: ShieldCheck,
     accent: "emerald",
@@ -140,10 +140,10 @@ function StatCard({
 }
 
 const funnelStages = [
-  { key: "preboard" as const,     label: "Preboard",     color: "bg-blue-500",    pct_color: "text-blue-400" },
-  { key: "onboard" as const,      label: "Onboard",      color: "bg-emerald-500", pct_color: "text-emerald-400" },
+  { key: "preboard" as const,     label: "Applicant",     color: "bg-blue-500",    pct_color: "text-blue-400" },
+  { key: "onboard" as const,      label: "Candidate",     color: "bg-emerald-500", pct_color: "text-emerald-400" },
   { key: "skillsArcade" as const, label: "Skills Arcade", color: "bg-amber-500",  pct_color: "text-amber-400" },
-  { key: "completed" as const,    label: "Completed",    color: "bg-primary",     pct_color: "text-primary" },
+  { key: "completed" as const,    label: "Nurse",         color: "bg-primary",     pct_color: "text-primary" },
 ];
 
 function FunnelSection({ stats, isLoading }: { stats?: DashboardStats; isLoading: boolean }) {
@@ -160,7 +160,7 @@ function FunnelSection({ stats, isLoading }: { stats?: DashboardStats; isLoading
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="font-serif text-lg font-light tracking-tight">Journey Funnel</CardTitle>
-            <CardDescription className="text-xs mt-0.5">Nurse progression through lifecycle stages</CardDescription>
+            <CardDescription className="text-xs mt-0.5">Applicant → Candidate → Nurse progression</CardDescription>
           </div>
           <TrendingUp className="h-4 w-4 text-muted-foreground/40" />
         </div>
@@ -290,14 +290,14 @@ function QuickActions() {
         <RegisterNurseDialog trigger={
           <Button className="w-full justify-start gap-3 h-10 font-medium" variant="default">
             <UserPlus className="h-4 w-4" />
-            Register New Nurse
+            Register New Applicant
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />
           </Button>
         } />
         <Link href="/preboard">
           <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline">
             <ClipboardCheck className="h-4 w-4" />
-            Preboard Admin
+            Applicant Admin
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />
           </Button>
         </Link>
@@ -337,7 +337,7 @@ export default function Dashboard() {
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Nurse lifecycle management at a glance
+            Applicant → Candidate → Nurse lifecycle at a glance
           </p>
         </div>
 
