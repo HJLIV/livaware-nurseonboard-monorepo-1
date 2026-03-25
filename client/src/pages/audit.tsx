@@ -37,7 +37,7 @@ const moduleOptions = [
   { value: "admin", label: "Admin" },
   { value: "preboard", label: "Applicant" },
   { value: "onboard", label: "Candidate" },
-  { value: "skills_arcade", label: "Skills Arcade" },
+  { value: "skills_arcade", label: "Pre-Induction" },
   { value: "portal", label: "Portal" },
 ];
 

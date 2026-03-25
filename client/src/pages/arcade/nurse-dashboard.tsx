@@ -130,7 +130,7 @@ export default function NurseDashboard() {
     <div className="space-y-7 max-w-5xl mx-auto">
       <div className="animate-fade-in-up">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
-          Skills Arcade
+          Pre-Induction
         </p>
         <h1 className="font-serif text-3xl font-light tracking-tight text-foreground" data-testid="text-dashboard-title">
           {isAdmin ? "Clinical Module Library" : `Welcome back${user?.name ? `, ${user.name.split(" ")[0]}` : ""}`}

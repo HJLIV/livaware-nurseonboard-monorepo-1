@@ -43,7 +43,7 @@ export default function AdminReports() {
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Pre-Induction</p>
           <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-reports-title">Reports & Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1">Competency assessment overview</p>
         </div>

@@ -441,7 +441,7 @@ export default function AdminUsers() {
       <InviteNurseDialog open={showInviteDialog} onOpenChange={setShowInviteDialog} />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Pre-Induction</p>
           <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-admin-users-title">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">View user details and training progress</p>
         </div>

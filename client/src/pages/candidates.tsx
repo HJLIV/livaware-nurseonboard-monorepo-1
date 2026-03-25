@@ -38,10 +38,10 @@ function AddCandidateDialog() {
       setOpen(false);
       setFullName(""); setEmail(""); setPhone("");
       toast({
-        title: "Candidate added",
+        title: "Fast-tracked to onboarding",
         description: data.emailSent
           ? "Portal invite email sent to " + data.email
-          : "Candidate registered. Portal invite email could not be sent.",
+          : "Candidate registered and fast-tracked. Portal invite email could not be sent.",
       });
     },
     onError: (err: Error) => {
@@ -52,14 +52,15 @@ function AddCandidateDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 font-semibold shadow-md" data-testid="button-add-candidate">
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-add-candidate">
           <Plus className="h-4 w-4" />
-          Add Candidate
+          Fast-Track to Onboarding
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-xl font-light">Register New Candidate</DialogTitle>
+          <DialogTitle className="font-serif text-xl font-light">Fast-Track to Onboarding</DialogTitle>
+          <p className="text-sm text-muted-foreground">Bypass the applicant stage for someone you already know well. They'll go straight to onboarding.</p>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="space-y-1.5">

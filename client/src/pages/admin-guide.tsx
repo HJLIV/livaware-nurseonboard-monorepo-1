@@ -71,7 +71,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Check the pipeline funnel",
         detail:
-          "The funnel chart visualises how many people are at each stage: Applicant, Candidate, Skills Arcade, and Nurse. This helps identify bottlenecks.",
+          "The funnel chart visualises how many people are at each stage: Applicant, Candidate, Onboarding, Pre-Induction, and Nurse. This helps identify bottlenecks.",
       },
       {
         action: "Review recent activity",
@@ -148,7 +148,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Click on a person to view their profile",
         detail:
-          "The detail page shows five tabs: Overview, Applicant, Candidate, Skills Arcade, and Audit Trail. Each tab gives you deep visibility into that stage.",
+          "The detail page shows five tabs: Overview, Applicant, Candidate, Pre-Induction, and Audit Trail. Each tab gives you deep visibility into that stage.",
       },
       {
         action: "Review the Overview tab",
@@ -251,7 +251,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Understanding the portal experience",
         detail:
-          'When someone clicks their portal link, they see a journey hub with three stages: Applicant Assessment, Candidate Onboarding, and Skills Arcade. They must complete each stage in order.',
+          'When someone clicks their portal link, they see a journey hub with three stages: Applicant Assessment, Candidate Onboarding, and Pre-Induction. They must complete each stage in order.',
       },
       {
         action: "First visit vs return visit",
@@ -282,16 +282,16 @@ const SOP_SECTIONS: SOPSection[] = [
   },
   {
     id: "arcade",
-    title: "Skills Arcade Administration",
+    title: "Pre-Induction Administration",
     icon: Gamepad2,
     color: "text-orange-400",
     overview:
-      "The Clinical Skills Arcade contains 40 competency modules covering essential clinical scenarios. As an admin, you can manage modules, view reports, and manage user assignments.",
+      "The Pre-Induction area contains 40 competency modules covering essential clinical scenarios. As an admin, you can manage modules, view reports, and manage user assignments.",
     steps: [
       {
-        action: "Access the Arcade dashboard",
+        action: "Access the Pre-Induction dashboard",
         detail:
-          'Navigate to Skills Arcade in the sidebar. As an admin, you\'ll see the "Clinical Module Library" showing all 40 modules with search functionality.',
+          'Navigate to Pre-Induction in the sidebar. As an admin, you\'ll see the "Clinical Module Library" showing all 40 modules with search functionality.',
       },
       {
         action: "Search and browse modules",
@@ -301,7 +301,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Manage Modules",
         detail:
-          'Click "Manage Modules" or navigate to the Modules page under Arcade in the sidebar. Here you can view all modules, toggle active/inactive status, and see scenario counts.',
+          'Click "Manage Modules" or navigate to the Modules page under Clinical in the sidebar. Here you can view all modules, toggle active/inactive status, and see scenario counts.',
         tip: "Deactivating a module hides it from nurses but preserves all historical data.",
       },
       {
@@ -316,7 +316,7 @@ const SOP_SECTIONS: SOPSection[] = [
       },
     ],
     quickLink: "/arcade",
-    quickLinkLabel: "Go to Skills Arcade",
+    quickLinkLabel: "Go to Pre-Induction",
     tips: [
       "The arcade has 40 modules spanning medication, wound care, infection control, mental health, palliative care, and more.",
       "Nurses access scenarios through their portal journey or direct assignment.",
@@ -339,7 +339,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Filter by module",
         detail:
-          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Applicant, or Arcade.',
+          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Applicant, or Pre-Induction.',
       },
       {
         action: "Search for specific actions",
@@ -380,7 +380,7 @@ const QUICK_REFERENCE = [
     title: "Weekly Tasks",
     icon: Target,
     items: [
-      "Review Skills Arcade reports for completion trends",
+      "Review Pre-Induction reports for completion trends",
       "Check audit trail for any unusual activity",
       "Follow up with nurses who have stalled onboarding",
       "Export reports for management review",
@@ -395,7 +395,7 @@ const QUICK_REFERENCE = [
       "Monitor preboard assessment completion",
       "Review preboard results and advance to onboard",
       "Monitor document uploads and compliance checks",
-      "Assign Skills Arcade modules when onboarding complete",
+      "Assign Pre-Induction modules when onboarding complete",
     ],
   },
 ];

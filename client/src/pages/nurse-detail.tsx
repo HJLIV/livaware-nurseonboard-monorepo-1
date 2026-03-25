@@ -80,7 +80,7 @@ interface AuditLog {
 const journeyStages = [
   { key: "preboard", label: "Applicant", icon: ClipboardCheck },
   { key: "onboard", label: "Candidate", icon: ShieldCheck },
-  { key: "skills_arcade", label: "Skills Arcade", icon: Gamepad2 },
+  { key: "skills_arcade", label: "Pre-Induction", icon: Gamepad2 },
 ];
 
 function JourneyStepper({ currentStage }: { currentStage: string }) {
@@ -230,7 +230,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
             <StatusBadge status={nurse.onboardStatus} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Skills Arcade</span>
+            <span className="text-sm text-muted-foreground">Pre-Induction</span>
             <StatusBadge status={nurse.arcadeStatus} />
           </div>
           <div className="pt-3 border-t space-y-2">
@@ -613,7 +613,7 @@ export default function NurseDetail() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="preboard">Applicant</TabsTrigger>
             <TabsTrigger value="onboard">Candidate</TabsTrigger>
-            <TabsTrigger value="arcade">Skills Arcade</TabsTrigger>
+            <TabsTrigger value="arcade">Pre-Induction</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 

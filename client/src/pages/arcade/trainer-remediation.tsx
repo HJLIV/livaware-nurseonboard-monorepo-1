@@ -389,7 +389,7 @@ export default function TrainerRemediation() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Pre-Induction</p>
         <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-remediation-title">Remediation Queue</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Nurses requiring face-to-face training and sign-off

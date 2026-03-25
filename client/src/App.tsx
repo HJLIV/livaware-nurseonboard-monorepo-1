@@ -29,7 +29,7 @@ const PipelinePage = lazy(() => import("@/pages/pipeline"));
 const PortalPage = lazy(() => import("@/pages/portal"));
 const RefereeForm = lazy(() => import("@/pages/referee-form"));
 
-// Clinical Skills Arcade
+// Pre-Induction (Clinical Skills)
 const ArcadeNurseDashboard = lazy(() => import("@/pages/arcade/nurse-dashboard"));
 const ArcadeScenarioPlayer = lazy(() => import("@/pages/arcade/scenario-player"));
 const ArcadeTrainerRemediation = lazy(() => import("@/pages/arcade/trainer-remediation"));
@@ -94,7 +94,7 @@ function AuthenticatedRouter() {
               <Route path="/preboard" component={AdminPreboard} />
               <Route path="/preboard/assessment" component={PreboardAssessment} />
 
-              {/* Clinical Skills Arcade */}
+              {/* Pre-Induction (Clinical Skills) */}
               <Route path="/arcade">{() => <AppLayout><ArcadeNurseDashboard /></AppLayout>}</Route>
               <Route path="/arcade/scenario/:id">{() => <AppLayout><ArcadeScenarioPlayer /></AppLayout>}</Route>
               <Route path="/arcade/walkthrough/:id">{() => <AppLayout><ArcadeWalkthrough /></AppLayout>}</Route>

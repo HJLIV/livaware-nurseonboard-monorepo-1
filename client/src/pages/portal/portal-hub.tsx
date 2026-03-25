@@ -56,7 +56,7 @@ const journeyConfig = [
   },
   {
     key: "skillsArcade" as const,
-    label: "Skills Arcade",
+    label: "Pre-Induction",
     description: "Demonstrate competency in required clinical skills",
     icon: Gamepad2,
     color: "text-amber-400",
@@ -87,7 +87,7 @@ const introStages = [
   },
   {
     number: 3,
-    title: "Skills Arcade",
+    title: "Pre-Induction",
     description: "Interactive clinical scenarios that assess your hands-on competency across key nursing skills — medication administration, wound care, IV therapy, and more.",
     icon: Gamepad2,
     color: "text-amber-400",
@@ -334,7 +334,7 @@ export default function PortalHub() {
                 : isLocked && stage.key === "skillsArcade" && !preboardCompleted
                   ? "Complete Applicant Assessment first"
                   : isLocked && stage.key === "skillsArcade"
-                    ? "Complete Candidate Onboarding first"
+                    ? "Complete Onboarding first"
                     : null;
 
             return (

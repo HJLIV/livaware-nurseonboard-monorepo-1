@@ -54,7 +54,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
     className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
   },
   skills_arcade: {
-    label: "Skills Arcade",
+    label: "Pre-Induction",
     className: "bg-amber-500/15 text-amber-400 border-amber-500/20",
   },
 };

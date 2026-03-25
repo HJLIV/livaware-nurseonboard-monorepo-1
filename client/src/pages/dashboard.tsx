@@ -88,7 +88,7 @@ const statCards = [
   {
     key: "skillsCompetent" as keyof DashboardStats,
     title: "Skills Competent",
-    desc: "Arcade competency achieved",
+    desc: "Pre-Induction competency achieved",
     icon: Gamepad2,
     accent: "amber",
     gradient: "from-amber-500/8 to-transparent",
@@ -142,7 +142,7 @@ function StatCard({
 const funnelStages = [
   { key: "preboard" as const,     label: "Applicant",     color: "bg-blue-500",    pct_color: "text-blue-400" },
   { key: "onboard" as const,      label: "Candidate",     color: "bg-emerald-500", pct_color: "text-emerald-400" },
-  { key: "skillsArcade" as const, label: "Skills Arcade", color: "bg-amber-500",  pct_color: "text-amber-400" },
+  { key: "skillsArcade" as const, label: "Pre-Induction", color: "bg-amber-500",  pct_color: "text-amber-400" },
   { key: "completed" as const,    label: "Nurse",         color: "bg-primary",     pct_color: "text-primary" },
 ];
 
@@ -160,7 +160,7 @@ function FunnelSection({ stats, isLoading }: { stats?: DashboardStats; isLoading
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="font-serif text-lg font-light tracking-tight">Journey Funnel</CardTitle>
-            <CardDescription className="text-xs mt-0.5">Applicant → Candidate → Nurse progression</CardDescription>
+            <CardDescription className="text-xs mt-0.5">Applicant → Candidate → Onboarding → Pre-Induction progression</CardDescription>
           </div>
           <TrendingUp className="h-4 w-4 text-muted-foreground/40" />
         </div>
@@ -337,7 +337,7 @@ export default function Dashboard() {
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Applicant → Candidate → Nurse lifecycle at a glance
+            Applicant → Candidate → Onboarding → Pre-Induction lifecycle at a glance
           </p>
         </div>
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/app-layout";
+import { RegisterNurseDialog } from "@/pages/nurses";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -108,16 +109,19 @@ export default function AdminPreboard() {
   return (
     <AppLayout>
       <div className="space-y-7">
-        <div className="animate-fade-in-up">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
-            Applicants
-          </p>
-          <h1 className="font-serif text-3xl font-light tracking-tight text-foreground">
-            Assessment Admin
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage and review applicant assessments
-          </p>
+        <div className="flex items-center justify-between animate-fade-in-up">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/50 mb-1.5">
+              Applicants
+            </p>
+            <h1 className="font-serif text-3xl font-light tracking-tight text-foreground">
+              Assessment Admin
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage and review applicant assessments
+            </p>
+          </div>
+          <RegisterNurseDialog />
         </div>
 
         <div className="flex items-center gap-4 animate-fade-in-up animate-delay-100">

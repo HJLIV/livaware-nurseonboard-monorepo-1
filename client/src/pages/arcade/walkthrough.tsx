@@ -48,15 +48,15 @@ export default function WalkthroughPage() {
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Getting Started</p>
-            <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-walkthrough-title">Welcome to Skills Arcade</h1>
+            <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-walkthrough-title">Welcome to Pre-Induction</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Your guide to clinical competency assessment</p>
           </div>
         </div>
       </div>
 
-      <Section icon={HeartPulse} title="What is Skills Arcade?">
+      <Section icon={HeartPulse} title="What is Pre-Induction?">
         <p>
-          Skills Arcade is a clinical competency assessment platform designed for community and home care nurses.
+          Pre-Induction is a clinical competency assessment platform designed for community and home care nurses.
           It uses realistic, scenario-based assessments to evaluate whether you can safely and effectively carry
           out the clinical procedures you perform every day with patients.
         </p>
@@ -78,7 +78,7 @@ export default function WalkthroughPage() {
           knowledge is the difference between going through the motions and providing safe, accountable care.
         </p>
         <p>
-          Skills Arcade tests this critical dimension of competency. By asking you to sequence steps, match
+          Pre-Induction tests this critical dimension of competency. By asking you to sequence steps, match
           clinical concepts, make decisions at key branching points, and perform calculations, it assesses
           whether you understand the <span className="text-foreground font-medium">why</span> and <span className="text-foreground font-medium">when</span>, not just the how.
         </p>
