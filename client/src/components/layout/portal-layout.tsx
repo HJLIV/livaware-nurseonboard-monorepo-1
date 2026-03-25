@@ -28,7 +28,7 @@ export function PortalLayout({
         data-testid="portal-header"
       >
         <div className="max-w-4xl mx-auto flex items-center gap-3 px-4 py-3 sm:px-6">
-          <span className="text-lg font-bold text-primary-foreground tracking-tight">Livaware</span>
+          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-6 w-auto" />
           <div className="h-5 w-px bg-border mx-1" />
           <div className="min-w-0">
             <p className="text-xs font-medium tracking-[0.14em] uppercase text-primary" data-testid="text-portal-title">

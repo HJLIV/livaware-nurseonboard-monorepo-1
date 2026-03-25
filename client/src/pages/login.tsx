@@ -60,12 +60,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Logo */}
         <div className="relative animate-fade-in-up">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[hsl(39_45%_61%)] shadow-lg">
-              <span className="text-base font-bold text-[hsl(242_95%_7%)]">L</span>
-            </div>
-            <span className="text-xl font-semibold tracking-tight text-white">Livaware</span>
-          </div>
+          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-8 w-auto" />
         </div>
 
         {/* Hero text */}
@@ -116,10 +111,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Mobile logo */}
         <div className="mb-10 flex items-center gap-3 lg:hidden animate-fade-in-up">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-md">
-            <span className="text-base font-bold text-primary-foreground">L</span>
-          </div>
-          <span className="text-xl font-semibold tracking-tight">Livaware</span>
+          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
         </div>
 
         <div className="w-full max-w-sm animate-fade-in-up animate-delay-100">

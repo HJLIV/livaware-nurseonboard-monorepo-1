@@ -141,17 +141,7 @@ export function SidebarNav() {
 
       {/* ── Logo ── */}
       <div className="flex h-16 items-center gap-3 px-5 border-b border-sidebar-border/60">
-        <div className="relative">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-md">
-            <span className="text-sm font-bold text-primary-foreground">L</span>
-          </div>
-        </div>
-        <div>
-          <span className="text-[15px] font-semibold tracking-tight text-sidebar-foreground">
-            Livaware
-          </span>
-          <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Clinical Platform</p>
-        </div>
+        <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto brightness-90" />
       </div>
 
       {/* ── Navigation ── */}

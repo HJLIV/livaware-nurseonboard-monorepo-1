@@ -104,13 +104,9 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
       <div className="border-b bg-card">
         <div className="mx-auto max-w-2xl px-4 py-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">L</span>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">Livaware</h1>
-              <p className="text-xs text-muted-foreground">Clinical Workforce Platform</p>
-            </div>
+            <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
+            <div className="h-6 w-px bg-border" />
+            <p className="text-xs text-muted-foreground">Clinical Workforce Platform</p>
           </div>
         </div>
       </div>
@@ -282,11 +278,10 @@ export default function PortalHub() {
       <div className="border-b bg-card">
         <div className="mx-auto max-w-2xl px-4 py-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">L</span>
-            </div>
+            <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
+            <div className="h-6 w-px bg-border" />
             <div>
-              <h1 className="text-lg font-semibold">Livaware Portal</h1>
+              <p className="text-sm font-medium">Portal</p>
               <p className="text-xs text-muted-foreground">
                 Nurse Onboarding Journey
               </p>
