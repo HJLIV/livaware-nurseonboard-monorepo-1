@@ -118,6 +118,9 @@ export function SidebarNav() {
     authenticated: boolean;
     username: string;
     role?: string;
+    email?: string;
+    displayName?: string;
+    authMethod?: "local" | "microsoft";
   } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -180,10 +183,17 @@ export function SidebarNav() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-semibold text-sidebar-foreground leading-tight">
-                {authData.username}
+                {authData.displayName || authData.username}
               </p>
-              <p className="text-[10px] text-muted-foreground capitalize tracking-wide">
-                {authData.role ?? "user"}
+              <p className="text-[10px] text-muted-foreground tracking-wide">
+                {authData.authMethod === "microsoft" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <svg viewBox="0 0 21 21" className="h-2.5 w-2.5 inline-block shrink-0"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+                    Microsoft · {(authData.role ?? "user")}
+                  </span>
+                ) : (
+                  <span className="capitalize">{authData.role ?? "user"}</span>
+                )}
               </p>
             </div>
             <button

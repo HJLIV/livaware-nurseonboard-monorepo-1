@@ -113,10 +113,24 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 - `assessments` → `preboardAssessments` (Preboard naming)
 - All Insert types (`InsertCandidate`, `InsertMagicLink`, `InsertAuditLog`, etc.)
 
+## Authentication
+
+- **Local auth**: Username/password via `ADMIN_USERNAME`/`ADMIN_PASSWORD` (default: admin/admin), `TEAM_USERNAME`/`TEAM_PASSWORD`
+- **Microsoft 365 SSO**: Azure AD / Entra ID OAuth2 via MSAL. Users click "Sign in with Microsoft 365" on the login page. Requires:
+  - `AZURE_AD_TENANT_ID` — Azure directory/tenant ID
+  - `AZURE_AD_CLIENT_ID` — App registration client ID
+  - `AZURE_AD_CLIENT_SECRET` — Client secret (stored as Replit secret)
+  - Redirect URI: `https://<domain>/api/auth/microsoft/callback`
+- SSO sessions store `displayName`, `email`, `authMethod: "microsoft"` in the session
+- The sidebar shows Microsoft badge + user display name for SSO sessions
+- SSO login events are logged to the audit trail (`microsoft_sso_login` action)
+- Server module: `server/msal-auth.ts`
+
 ## Environment Variables
 
 - `DATABASE_URL` — PostgreSQL connection string (Replit)
 - `SESSION_SECRET` — Session signing secret
+- `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET` — Microsoft SSO
 - `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` — For AI services
 - `ANTHROPIC_API_KEY` — For Anthropic AI services (compliance checks)
 - `REPORT_EMAIL` — Recipient for preboard assessment reports

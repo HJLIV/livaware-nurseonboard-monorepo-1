@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { LogIn, ArrowRight, Activity, ShieldCheck, Gamepad2, ClipboardCheck } from "lucide-react";
 
@@ -22,6 +23,34 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const { toast } = useToast();
+
+  const { data: ssoStatus } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/auth/microsoft/status"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 60000,
+  });
+
+  const ssoEnabled = ssoStatus?.enabled ?? false;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (error) {
+      const messages: Record<string, string> = {
+        sso_failed: "Microsoft sign-in failed. Please try again.",
+        sso_denied: "Sign-in was cancelled or denied.",
+        sso_no_code: "No authorization code received. Please try again.",
+        sso_no_account: "Could not retrieve your Microsoft account. Please try again.",
+        sso_token_failed: "Token exchange failed. Please try again or use local sign-in.",
+      };
+      toast({
+        title: "Sign-in issue",
+        description: messages[error] || "An error occurred during sign-in.",
+        variant: "destructive",
+      });
+      window.history.replaceState({}, "", "/");
+    }
+  }, [toast]);
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -173,6 +202,35 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               )}
             </Button>
           </form>
+
+          {ssoEnabled && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border/50" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <a href="/api/auth/microsoft/login" className="block">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-11 gap-3 font-medium"
+                >
+                  <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                    <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                    <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                    <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                  </svg>
+                  Sign in with Microsoft 365
+                </Button>
+              </a>
+            </>
+          )}
 
           {/* Divider */}
           <div className="relative my-8">

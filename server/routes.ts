@@ -66,6 +66,10 @@ export async function registerRoutes(
     return res.status(401).json({ authenticated: false });
   });
 
+  // === MICROSOFT SSO ===
+  const { registerMicrosoftAuthRoutes } = await import("./msal-auth");
+  registerMicrosoftAuthRoutes(app);
+
   // === PROTECTED ROUTE MIDDLEWARE ===
   app.use("/api/nurses", requireAuth);
   app.use("/api/dashboard", requireAuth);
