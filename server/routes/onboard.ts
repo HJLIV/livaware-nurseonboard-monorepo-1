@@ -125,6 +125,8 @@ export function registerAdminRoutes(app: Express) {
 
   app.post("/api/candidates/:id/nmc-verification", async (req, res) => {
     const data = { ...req.body, nurseId: param(req, "id") };
+    if (typeof data.verifiedAt === "string") data.verifiedAt = new Date(data.verifiedAt);
+    if (!data.verifiedAt && data.status === "verified") data.verifiedAt = new Date();
     const result = await storage.createNmcVerification(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -233,6 +235,8 @@ export function registerAdminRoutes(app: Express) {
 
   app.post("/api/candidates/:id/dbs-verification", async (req, res) => {
     const data = { ...req.body, nurseId: param(req, "id") };
+    if (typeof data.verifiedAt === "string") data.verifiedAt = new Date(data.verifiedAt);
+    if (!data.verifiedAt && data.status === "verified") data.verifiedAt = new Date();
     const result = await storage.createDbsVerification(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -717,7 +721,17 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.get("/api/candidates/:id/onboarding-state", async (req, res) => {
-    const result = await storage.getOnboardingState(param(req, "id"));
+    let result = await storage.getOnboardingState(param(req, "id"));
+    if (!result) {
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (candidate) {
+        result = await storage.createOnboardingState({
+          nurseId: candidate.id,
+          currentStep: 1,
+          stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
+        });
+      }
+    }
     res.json(result || null);
   });
 

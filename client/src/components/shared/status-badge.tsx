@@ -59,6 +59,26 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   },
 };
 
+export function StepStatusDot({ status }: { status?: string }) {
+  if (!status) return null;
+  const isComplete = status === "completed" || status === "complete";
+  const isInProgress = status === "in_progress";
+  const isFlagged = status === "flagged" || status === "escalated";
+  const isBlocked = status === "blocked" || status === "failed";
+
+  const color = isComplete
+    ? "bg-emerald-400"
+    : isInProgress
+    ? "bg-blue-400"
+    : isFlagged
+    ? "bg-amber-400"
+    : isBlocked
+    ? "bg-red-400"
+    : "bg-muted-foreground/30";
+
+  return <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", color)} />;
+}
+
 export function StatusBadge({ status, isStage, className }: StatusBadgeProps) {
   if (!status) return null;
   const config = statusConfig[status] || {

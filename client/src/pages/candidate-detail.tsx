@@ -2940,15 +2940,15 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
         </Card>
         <Tabs defaultValue="identity">
           <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1" data-testid="tabs-onboarding">
-            <TabsTrigger value="identity" className="text-xs gap-1.5"><User className="h-3 w-3" />Identity</TabsTrigger>
-            <TabsTrigger value="nmc" className="text-xs gap-1.5"><Shield className="h-3 w-3" />NMC</TabsTrigger>
-            <TabsTrigger value="dbs" className="text-xs gap-1.5"><FileCheck className="h-3 w-3" />DBS</TabsTrigger>
-            <TabsTrigger value="right_to_work" className="text-xs gap-1.5"><Globe className="h-3 w-3" />Right to Work</TabsTrigger>
-            <TabsTrigger value="profile" className="text-xs gap-1.5"><Briefcase className="h-3 w-3" />Profile</TabsTrigger>
-            <TabsTrigger value="competency" className="text-xs gap-1.5"><Stethoscope className="h-3 w-3" />Competency</TabsTrigger>
-            <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health</TabsTrigger>
-            <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References</TabsTrigger>
-            <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity</TabsTrigger>
+            <TabsTrigger value="identity" className="text-xs gap-1.5"><User className="h-3 w-3" />Identity<StepStatusDot status={stepStatuses.identity} /></TabsTrigger>
+            <TabsTrigger value="nmc" className="text-xs gap-1.5"><Shield className="h-3 w-3" />NMC<StepStatusDot status={stepStatuses.nmc} /></TabsTrigger>
+            <TabsTrigger value="dbs" className="text-xs gap-1.5"><FileCheck className="h-3 w-3" />DBS<StepStatusDot status={stepStatuses.dbs} /></TabsTrigger>
+            <TabsTrigger value="right_to_work" className="text-xs gap-1.5"><Globe className="h-3 w-3" />Right to Work<StepStatusDot status={stepStatuses.right_to_work} /></TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs gap-1.5"><Briefcase className="h-3 w-3" />Profile<StepStatusDot status={stepStatuses.profile} /></TabsTrigger>
+            <TabsTrigger value="competency" className="text-xs gap-1.5"><Stethoscope className="h-3 w-3" />Competency<StepStatusDot status={stepStatuses.competency} /></TabsTrigger>
+            <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health<StepStatusDot status={stepStatuses.health} /></TabsTrigger>
+            <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References<StepStatusDot status={stepStatuses.references} /></TabsTrigger>
+            <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity<StepStatusDot status={stepStatuses.indemnity} /></TabsTrigger>
           </TabsList>
           <div className="mt-6">
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
