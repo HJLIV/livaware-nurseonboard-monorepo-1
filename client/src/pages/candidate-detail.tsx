@@ -3037,7 +3037,7 @@ function PreboardTab({ candidateId }: { candidateId: string }) {
 }
 
 function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { candidateId: string; candidate: Candidate; stepStatuses: Record<string, string>; currentStep: number }) {
-  const [section, setSection] = useState<"onboarding" | "compliance">("onboarding");
+  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance">("onboarding");
 
   const { data: preboardAssessment } = useQuery({
     queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
@@ -3048,6 +3048,17 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
   return (
     <div className="space-y-4">
       <div className="flex gap-2" data-testid="section-toggle">
+        <Button
+          variant={section === "preboard" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setSection("preboard")}
+          data-testid="button-section-preboard"
+        >
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          Preboard
+          <StepStatusDot status={preboardStatus} />
+        </Button>
         <Button
           variant={section === "onboarding" ? "default" : "outline"}
           size="sm"
@@ -3092,7 +3103,6 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health<StepStatusDot status={stepStatuses.health} /></TabsTrigger>
             <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References<StepStatusDot status={stepStatuses.references} /></TabsTrigger>
             <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity<StepStatusDot status={stepStatuses.indemnity} /></TabsTrigger>
-            <TabsTrigger value="preboard" className="text-xs gap-1.5"><ClipboardCheck className="h-3 w-3" />Preboard<StepStatusDot status={preboardStatus} /></TabsTrigger>
           </TabsList>
           <div className="mt-6">
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
@@ -3104,10 +3114,13 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="health"><HealthTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="references"><ReferencesTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} /></TabsContent>
-            <TabsContent value="preboard"><PreboardTab candidateId={candidateId} /></TabsContent>
           </div>
         </Tabs>
         </>
+      )}
+
+      {section === "preboard" && (
+        <PreboardTab candidateId={candidateId} />
       )}
 
       {section === "compliance" && (
