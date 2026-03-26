@@ -37,6 +37,22 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/preboard/assessments/by-nurse/:nurseId", async (req, res) => {
+    if (!req.session?.isAuthenticated) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    try {
+      const assessment = await storage.getAssessmentByNurseId(req.params.nurseId);
+      if (!assessment) {
+        return res.status(404).json({ message: "No assessment found" });
+      }
+      res.json(assessment);
+    } catch (err) {
+      console.error("Error fetching assessment by nurse ID:", err);
+      res.status(500).json({ error: "Failed to fetch assessment" });
+    }
+  });
+
   app.post("/api/assessments", async (req, res) => {
     try {
       const parsed = submitSchema.safeParse(req.body);

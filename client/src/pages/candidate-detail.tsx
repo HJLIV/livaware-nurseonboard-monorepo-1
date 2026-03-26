@@ -2899,8 +2899,151 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
   );
 }
 
+function PreboardTab({ candidateId }: { candidateId: string }) {
+  const { data: assessment, isLoading, error } = useQuery<{
+    id: number;
+    nurseId: string | null;
+    nurseName: string;
+    nurseEmail: string;
+    nursePhone: string | null;
+    responses: Array<{
+      questionId: number;
+      tag: string;
+      domain: string;
+      prompt: string;
+      response: string;
+      timeSpent: number;
+      timeLimit: number;
+    }>;
+    aiAnalysis: string | null;
+    emailSent: boolean | null;
+    completedAt: string | null;
+  }>({
+    queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  const isServerError = error instanceof Error && !error.message.startsWith("4");
+
+  if (isServerError) {
+    return (
+      <Card className="border border-destructive/20">
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 mb-4">
+            <AlertCircle className="h-7 w-7 text-destructive/60" />
+          </div>
+          <p className="font-serif text-lg text-foreground mb-1">Failed to load assessment</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Something went wrong while fetching the preboard assessment. Please try again later.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!assessment) {
+    return (
+      <Card className="border border-card-border">
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/8 mb-4">
+            <ClipboardCheck className="h-7 w-7 text-primary/40" />
+          </div>
+          <p className="font-serif text-lg text-foreground mb-1">No preboard assessment submitted yet</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            An assessment will appear here once the candidate completes their preboard questionnaire.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const responses = Array.isArray(assessment.responses) ? assessment.responses : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4 flex-wrap">
+        <Card className="border border-card-border flex-1 min-w-[140px]">
+          <CardContent className="p-6 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1">Questions</p>
+            <p className="font-serif text-4xl font-light text-foreground">{responses.length}</p>
+          </CardContent>
+        </Card>
+        {assessment.completedAt && (
+          <Card className="border border-card-border flex-1 min-w-[200px]">
+            <CardContent className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1">Completed</p>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Calendar className="h-4 w-4 text-muted-foreground/40" />
+                {new Date(assessment.completedAt).toLocaleDateString("en-US", {
+                  month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {assessment.aiAnalysis && (
+        <Card className="border border-primary/10 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <p className="text-sm font-semibold">AI Analysis</p>
+            </div>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{assessment.aiAnalysis}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {responses.length > 0 && (
+        <Card className="border border-card-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Question Responses</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {responses.map((r, i) => {
+              const overTime = r.timeSpent > r.timeLimit;
+              return (
+                <div key={r.questionId || i} className="rounded-lg border p-3 bg-muted/20">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-xs font-semibold text-foreground">Q{i + 1}: {r.prompt}</p>
+                    <Badge variant={overTime ? "destructive" : "secondary"} className="shrink-0 text-[10px]">
+                      {r.timeSpent}s / {r.timeLimit}s
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant="outline" className="text-[10px]">{r.domain}</Badge>
+                    <Badge variant="outline" className="text-[10px]">{r.tag}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{r.response}</p>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { candidateId: string; candidate: Candidate; stepStatuses: Record<string, string>; currentStep: number }) {
   const [section, setSection] = useState<"onboarding" | "compliance">("onboarding");
+
+  const { data: preboardAssessment } = useQuery({
+    queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
+    retry: false,
+  });
+  const preboardStatus = preboardAssessment ? "completed" : "pending";
 
   return (
     <div className="space-y-4">
@@ -2949,6 +3092,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health<StepStatusDot status={stepStatuses.health} /></TabsTrigger>
             <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References<StepStatusDot status={stepStatuses.references} /></TabsTrigger>
             <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity<StepStatusDot status={stepStatuses.indemnity} /></TabsTrigger>
+            <TabsTrigger value="preboard" className="text-xs gap-1.5"><ClipboardCheck className="h-3 w-3" />Preboard<StepStatusDot status={preboardStatus} /></TabsTrigger>
           </TabsList>
           <div className="mt-6">
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
@@ -2960,6 +3104,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="health"><HealthTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="references"><ReferencesTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} /></TabsContent>
+            <TabsContent value="preboard"><PreboardTab candidateId={candidateId} /></TabsContent>
           </div>
         </Tabs>
         </>

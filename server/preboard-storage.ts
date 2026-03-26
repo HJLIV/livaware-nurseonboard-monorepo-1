@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 export interface IStorage {
   createAssessment(data: InsertAssessment): Promise<Assessment>;
   getAssessment(id: number): Promise<Assessment | undefined>;
+  getAssessmentByNurseId(nurseId: string): Promise<Assessment | undefined>;
   getAllAssessments(): Promise<Assessment[]>;
   updateAssessmentAnalysis(id: number, aiAnalysis: string): Promise<Assessment | undefined>;
   markEmailSent(id: number): Promise<void>;
@@ -18,6 +19,14 @@ export class DatabaseStorage implements IStorage {
 
   async getAssessment(id: number): Promise<Assessment | undefined> {
     const [assessment] = await db.select().from(assessments).where(eq(assessments.id, id));
+    return assessment;
+  }
+
+  async getAssessmentByNurseId(nurseId: string): Promise<Assessment | undefined> {
+    const [assessment] = await db.select().from(assessments)
+      .where(eq(assessments.nurseId, nurseId))
+      .orderBy(desc(assessments.completedAt))
+      .limit(1);
     return assessment;
   }
 
