@@ -68,6 +68,38 @@ function DocumentLink({ doc }: { doc: any }) {
   );
 }
 
+interface NextOfKinData {
+  name: string;
+  relationship: string;
+  contactNumber: string;
+}
+
+function parseNextOfKin(value: string | null | undefined): NextOfKinData {
+  if (!value) return { name: "", relationship: "", contactNumber: "" };
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return {
+        name: parsed.name || "",
+        relationship: parsed.relationship || "",
+        contactNumber: parsed.contactNumber || "",
+      };
+    }
+  } catch {}
+  return { name: value, relationship: "", contactNumber: "" };
+}
+
+function serializeNextOfKin(name: string, relationship: string, contactNumber: string): string {
+  if (!name && !relationship && !contactNumber) return "";
+  return JSON.stringify({ name, relationship, contactNumber });
+}
+
+function formatNextOfKin(value: string | null | undefined): string {
+  const nok = parseNextOfKin(value);
+  const parts = [nok.name, nok.relationship, nok.contactNumber].filter(Boolean);
+  return parts.join(" — ");
+}
+
 function PortalBadge() {
   return (
     <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/50">
@@ -86,7 +118,9 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
     dateOfBirth: candidate.dateOfBirth || "",
     address: candidate.address || "",
     preferredPronouns: candidate.preferredPronouns || "",
-    nextOfKin: candidate.nextOfKin || "",
+    nokName: parseNextOfKin(candidate.nextOfKin).name,
+    nokRelationship: parseNextOfKin(candidate.nextOfKin).relationship,
+    nokContact: parseNextOfKin(candidate.nextOfKin).contactNumber,
     passportNumber: candidate.passportNumber || "",
     nmcPin: candidate.nmcPin || "",
     dbsNumber: candidate.dbsNumber || "",
@@ -113,7 +147,9 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       dateOfBirth: candidate.dateOfBirth || "",
       address: candidate.address || "",
       preferredPronouns: candidate.preferredPronouns || "",
-      nextOfKin: candidate.nextOfKin || "",
+      nokName: parseNextOfKin(candidate.nextOfKin).name,
+      nokRelationship: parseNextOfKin(candidate.nextOfKin).relationship,
+      nokContact: parseNextOfKin(candidate.nextOfKin).contactNumber,
       passportNumber: candidate.passportNumber || "",
       nmcPin: candidate.nmcPin || "",
       dbsNumber: candidate.dbsNumber || "",
@@ -138,7 +174,8 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       if (form.dateOfBirth !== (candidate.dateOfBirth || "")) payload.dateOfBirth = form.dateOfBirth || null;
       if (form.address !== (candidate.address || "")) payload.address = form.address || null;
       if (form.preferredPronouns !== (candidate.preferredPronouns || "")) payload.preferredPronouns = form.preferredPronouns || null;
-      if (form.nextOfKin !== (candidate.nextOfKin || "")) payload.nextOfKin = form.nextOfKin || null;
+      const newNok = serializeNextOfKin(form.nokName, form.nokRelationship, form.nokContact);
+      if (newNok !== (candidate.nextOfKin || "")) payload.nextOfKin = newNok || null;
       if (form.passportNumber !== (candidate.passportNumber || "")) payload.passportNumber = form.passportNumber || null;
       if (form.nmcPin !== (candidate.nmcPin || "")) payload.nmcPin = form.nmcPin || null;
       if (form.dbsNumber !== (candidate.dbsNumber || "")) payload.dbsNumber = form.dbsNumber || null;
@@ -182,7 +219,9 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
               <InfoRow icon={<Calendar className="h-4 w-4" />} label="Date of Birth" value={candidate.dateOfBirth} />
               <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address" value={candidate.address} />
               <InfoRow label="Preferred Pronouns" value={candidate.preferredPronouns} />
-              <InfoRow label="Next of Kin" value={candidate.nextOfKin} />
+              <InfoRow label="Next of Kin — Name" value={parseNextOfKin(candidate.nextOfKin).name || undefined} />
+              <InfoRow label="Next of Kin — Relationship" value={parseNextOfKin(candidate.nextOfKin).relationship || undefined} />
+              <InfoRow label="Next of Kin — Contact" value={parseNextOfKin(candidate.nextOfKin).contactNumber || undefined} />
             </div>
           </div>
           <div className="space-y-4">
@@ -233,7 +272,9 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             <LockedInput label="Date of Birth" value={form.dateOfBirth} onChange={v => updateField("dateOfBirth", v)} locked={isFieldLocked("dateOfBirth", candidate.dateOfBirth)} onUnlock={() => unlockField("dateOfBirth")} type="date" testId="input-edit-dob" />
             <LockedInput label="Address" value={form.address} onChange={v => updateField("address", v)} locked={isFieldLocked("address", candidate.address)} onUnlock={() => unlockField("address")} rows={2} testId="input-edit-address" />
             <LockedInput label="Preferred Pronouns" value={form.preferredPronouns} onChange={v => updateField("preferredPronouns", v)} locked={isFieldLocked("preferredPronouns", candidate.preferredPronouns)} onUnlock={() => unlockField("preferredPronouns")} placeholder="e.g. she/her" testId="input-edit-pronouns" />
-            <LockedInput label="Next of Kin" value={form.nextOfKin} onChange={v => updateField("nextOfKin", v)} locked={isFieldLocked("nextOfKin", candidate.nextOfKin)} onUnlock={() => unlockField("nextOfKin")} testId="input-edit-nok" />
+            <LockedInput label="Next of Kin — Name" value={form.nokName} onChange={v => updateField("nokName", v)} locked={isFieldLocked("nokName", parseNextOfKin(candidate.nextOfKin).name)} onUnlock={() => unlockField("nokName")} placeholder="e.g. Jane Smith" testId="input-edit-nok-name" />
+            <LockedInput label="Next of Kin — Relationship" value={form.nokRelationship} onChange={v => updateField("nokRelationship", v)} locked={isFieldLocked("nokRelationship", parseNextOfKin(candidate.nextOfKin).relationship)} onUnlock={() => unlockField("nokRelationship")} placeholder="e.g. Spouse, Parent, Sibling" testId="input-edit-nok-relationship" />
+            <LockedInput label="Next of Kin — Contact Number" value={form.nokContact} onChange={v => updateField("nokContact", v)} locked={isFieldLocked("nokContact", parseNextOfKin(candidate.nextOfKin).contactNumber)} onUnlock={() => unlockField("nokContact")} placeholder="e.g. 07700 900456" testId="input-edit-nok-contact" />
           </div>
         </div>
         <div className="space-y-4">

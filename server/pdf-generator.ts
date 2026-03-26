@@ -7,6 +7,17 @@ import type {
 } from "@shared/schema";
 import { MANDATORY_TRAINING_MODULES, COMPETENCY_MATRIX } from "@shared/schema";
 
+function parseNextOfKinServer(value: string | null | undefined): { name: string; relationship: string; contactNumber: string } {
+  if (!value) return { name: "", relationship: "", contactNumber: "" };
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { name: parsed.name || "", relationship: parsed.relationship || "", contactNumber: parsed.contactNumber || "" };
+    }
+  } catch {}
+  return { name: value, relationship: "", contactNumber: "" };
+}
+
 const NAVY = "#020121";
 const GOLD = "#C8A96E";
 const DARK_GREY = "#333333";
@@ -132,7 +143,10 @@ export async function generateCandidatePDF(candidateId: string): Promise<Buffer>
     fieldRow("Date of Birth", formatDate(candidate.dateOfBirth));
     fieldRow("Address", candidate.address);
     fieldRow("Pronouns", candidate.preferredPronouns);
-    fieldRow("Next of Kin", candidate.nextOfKin);
+    const nokData = parseNextOfKinServer(candidate.nextOfKin);
+    fieldRow("Next of Kin — Name", nokData.name || null);
+    fieldRow("Next of Kin — Relationship", nokData.relationship || null);
+    fieldRow("Next of Kin — Contact", nokData.contactNumber || null);
     fieldRow("Passport Number", candidate.passportNumber);
     fieldRow("Onboarding Status", statusLabel(candidate.status));
 

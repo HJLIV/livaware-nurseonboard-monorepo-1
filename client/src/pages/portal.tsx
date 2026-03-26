@@ -33,6 +33,32 @@ import type {
   ProfessionalIndemnity, Reference
 } from "@shared/schema";
 
+interface NextOfKinData {
+  name: string;
+  relationship: string;
+  contactNumber: string;
+}
+
+function parseNextOfKin(value: string | null | undefined): NextOfKinData {
+  if (!value) return { name: "", relationship: "", contactNumber: "" };
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return {
+        name: parsed.name || "",
+        relationship: parsed.relationship || "",
+        contactNumber: parsed.contactNumber || "",
+      };
+    }
+  } catch {}
+  return { name: value, relationship: "", contactNumber: "" };
+}
+
+function serializeNextOfKin(name: string, relationship: string, contactNumber: string): string {
+  if (!name && !relationship && !contactNumber) return "";
+  return JSON.stringify({ name, relationship, contactNumber });
+}
+
 function DocumentAiAlert({ docs, category }: { docs?: any[]; category: string }) {
   if (!docs) return null;
   const flaggedDocs = docs.filter((d: any) => d.category === category && (d.aiStatus === "warning" || d.aiStatus === "fail") && Array.isArray(d.aiIssues) && d.aiIssues.length > 0);
@@ -279,7 +305,9 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
   const [dateOfBirth, setDateOfBirth] = useState(candidate.dateOfBirth || "");
   const [address, setAddress] = useState(candidate.address || "");
   const [pronouns, setPronouns] = useState(candidate.preferredPronouns || "");
-  const [nextOfKin, setNextOfKin] = useState(candidate.nextOfKin || "");
+  const [nokName, setNokName] = useState(parseNextOfKin(candidate.nextOfKin).name);
+  const [nokRelationship, setNokRelationship] = useState(parseNextOfKin(candidate.nextOfKin).relationship);
+  const [nokContact, setNokContact] = useState(parseNextOfKin(candidate.nextOfKin).contactNumber);
   const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -293,7 +321,7 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
     mutationFn: async () => {
       const res = await apiRequest("PATCH", `/api/portal/${token}/candidate`, {
         fullName, email, phone, dateOfBirth, address,
-        preferredPronouns: pronouns, nextOfKin,
+        preferredPronouns: pronouns, nextOfKin: serializeNextOfKin(nokName, nokRelationship, nokContact) || null,
       });
       return res.json();
     },
@@ -344,7 +372,9 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
               </Select>
             )}
           </div>
-          <PortalLockedInput label="Next of Kin" value={nextOfKin} onChange={setNextOfKin} locked={isLocked("nextOfKin", candidate.nextOfKin)} onUnlock={() => unlock("nextOfKin")} placeholder="Name and contact number" testId="input-portal-nextofkin" />
+          <PortalLockedInput label="Next of Kin — Name" value={nokName} onChange={setNokName} locked={isLocked("nokName", parseNextOfKin(candidate.nextOfKin).name)} onUnlock={() => unlock("nokName")} placeholder="e.g. Jane Smith" testId="input-portal-nok-name" />
+          <PortalLockedInput label="Next of Kin — Relationship" value={nokRelationship} onChange={setNokRelationship} locked={isLocked("nokRelationship", parseNextOfKin(candidate.nextOfKin).relationship)} onUnlock={() => unlock("nokRelationship")} placeholder="e.g. Spouse, Parent, Sibling" testId="input-portal-nok-relationship" />
+          <PortalLockedInput label="Next of Kin — Contact Number" value={nokContact} onChange={setNokContact} locked={isLocked("nokContact", parseNextOfKin(candidate.nextOfKin).contactNumber)} onUnlock={() => unlock("nokContact")} placeholder="e.g. 07700 900456" testId="input-portal-nok-contact" />
         </div>
 
         <Separator />

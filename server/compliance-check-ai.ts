@@ -505,7 +505,7 @@ export async function runComplianceCheck(candidateId: string): Promise<string> {
       contactDetailsProvided: !!(candidate.email && candidate.phone),
       dateOfBirthProvided: !!candidate.dateOfBirth,
       addressProvided: !!candidate.address,
-      nextOfKinProvided: !!candidate.nextOfKin,
+      nextOfKinProvided: !!candidate.nextOfKin && (() => { try { const p = JSON.parse(candidate.nextOfKin!); return !!(p.name && p.contactNumber); } catch { return !!candidate.nextOfKin; } })(),
     },
     documentSummary: {
       totalDocuments: documents.length,
