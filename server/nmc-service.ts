@@ -184,6 +184,52 @@ export async function parseNmcPdf(buffer: Buffer): Promise<NmcPdfParseResult> {
     conditions.push("Struck off noted on register");
   }
 
+  if (!registeredName) {
+    for (const line of lines) {
+      if (line.length > 3 && !line.toLowerCase().includes("nmc") && !line.toLowerCase().includes("nursing") && !line.toLowerCase().includes("search") && !dateRegex.test(line) && !pinRegex.test(line)) {
+        registeredName = line;
+        break;
+      }
+    }
+  }
+
+  if (!registrationStatus) {
+    const statusKeywords = ["registered", "lapsed", "suspended", "struck off", "effective"];
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (statusKeywords.some(kw => lower.includes(kw))) {
+        registrationStatus = line;
+        break;
+      }
+    }
+  }
+
+  if (!fieldOfPractice) {
+    const practiceKeywords = ["nursing", "midwi", "nurse", "adult", "child", "mental health", "learning disabilit"];
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (practiceKeywords.some(kw => lower.includes(kw)) && !lower.includes("nmc") && !lower.includes("council")) {
+        fieldOfPractice = line;
+        break;
+      }
+    }
+  }
+
+  if (!renewalDate) {
+    const allDates = text.match(/\d{2}\/\d{2}\/\d{4}/g) || [];
+    if (allDates.length >= 1) {
+      const parsed = allDates.map(d => {
+        const [dd, mm, yyyy] = d.split("/");
+        return { str: d, date: new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd)) };
+      });
+      parsed.sort((a, b) => b.date.getTime() - a.date.getTime());
+      renewalDate = parsed[0].str;
+      if (!effectiveDate && parsed.length >= 2) {
+        effectiveDate = parsed[parsed.length - 1].str;
+      }
+    }
+  }
+
   if (!registeredName && !registrationStatus) {
     throw new NmcVerificationError(
       "Could not extract registration details from this PDF. Please ensure it is a PDF downloaded from the NMC register search results.",
@@ -331,8 +377,12 @@ export async function parseNmcPdfWithFallback(buffer: Buffer): Promise<NmcPdfPar
 
   if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
     console.warn("[NMC PDF] AI extraction skipped — no Anthropic API key configured");
+    if (regexResult) {
+      console.log("[NMC PDF] Returning partial regex result for admin review");
+      return regexResult;
+    }
     throw new NmcVerificationError(
-      "Could not extract complete registration details from this PDF. AI fallback is not configured.",
+      "Could not extract registration details from this PDF. AI fallback is not configured.",
       "PARSE_ERROR"
     );
   }
