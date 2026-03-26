@@ -308,6 +308,11 @@ export function buildReferenceRequestHtml(
           </a>
         </div>
 
+        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all;">
+          If the button above does not work, copy and paste this link into your browser:<br />
+          <a href="${refereeFormUrl}" style="color: #C8A96E; text-decoration: underline;">${refereeFormUrl}</a>
+        </p>
+
         <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
           This link is unique to this reference request — please do not share it. It will expire on <strong style="color: #C8A96E;">${expiryFormatted}</strong>. The form typically takes 10–15 minutes to complete.
         </p>
@@ -357,7 +362,8 @@ export async function sendReferenceRequestEmail(
     year: "numeric",
   });
 
-  const bodyText = customBody || getDefaultReferenceEmailBody(refereeName, candidateName);
+  const rawBody = customBody || getDefaultReferenceEmailBody(refereeName, candidateName);
+  const bodyText = rawBody.replace(/\[FORM_URL\]/g, refereeFormUrl);
   const subject = customSubject || `Livaware Ltd — Reference Request for ${candidateName}`;
   const htmlBody = buildReferenceRequestHtml(bodyText, refereeFormUrl, expiryFormatted);
 
