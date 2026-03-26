@@ -152,6 +152,11 @@ export async function sendPortalInviteEmail(
           </a>
         </div>
 
+        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all;">
+          If the button above does not work, copy and paste this link into your browser:<br />
+          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
+        </p>
+
         <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
           <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">${content.infoBoxTitle}</p>
           <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.8; margin: 0; padding-left: 20px;">
@@ -379,6 +384,79 @@ export async function sendReferenceRequestEmail(
           emailAddress: {
             address: refereeEmail,
             name: refereeName,
+          },
+        },
+      ],
+    },
+    saveToSentItems: true,
+  });
+}
+
+export async function sendNurseInviteEmail(
+  recipientEmail: string,
+  recipientName: string,
+  tempPassword: string,
+  invitedBy: string
+) {
+  const client = await getGraphClient();
+
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px; letter-spacing: -0.01em;">NurseOnboard</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Livaware Ltd — Skills Arcade Invitation</p>
+      </div>
+
+      <div style="padding: 32px;">
+        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
+          You have been invited by ${invitedBy} to join the Livaware Skills Arcade — our online training and competency platform for nursing professionals.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
+          Please use the credentials below to log in and begin your assigned training modules.
+        </p>
+
+        <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Your Login Credentials</p>
+          <p style="font-size: 14px; color: #E0DCD4; margin: 4px 0;"><strong style="color: #F0ECE4;">Email:</strong> ${recipientEmail}</p>
+          <p style="font-size: 14px; color: #E0DCD4; margin: 4px 0;"><strong style="color: #F0ECE4;">Temporary Password:</strong> ${tempPassword}</p>
+        </div>
+
+        <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
+          For security, please change your password after your first login. If you have any questions, contact the onboarding team.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
+          Kind regards,<br />
+          <strong style="color: #F0ECE4;">Livaware Onboarding Team</strong>
+        </p>
+      </div>
+
+      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
+          Livaware Ltd — Secure Nurse Onboarding &middot; Skills Arcade
+        </p>
+        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
+          This is an automated message. Please do not reply directly to this email.
+        </p>
+      </div>
+    </div>
+  `;
+
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: `Livaware Skills Arcade — Your Login Credentials`,
+      body: {
+        contentType: 'HTML',
+        content: htmlBody,
+      },
+      toRecipients: [
+        {
+          emailAddress: {
+            address: recipientEmail,
+            name: recipientName,
           },
         },
       ],

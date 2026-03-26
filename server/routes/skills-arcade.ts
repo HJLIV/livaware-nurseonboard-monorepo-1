@@ -719,7 +719,7 @@ export async function registerRoutes(
       let emailSent = false;
       let emailError = "";
       try {
-        const { sendNurseInviteEmail } = await import("./outlook");
+        const { sendNurseInviteEmail } = await import("../outlook");
         await sendNurseInviteEmail(email, name, tempPassword, adminUser.name);
         emailSent = true;
       } catch (e: any) {
