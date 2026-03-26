@@ -29,7 +29,7 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback } from "react";
-import { Pencil, Save, X } from "lucide-react";
+import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
 import { ONBOARDING_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES, INDUCTION_POLICIES, REFERENCE_QUESTIONS } from "@shared/schema";
 import type {
   Candidate, OnboardingState, NmcVerification, DbsVerification,
@@ -94,6 +94,16 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
     currentEmployer: candidate.currentEmployer || "",
     yearsQualified: candidate.yearsQualified?.toString() || "",
   });
+  const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set());
+
+  const isFieldLocked = (field: string, originalValue: string | null | undefined) => {
+    const val = originalValue ?? "";
+    return val !== "" && !unlockedFields.has(field);
+  };
+
+  const unlockField = (field: string) => {
+    setUnlockedFields(prev => new Set(prev).add(field));
+  };
 
   const startEditing = useCallback(() => {
     setForm({
@@ -111,6 +121,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       currentEmployer: candidate.currentEmployer || "",
       yearsQualified: candidate.yearsQualified?.toString() || "",
     });
+    setUnlockedFields(new Set());
     setEditing(true);
   }, [candidate]);
 
@@ -216,63 +227,24 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Full Name</Label>
-              <Input value={form.fullName} onChange={e => updateField("fullName", e.target.value)} data-testid="input-edit-fullName" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Email</Label>
-              <Input type="email" value={form.email} onChange={e => updateField("email", e.target.value)} data-testid="input-edit-email" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Phone</Label>
-              <Input value={form.phone} onChange={e => updateField("phone", e.target.value)} placeholder="e.g. 07700 900123" data-testid="input-edit-phone" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Date of Birth</Label>
-              <Input type="date" value={form.dateOfBirth} onChange={e => updateField("dateOfBirth", e.target.value)} data-testid="input-edit-dob" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Address</Label>
-              <Textarea value={form.address} onChange={e => updateField("address", e.target.value)} rows={2} data-testid="input-edit-address" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Preferred Pronouns</Label>
-              <Input value={form.preferredPronouns} onChange={e => updateField("preferredPronouns", e.target.value)} placeholder="e.g. she/her" data-testid="input-edit-pronouns" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Next of Kin</Label>
-              <Input value={form.nextOfKin} onChange={e => updateField("nextOfKin", e.target.value)} data-testid="input-edit-nok" />
-            </div>
+            <LockedInput label="Full Name" value={form.fullName} onChange={v => updateField("fullName", v)} locked={isFieldLocked("fullName", candidate.fullName)} onUnlock={() => unlockField("fullName")} testId="input-edit-fullName" />
+            <LockedInput label="Email" value={form.email} onChange={v => updateField("email", v)} locked={isFieldLocked("email", candidate.email)} onUnlock={() => unlockField("email")} type="email" testId="input-edit-email" />
+            <LockedInput label="Phone" value={form.phone} onChange={v => updateField("phone", v)} locked={isFieldLocked("phone", candidate.phone)} onUnlock={() => unlockField("phone")} placeholder="e.g. 07700 900123" testId="input-edit-phone" />
+            <LockedInput label="Date of Birth" value={form.dateOfBirth} onChange={v => updateField("dateOfBirth", v)} locked={isFieldLocked("dateOfBirth", candidate.dateOfBirth)} onUnlock={() => unlockField("dateOfBirth")} type="date" testId="input-edit-dob" />
+            <LockedInput label="Address" value={form.address} onChange={v => updateField("address", v)} locked={isFieldLocked("address", candidate.address)} onUnlock={() => unlockField("address")} rows={2} testId="input-edit-address" />
+            <LockedInput label="Preferred Pronouns" value={form.preferredPronouns} onChange={v => updateField("preferredPronouns", v)} locked={isFieldLocked("preferredPronouns", candidate.preferredPronouns)} onUnlock={() => unlockField("preferredPronouns")} placeholder="e.g. she/her" testId="input-edit-pronouns" />
+            <LockedInput label="Next of Kin" value={form.nextOfKin} onChange={v => updateField("nextOfKin", v)} locked={isFieldLocked("nextOfKin", candidate.nextOfKin)} onUnlock={() => unlockField("nextOfKin")} testId="input-edit-nok" />
           </div>
         </div>
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Passport Number</Label>
-              <Input value={form.passportNumber} onChange={e => updateField("passportNumber", e.target.value)} data-testid="input-edit-passport" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">NMC PIN</Label>
-              <Input value={form.nmcPin} onChange={e => updateField("nmcPin", e.target.value)} placeholder="e.g. 12A3456B" data-testid="input-edit-nmc" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">DBS Number</Label>
-              <Input value={form.dbsNumber} onChange={e => updateField("dbsNumber", e.target.value)} placeholder="e.g. 001234567890" data-testid="input-edit-dbs" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Band</Label>
-              <Input type="number" min="1" max="9" value={form.band} onChange={e => updateField("band", e.target.value)} placeholder="e.g. 5" data-testid="input-edit-band" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Current Employer</Label>
-              <Input value={form.currentEmployer} onChange={e => updateField("currentEmployer", e.target.value)} data-testid="input-edit-employer" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Years Qualified</Label>
-              <Input type="number" min="0" value={form.yearsQualified} onChange={e => updateField("yearsQualified", e.target.value)} data-testid="input-edit-years" />
-            </div>
+            <LockedInput label="Passport Number" value={form.passportNumber} onChange={v => updateField("passportNumber", v)} locked={isFieldLocked("passportNumber", candidate.passportNumber)} onUnlock={() => unlockField("passportNumber")} testId="input-edit-passport" />
+            <LockedInput label="NMC PIN" value={form.nmcPin} onChange={v => updateField("nmcPin", v)} locked={isFieldLocked("nmcPin", candidate.nmcPin)} onUnlock={() => unlockField("nmcPin")} placeholder="e.g. 12A3456B" testId="input-edit-nmc" />
+            <LockedInput label="DBS Number" value={form.dbsNumber} onChange={v => updateField("dbsNumber", v)} locked={isFieldLocked("dbsNumber", candidate.dbsNumber)} onUnlock={() => unlockField("dbsNumber")} placeholder="e.g. 001234567890" testId="input-edit-dbs" />
+            <LockedInput label="Band" value={form.band} onChange={v => updateField("band", v)} locked={isFieldLocked("band", candidate.band?.toString())} onUnlock={() => unlockField("band")} type="number" min="1" max="9" placeholder="e.g. 5" testId="input-edit-band" />
+            <LockedInput label="Current Employer" value={form.currentEmployer} onChange={v => updateField("currentEmployer", v)} locked={isFieldLocked("currentEmployer", candidate.currentEmployer)} onUnlock={() => unlockField("currentEmployer")} testId="input-edit-employer" />
+            <LockedInput label="Years Qualified" value={form.yearsQualified} onChange={v => updateField("yearsQualified", v)} locked={isFieldLocked("yearsQualified", candidate.yearsQualified?.toString())} onUnlock={() => unlockField("yearsQualified")} type="number" min="0" testId="input-edit-years" />
           </div>
         </div>
       </div>
@@ -281,13 +253,66 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
 }
 
 function InfoRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value?: string | null }) {
+  const hasValue = value !== undefined && value !== null && value !== "";
   return (
     <div className="flex items-start gap-3">
       {icon && <div className="mt-0.5 text-muted-foreground">{icon}</div>}
-      <div>
+      <div className="flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium text-foreground">{value || "Not provided"}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{value || "Not provided"}</p>
+          {hasValue && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-500">
+              <CheckCircle className="h-3 w-3" />
+              <LockIcon className="h-2.5 w-2.5" />
+            </span>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function LockedInput({ label, value, onChange, locked, onUnlock, type, placeholder, min, max, rows, testId }: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  locked: boolean;
+  onUnlock: () => void;
+  type?: string;
+  placeholder?: string;
+  min?: string;
+  max?: string;
+  rows?: number;
+  testId?: string;
+}) {
+  if (locked) {
+    return (
+      <div className="space-y-1.5">
+        <Label className="text-xs">{label}</Label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+            <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="truncate">{value}</span>
+            <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+          </div>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={onUnlock} data-testid={testId ? `${testId}-unlock` : undefined}>
+            <Unlock className="h-3 w-3 mr-1" />
+            Unlock
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      {rows ? (
+        <Textarea value={value} onChange={e => onChange(e.target.value)} rows={rows} data-testid={testId} />
+      ) : (
+        <Input type={type || "text"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} min={min} max={max} data-testid={testId} />
+      )}
     </div>
   );
 }
@@ -1215,7 +1240,16 @@ function ProfileTab({ candidate, candidateId }: { candidate: Candidate; candidat
   const [employer, setEmployer] = useState(candidate.currentEmployer || "");
   const [yearsQualified, setYearsQualified] = useState(candidate.yearsQualified?.toString() || "");
   const [specialisms, setSpecialisms] = useState<string[]>(candidate.specialisms || []);
+  const [unlockedProfileFields, setUnlockedProfileFields] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const isProfileLocked = (field: string, originalValue: string | null | undefined) => {
+    const val = originalValue ?? "";
+    return val !== "" && !unlockedProfileFields.has(field);
+  };
+  const unlockProfileField = (field: string) => {
+    setUnlockedProfileFields(prev => new Set(prev).add(field));
+  };
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -1229,6 +1263,7 @@ function ProfileTab({ candidate, candidateId }: { candidate: Candidate; candidat
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      setUnlockedProfileFields(new Set());
       toast({ title: "Profile updated" });
     },
   });
@@ -1239,14 +1274,8 @@ function ProfileTab({ candidate, candidateId }: { candidate: Candidate; candidat
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Employment Details</h3>
           <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Current Employer</Label>
-              <Input value={employer} onChange={e => setEmployer(e.target.value)} placeholder="e.g. Royal Marsden NHS Trust" data-testid="input-employer" />
-            </div>
-            <div className="space-y-2">
-              <Label>Years Qualified</Label>
-              <Input type="number" value={yearsQualified} onChange={e => setYearsQualified(e.target.value)} placeholder="e.g. 5" data-testid="input-years-qualified" />
-            </div>
+            <LockedInput label="Current Employer" value={employer} onChange={v => setEmployer(v)} locked={isProfileLocked("employer", candidate.currentEmployer)} onUnlock={() => unlockProfileField("employer")} placeholder="e.g. Royal Marsden NHS Trust" testId="input-employer" />
+            <LockedInput label="Years Qualified" value={yearsQualified} onChange={v => setYearsQualified(v)} locked={isProfileLocked("yearsQualified", candidate.yearsQualified?.toString())} onUnlock={() => unlockProfileField("yearsQualified")} type="number" min="0" placeholder="e.g. 5" testId="input-years-qualified" />
             <div className="space-y-2">
               <Label>Clinical Specialisms</Label>
               <SpecialismSelector selected={specialisms} onChange={setSpecialisms} testIdPrefix="admin-specialism" />

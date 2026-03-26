@@ -20,7 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle, AlertCircle, Loader2, User, Shield, FileCheck,
   Stethoscope, BookOpen, Heart, Users, FileText, ShieldCheck,
-  Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb, Equal
+  Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb, Equal,
+  Lock as LockIcon, Unlock
 } from "lucide-react";
 import {
   PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES
@@ -226,6 +227,48 @@ function PassportUpload({ token, existingPassportNumber }: { token: string; exis
   );
 }
 
+function PortalLockedInput({ label, value, onChange, locked, onUnlock, type, placeholder, rows, testId }: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  locked: boolean;
+  onUnlock: () => void;
+  type?: string;
+  placeholder?: string;
+  rows?: number;
+  testId?: string;
+}) {
+  if (locked) {
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+            <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="truncate">{value}</span>
+            <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+          </div>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={onUnlock} data-testid={testId ? `${testId}-unlock` : undefined}>
+            <Unlock className="h-3 w-3 mr-1" />
+            Edit
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {rows ? (
+        <Textarea value={value} onChange={e => onChange(e.target.value)} rows={rows} data-testid={testId} />
+      ) : (
+        <Input type={type || "text"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} data-testid={testId} />
+      )}
+    </div>
+  );
+}
+
 function IdentityStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
   const { data: identityDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
@@ -237,7 +280,14 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
   const [address, setAddress] = useState(candidate.address || "");
   const [pronouns, setPronouns] = useState(candidate.preferredPronouns || "");
   const [nextOfKin, setNextOfKin] = useState(candidate.nextOfKin || "");
+  const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const isLocked = (field: string, originalValue: string | null | undefined) => {
+    const val = originalValue ?? "";
+    return val !== "" && !unlockedFields.has(field);
+  };
+  const unlock = (field: string) => setUnlockedFields(prev => new Set(prev).add(field));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -250,6 +300,7 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      setUnlockedFields(new Set());
       toast({ title: "Identity saved", description: "Your identity details have been updated." });
     },
   });
@@ -258,44 +309,42 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
     <SectionWrapper title="Identity & Contact" icon={<User className="h-5 w-5" />} status={status}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Full Name</Label>
-            <Input value={fullName} onChange={e => setFullName(e.target.value)} data-testid="input-portal-fullname" />
-          </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} data-testid="input-portal-email" />
-          </div>
-          <div className="space-y-2">
-            <Label>Phone</Label>
-            <Input value={phone} onChange={e => setPhone(e.target.value)} data-testid="input-portal-phone" />
-          </div>
-          <div className="space-y-2">
-            <Label>Date of Birth</Label>
-            <Input type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)} data-testid="input-portal-dob" />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label>Address</Label>
-            <Textarea value={address} onChange={e => setAddress(e.target.value)} data-testid="input-portal-address" />
+          <PortalLockedInput label="Full Name" value={fullName} onChange={setFullName} locked={isLocked("fullName", candidate.fullName)} onUnlock={() => unlock("fullName")} testId="input-portal-fullname" />
+          <PortalLockedInput label="Email" value={email} onChange={setEmail} locked={isLocked("email", candidate.email)} onUnlock={() => unlock("email")} type="email" testId="input-portal-email" />
+          <PortalLockedInput label="Phone" value={phone} onChange={setPhone} locked={isLocked("phone", candidate.phone)} onUnlock={() => unlock("phone")} testId="input-portal-phone" />
+          <PortalLockedInput label="Date of Birth" value={dateOfBirth} onChange={setDateOfBirth} locked={isLocked("dateOfBirth", candidate.dateOfBirth)} onUnlock={() => unlock("dateOfBirth")} type="date" testId="input-portal-dob" />
+          <div className="sm:col-span-2">
+            <PortalLockedInput label="Address" value={address} onChange={setAddress} locked={isLocked("address", candidate.address)} onUnlock={() => unlock("address")} rows={2} testId="input-portal-address" />
           </div>
           <div className="space-y-2">
             <Label>Preferred Pronouns</Label>
-            <Select value={pronouns} onValueChange={setPronouns}>
-              <SelectTrigger data-testid="select-portal-pronouns">
-                <SelectValue placeholder="Select pronouns" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="she/her">She/Her</SelectItem>
-                <SelectItem value="he/him">He/Him</SelectItem>
-                <SelectItem value="they/them">They/Them</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
+            {isLocked("pronouns", candidate.preferredPronouns) ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span className="truncate">{pronouns}</span>
+                  <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={() => unlock("pronouns")}>
+                  <Unlock className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </div>
+            ) : (
+              <Select value={pronouns} onValueChange={setPronouns}>
+                <SelectTrigger data-testid="select-portal-pronouns">
+                  <SelectValue placeholder="Select pronouns" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="she/her">She/Her</SelectItem>
+                  <SelectItem value="he/him">He/Him</SelectItem>
+                  <SelectItem value="they/them">They/Them</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Next of Kin</Label>
-            <Input value={nextOfKin} onChange={e => setNextOfKin(e.target.value)} placeholder="Name and contact number" data-testid="input-portal-nextofkin" />
-          </div>
+          <PortalLockedInput label="Next of Kin" value={nextOfKin} onChange={setNextOfKin} locked={isLocked("nextOfKin", candidate.nextOfKin)} onUnlock={() => unlock("nextOfKin")} placeholder="Name and contact number" testId="input-portal-nextofkin" />
         </div>
 
         <Separator />
@@ -338,9 +387,11 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
 
 function NmcStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
   const [pin, setPin] = useState(candidate.nmcPin || "");
+  const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
   const [nmcParseResult, setNmcParseResult] = useState<any>(null);
   const { toast } = useToast();
+  const isPinLocked = !!(candidate.nmcPin) && !pinUnlocked;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -390,9 +441,28 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
         <p className="text-sm text-muted-foreground">
           Enter your NMC PIN number and upload your NMC register PDF for verification. The admin team will review and confirm.
         </p>
-        <div className="max-w-sm space-y-2">
-          <Label>NMC PIN</Label>
-          <Input value={pin} onChange={e => setPin(e.target.value)} placeholder="e.g. 18A1234C" data-testid="input-portal-nmc-pin" />
+        <div className="max-w-sm">
+          {isPinLocked ? (
+            <div className="space-y-2">
+              <Label>NMC PIN</Label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span>{pin}</span>
+                  <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={() => setPinUnlocked(true)}>
+                  <Unlock className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>NMC PIN</Label>
+              <Input value={pin} onChange={e => setPin(e.target.value)} placeholder="e.g. 18A1234C" data-testid="input-portal-nmc-pin" />
+            </div>
+          )}
         </div>
 
         <Separator />
@@ -487,6 +557,8 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
     queryKey: ["/api/portal", token, "documents"],
   });
   const [certNumber, setCertNumber] = useState(candidate.dbsNumber || "");
+  const [certUnlocked, setCertUnlocked] = useState(false);
+  const isCertLocked = !!(candidate.dbsNumber) && !certUnlocked;
   const [issueDate, setIssueDate] = useState("");
   const [certType, setCertType] = useState("Enhanced with Barred List");
   const [updateService, setUpdateService] = useState(false);
@@ -572,7 +644,21 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
           <div className="space-y-2">
             <Label>Certificate Number</Label>
-            <Input value={certNumber} onChange={e => setCertNumber(e.target.value)} placeholder="e.g. 001234567890" data-testid="input-portal-dbs-number" />
+            {isCertLocked ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span>{certNumber}</span>
+                  <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={() => setCertUnlocked(true)}>
+                  <Unlock className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </div>
+            ) : (
+              <Input value={certNumber} onChange={e => setCertNumber(e.target.value)} placeholder="e.g. 001234567890" data-testid="input-portal-dbs-number" />
+            )}
           </div>
           <div className="space-y-2">
             <Label>Issue Date</Label>
@@ -1017,7 +1103,14 @@ function ProfileStep({ token, candidate, status }: { token: string; candidate: C
   const [band, setBand] = useState(candidate.band?.toString() || "");
   const [yearsQualified, setYearsQualified] = useState(candidate.yearsQualified?.toString() || "");
   const [specialisms, setSpecialisms] = useState<string[]>(candidate.specialisms || []);
+  const [unlockedProfileFields, setUnlockedProfileFields] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const isProfileLocked = (field: string, originalValue: string | null | undefined) => {
+    const val = originalValue ?? "";
+    return val !== "" && !unlockedProfileFields.has(field);
+  };
+  const unlockProfile = (field: string) => setUnlockedProfileFields(prev => new Set(prev).add(field));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1032,6 +1125,7 @@ function ProfileStep({ token, candidate, status }: { token: string; candidate: C
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      setUnlockedProfileFields(new Set());
       toast({ title: "Profile saved" });
     },
   });
@@ -1040,27 +1134,35 @@ function ProfileStep({ token, candidate, status }: { token: string; candidate: C
     <SectionWrapper title="Professional Profile" icon={<Award className="h-5 w-5" />} status={status}>
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Current Employer</Label>
-            <Input value={employer} onChange={e => setEmployer(e.target.value)} placeholder="e.g. Royal Marsden NHS Trust" data-testid="input-portal-employer" />
-          </div>
+          <PortalLockedInput label="Current Employer" value={employer} onChange={setEmployer} locked={isProfileLocked("employer", candidate.currentEmployer)} onUnlock={() => unlockProfile("employer")} placeholder="e.g. Royal Marsden NHS Trust" testId="input-portal-employer" />
           <div className="space-y-2">
             <Label>Band</Label>
-            <Select value={band} onValueChange={setBand}>
-              <SelectTrigger data-testid="select-portal-band">
-                <SelectValue placeholder="Select band" />
-              </SelectTrigger>
-              <SelectContent>
-                {[2, 3, 4, 5, 6, 7, 8].map(b => (
-                  <SelectItem key={b} value={b.toString()}>Band {b}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isProfileLocked("band", candidate.band?.toString()) ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-950/10 text-sm">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  <span>Band {band}</span>
+                  <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
+                </div>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={() => unlockProfile("band")}>
+                  <Unlock className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+              </div>
+            ) : (
+              <Select value={band} onValueChange={setBand}>
+                <SelectTrigger data-testid="select-portal-band">
+                  <SelectValue placeholder="Select band" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2, 3, 4, 5, 6, 7, 8].map(b => (
+                    <SelectItem key={b} value={b.toString()}>Band {b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Years Qualified</Label>
-            <Input type="number" value={yearsQualified} onChange={e => setYearsQualified(e.target.value)} placeholder="e.g. 5" data-testid="input-portal-years" />
-          </div>
+          <PortalLockedInput label="Years Qualified" value={yearsQualified} onChange={setYearsQualified} locked={isProfileLocked("yearsQualified", candidate.yearsQualified?.toString())} onUnlock={() => unlockProfile("yearsQualified")} type="number" placeholder="e.g. 5" testId="input-portal-years" />
           <div className="space-y-2 sm:col-span-2">
             <Label>Clinical Specialisms</Label>
             <SpecialismSelector selected={specialisms} onChange={setSpecialisms} testIdPrefix="portal-specialism" />
