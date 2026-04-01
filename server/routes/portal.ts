@@ -194,6 +194,50 @@ export function registerPortalRoutes(app: Express) {
     });
   });
 
+  app.post("/api/portal/:token/proof-of-address", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const nurseId = (req as any).nurseId;
+      const documentDate = req.body.documentDate;
+      if (!documentDate) return res.status(400).json({ message: "Document date is required" });
+      const docDate = new Date(documentDate);
+      const now = new Date();
+      if (docDate > now) return res.status(400).json({ message: "Document date cannot be in the future" });
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      if (docDate < threeMonthsAgo) return res.status(400).json({ message: "Document must be dated within the last 3 months" });
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const doc = await storage.createDocument({
+        nurseId,
+        type: "Proof of Address",
+        filename: req.file.filename,
+        originalFilename: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: "proof_of_address",
+        expiryDate: documentDate,
+        uploadedBy: "nurse",
+      });
+      const state = await storage.getOnboardingState(nurseId);
+      if (state) {
+        const statuses = (state.stepStatuses as Record<string, string>) || {};
+        statuses.identity = "in_progress";
+        await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
+      }
+      await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: "Proof of Address", category: "proof_of_address", filename: req.file.originalname } });
+      if (doc.filePath) {
+        triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address');
+        triggerEmailNotification(doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address', 'nurse', doc.mimeType || undefined);
+        triggerDocumentAnalysis(doc.id, doc.filePath, doc.mimeType || '', 'proof_of_address', 'Proof of Address');
+      }
+      res.status(201).json(doc);
+    } catch (err: any) {
+      console.error("[Portal PoA Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload proof of address" });
+    }
+  });
+
   app.get("/api/portal/:token/documents", validatePortalToken, async (req, res) => {
     const docs = await storage.getDocuments((req as any).nurseId);
     res.json(docs);

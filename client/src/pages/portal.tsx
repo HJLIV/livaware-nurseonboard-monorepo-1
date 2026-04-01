@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PortalLayout } from "@/components/layout/portal-layout";
@@ -295,6 +295,118 @@ function PortalLockedInput({ label, value, onChange, locked, onUnlock, type, pla
   );
 }
 
+function PortalProofOfAddress({ token }: { token: string }) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [documentDate, setDocumentDate] = useState("");
+
+  const { data: docs = [] } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
+  });
+  const poaDocs = docs.filter((d: any) => d.category === "proof_of_address");
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!documentDate) throw new Error("Please select the document date first");
+      const docDate = new Date(documentDate);
+      const today = new Date();
+      if (docDate > today) throw new Error("Document date cannot be in the future");
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      if (docDate < threeMonthsAgo) throw new Error("Document must be dated within the last 3 months");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("documentDate", documentDate);
+      const res = await fetch(`/api/portal/${token}/proof-of-address`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      setDocumentDate("");
+      toast({ title: "Proof of address uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMutation.mutate(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const isExpired = (expiryDate: string | null) => {
+    if (!expiryDate) return true;
+    const d = new Date(expiryDate);
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    return d < threeMonthsAgo;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-sm font-medium">Proof of Address (required)</Label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Upload a recent document (dated within the last 3 months) showing your current address. Accepted documents: utility bill, bank statement, council tax bill, or tenancy agreement.
+        </p>
+      </div>
+
+      {poaDocs.length > 0 && (
+        <div className="space-y-2">
+          {poaDocs.map((doc: any) => {
+            const expired = isExpired(doc.expiryDate);
+            return (
+              <div key={doc.id} className={`flex items-center gap-2 rounded-md border p-2 text-sm ${expired ? "border-red-800/30 bg-red-950/10" : "border-emerald-800/30 bg-emerald-950/10"}`}>
+                {expired ? <AlertCircle className="h-4 w-4 text-red-400 shrink-0" /> : <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
+                <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
+                {doc.expiryDate && (
+                  <span className={`text-xs shrink-0 ${expired ? "text-red-400" : "text-emerald-400"}`}>
+                    {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
+                    {expired && " — expired"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex gap-2 items-end max-w-sm">
+        <div className="flex-1">
+          <Label className="text-xs">Document Date</Label>
+          <Input
+            type="date"
+            value={documentDate}
+            onChange={(e) => setDocumentDate(e.target.value)}
+            className="h-9 text-sm"
+            max={new Date().toISOString().split("T")[0]}
+            data-testid="input-portal-poa-date"
+          />
+        </div>
+        <Button
+          size="sm"
+          className="h-9 text-sm gap-1.5"
+          onClick={() => fileRef.current?.click()}
+          disabled={!documentDate || uploadMutation.isPending}
+          data-testid="button-portal-poa-upload"
+        >
+          {uploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          Upload Proof
+        </Button>
+      </div>
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleFile} />
+    </div>
+  );
+}
+
 function IdentityStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
   const { data: identityDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
@@ -381,31 +493,9 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
 
         <PassportUpload token={token} existingPassportNumber={candidate.passportNumber} />
 
-        <div className="space-y-3">
-          <div>
-            <Label className="text-sm font-medium">Proof of Address (required)</Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload a recent document (dated within the last 3 months) showing your current address. Accepted documents: utility bill, bank statement, council tax bill, or tenancy agreement.
-            </p>
-          </div>
-          <FileUpload
-            uploadUrl={`/api/portal/${token}/upload`}
-            onUploadComplete={(file) => {
-              apiRequest("POST", `/api/portal/${token}/documents`, {
-                type: "Proof of Address",
-                filename: file.filename,
-                originalFilename: file.originalFilename,
-                filePath: file.filePath,
-                fileSize: file.fileSize,
-                mimeType: file.mimeType,
-                category: "identity",
-              });
-            }}
-            data-testid="upload-proof-of-address"
-          />
-        </div>
+        <PortalProofOfAddress token={token} />
 
-        <DocumentAiAlert docs={identityDocs} category="identity" />
+        <DocumentAiAlert docs={identityDocs} category="proof_of_address" />
 
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-identity">
           {saveMutation.isPending ? "Saving..." : "Save Identity Details"}
