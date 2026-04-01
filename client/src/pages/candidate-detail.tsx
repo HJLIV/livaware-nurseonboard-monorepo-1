@@ -23,7 +23,7 @@ import {
   Users, FileText, ShieldCheck, Clock, CheckCircle, AlertTriangle,
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
-  ClipboardCheck, AlertCircle, Sparkles, FileDown
+  ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap
 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -2969,7 +2969,23 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
   );
 }
 
-function PreboardTab({ candidateId }: { candidateId: string }) {
+function PreboardTab({ candidateId, candidate }: { candidateId: string; candidate: Candidate }) {
+  const { toast } = useToast();
+  const [fastTrackReason, setFastTrackReason] = useState(candidate.fastTrackReason || "");
+  const [isEditingReason, setIsEditingReason] = useState(false);
+
+  const saveReasonMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const res = await apiRequest("PATCH", `/api/nurses/${candidateId}`, { fastTrackReason: reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}`] });
+      setIsEditingReason(false);
+      toast({ title: "Fast-track reason saved" });
+    },
+  });
+
   const { data: assessment, isLoading, error } = useQuery<{
     id: number;
     nurseId: string | null;
@@ -3021,19 +3037,86 @@ function PreboardTab({ candidateId }: { candidateId: string }) {
     );
   }
 
+  const fastTrackBanner = candidate.fastTracked ? (
+    <Card className="border border-amber-500/30 bg-amber-500/5">
+      <CardContent className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+            <Zap className="h-4.5 w-4.5 text-amber-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-semibold text-sm text-foreground">Fast-Tracked to Onboarding</p>
+              <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10">Skipped Preboard</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              This candidate was fast-tracked past the preboarding stage directly into onboarding.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Reason for Fast-Track</Label>
+              {isEditingReason ? (
+                <div className="flex gap-2">
+                  <Textarea
+                    value={fastTrackReason}
+                    onChange={(e) => setFastTrackReason(e.target.value)}
+                    placeholder="Enter reason for fast-tracking this candidate..."
+                    className="text-sm min-h-[60px] flex-1"
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      size="sm"
+                      onClick={() => saveReasonMutation.mutate(fastTrackReason)}
+                      disabled={saveReasonMutation.isPending || !fastTrackReason.trim()}
+                    >
+                      {saveReasonMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setFastTrackReason(candidate.fastTrackReason || ""); setIsEditingReason(false); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="flex items-start gap-2 cursor-pointer group rounded-md border border-transparent hover:border-border p-2 -m-2"
+                  onClick={() => setIsEditingReason(true)}
+                >
+                  {candidate.fastTrackReason ? (
+                    <p className="text-sm text-foreground flex-1">{candidate.fastTrackReason}</p>
+                  ) : (
+                    <p className="text-sm text-amber-600 italic flex-1">No reason provided — click to add one</p>
+                  )}
+                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 mt-0.5 shrink-0" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  ) : null;
+
   if (!assessment) {
     return (
-      <Card className="border border-card-border">
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/8 mb-4">
-            <ClipboardCheck className="h-7 w-7 text-primary/40" />
-          </div>
-          <p className="font-serif text-lg text-foreground mb-1">No preboard assessment submitted yet</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            An assessment will appear here once the candidate completes their preboard questionnaire.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {fastTrackBanner}
+        {!candidate.fastTracked && (
+          <Card className="border border-card-border">
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/8 mb-4">
+                <ClipboardCheck className="h-7 w-7 text-primary/40" />
+              </div>
+              <p className="font-serif text-lg text-foreground mb-1">No preboard assessment submitted yet</p>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                An assessment will appear here once the candidate completes their preboard questionnaire.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
@@ -3041,6 +3124,7 @@ function PreboardTab({ candidateId }: { candidateId: string }) {
 
   return (
     <div className="space-y-4">
+      {fastTrackBanner}
       <div className="flex items-center gap-4 flex-wrap">
         <Card className="border border-card-border flex-1 min-w-[140px]">
           <CardContent className="p-6 text-center">
@@ -3113,7 +3197,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
     queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
     retry: false,
   });
-  const preboardStatus = preboardAssessment ? "completed" : "pending";
+  const preboardStatus = candidate.fastTracked ? "skipped" : preboardAssessment ? "completed" : "pending";
 
   return (
     <div className="space-y-4">
@@ -3190,7 +3274,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
       )}
 
       {section === "preboard" && (
-        <PreboardTab candidateId={candidateId} />
+        <PreboardTab candidateId={candidateId} candidate={candidate} />
       )}
 
       {section === "compliance" && (

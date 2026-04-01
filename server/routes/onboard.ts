@@ -67,13 +67,20 @@ export function registerAdminRoutes(app: Express) {
     const { insertCandidateSchema } = await import("@shared/schema");
     const parsed = insertCandidateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
-    const candidate = await storage.createCandidate(parsed.data);
+    const data = { ...parsed.data };
+    if (data.fastTracked) {
+      data.currentStage = "onboard";
+    }
+    const candidate = await storage.createCandidate(data);
     await storage.createOnboardingState({
       nurseId: candidate.id,
       currentStep: 1,
       stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
     });
     await storage.createAuditLog({ nurseId: candidate.id, action: "candidate_created", agentName: agentFor(req), detail: { name: candidate.fullName } });
+    if (candidate.fastTracked) {
+      await storage.createAuditLog({ nurseId: candidate.id, action: "fast_tracked", agentName: agentFor(req), detail: { skippedStage: "preboard", reason: "Fast-tracked to onboarding — awaiting admin reason" } });
+    }
 
     let emailSent = false;
     if (candidate.email) {

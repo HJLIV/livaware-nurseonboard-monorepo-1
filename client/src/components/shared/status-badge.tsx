@@ -65,6 +65,7 @@ export function StepStatusDot({ status }: { status?: string }) {
   const isInProgress = status === "in_progress";
   const isFlagged = status === "flagged" || status === "escalated";
   const isBlocked = status === "blocked" || status === "failed";
+  const isSkipped = status === "skipped";
 
   const color = isComplete
     ? "bg-emerald-400"
@@ -74,6 +75,8 @@ export function StepStatusDot({ status }: { status?: string }) {
     ? "bg-amber-400"
     : isBlocked
     ? "bg-red-400"
+    : isSkipped
+    ? "bg-amber-400"
     : "bg-muted-foreground/30";
 
   return <span className={cn("inline-block h-1.5 w-1.5 rounded-full shrink-0", color)} />;

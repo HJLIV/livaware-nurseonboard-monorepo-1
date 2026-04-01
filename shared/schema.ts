@@ -54,6 +54,8 @@ export const nurses = pgTable("nurses", {
   onboardStatus: onboardStatusEnum("onboard_status").default("not_started").notNull(),
   arcadeStatus: arcadeStatusEnum("arcade_status").default("not_started").notNull(),
   onboardingStep: onboardingStatusEnum("onboarding_step").default("application"),
+  fastTracked: boolean("fast_tracked").default(false).notNull(),
+  fastTrackReason: text("fast_track_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
