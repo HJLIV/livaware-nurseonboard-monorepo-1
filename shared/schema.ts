@@ -56,6 +56,7 @@ export const nurses = pgTable("nurses", {
   onboardingStep: onboardingStatusEnum("onboarding_step").default("application"),
   fastTracked: boolean("fast_tracked").default(false).notNull(),
   fastTrackReason: text("fast_track_reason"),
+  passportPhotoPath: text("passport_photo_path"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

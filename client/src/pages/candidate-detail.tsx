@@ -28,7 +28,7 @@ import {
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
 import { ONBOARDING_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES, INDUCTION_POLICIES, REFERENCE_QUESTIONS } from "@shared/schema";
 import type {
@@ -105,6 +105,100 @@ function PortalBadge() {
     <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/50">
       Portal
     </Badge>
+  );
+}
+
+function PassportPhotoUpload({ candidate }: { candidate: Candidate }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/candidates/${candidate.id}/passport-photo`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidate.id] });
+      toast({ title: "Passport photo uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/candidates/${candidate.id}/passport-photo`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to remove");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidate.id] });
+      toast({ title: "Passport photo removed" });
+    },
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMutation.mutate(file);
+  };
+
+  if (candidate.passportPhotoPath) {
+    return (
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Passport Photo</Label>
+        <div className="relative group inline-block">
+          <img
+            src={candidate.passportPhotoPath}
+            alt="Passport photo"
+            className="h-32 w-auto rounded-lg border border-border object-cover"
+          />
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
+            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="h-3 w-3 mr-1" /> Replace
+            </Button>
+            <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => removeMutation.mutate()} disabled={removeMutation.isPending}>
+              <X className="h-3 w-3 mr-1" /> Remove
+            </Button>
+          </div>
+        </div>
+        <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">Passport Photo</Label>
+      <div
+        className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {uploadMutation.isPending ? (
+          <div className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Uploading...</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1">
+            <Upload className="h-5 w-5 text-muted-foreground/50" />
+            <span className="text-xs text-muted-foreground">Click to upload passport photo</span>
+            <span className="text-[10px] text-muted-foreground/50">JPG, PNG or WebP up to 10MB</span>
+          </div>
+        )}
+      </div>
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
+    </div>
   );
 }
 
@@ -228,6 +322,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
             <div className="space-y-3">
               <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
+              <PassportPhotoUpload candidate={candidate} />
               <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
               <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
               <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
@@ -281,6 +376,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
           <div className="space-y-3">
             <LockedInput label="Passport Number" value={form.passportNumber} onChange={v => updateField("passportNumber", v)} locked={isFieldLocked("passportNumber", candidate.passportNumber)} onUnlock={() => unlockField("passportNumber")} testId="input-edit-passport" />
+            <PassportPhotoUpload candidate={candidate} />
             <LockedInput label="NMC PIN" value={form.nmcPin} onChange={v => updateField("nmcPin", v)} locked={isFieldLocked("nmcPin", candidate.nmcPin)} onUnlock={() => unlockField("nmcPin")} placeholder="e.g. 12A3456B" testId="input-edit-nmc" />
             <LockedInput label="DBS Number" value={form.dbsNumber} onChange={v => updateField("dbsNumber", v)} locked={isFieldLocked("dbsNumber", candidate.dbsNumber)} onUnlock={() => unlockField("dbsNumber")} placeholder="e.g. 001234567890" testId="input-edit-dbs" />
             <LockedInput label="Band" value={form.band} onChange={v => updateField("band", v)} locked={isFieldLocked("band", candidate.band?.toString())} onUnlock={() => unlockField("band")} type="number" min="1" max="9" placeholder="e.g. 5" testId="input-edit-band" />

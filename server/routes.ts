@@ -72,6 +72,7 @@ export async function registerRoutes(
 
   // === PROTECTED ROUTE MIDDLEWARE ===
   app.use("/api/nurses", requireAuth);
+  app.use("/api/candidates", requireAuth);
   app.use("/api/dashboard", requireAuth);
   app.use("/api/pipeline", requireAuth);
   app.use("/api/audit-logs", requireAdmin);

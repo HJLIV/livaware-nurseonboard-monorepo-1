@@ -111,6 +111,38 @@ export function registerAdminRoutes(app: Express) {
     res.json(candidate);
   });
 
+  app.post("/api/candidates/:id/passport-photo", uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+      if (!allowedImageTypes.includes(req.file.mimetype)) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Only image files (JPG, PNG, WebP) are allowed for passport photos" });
+      }
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Not found" });
+      const filePath = `/api/uploads/${req.file.filename}`;
+      await storage.updateNurse(candidate.id, { passportPhotoPath: filePath });
+      await storage.createAuditLog({ nurseId: candidate.id, action: "passport_photo_uploaded", agentName: agentFor(req), detail: { filename: req.file.originalname, filePath } });
+      res.json({ passportPhotoPath: filePath });
+    } catch (err: any) {
+      console.error("[Passport Photo Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload passport photo" });
+    }
+  });
+
+  app.delete("/api/candidates/:id/passport-photo", async (req, res) => {
+    try {
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Not found" });
+      await storage.updateNurse(candidate.id, { passportPhotoPath: null });
+      await storage.createAuditLog({ nurseId: candidate.id, action: "passport_photo_removed", agentName: agentFor(req), detail: {} });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to remove passport photo" });
+    }
+  });
+
   app.patch("/api/candidates/:id", async (req, res) => {
     const candidate = await storage.updateCandidate(param(req, "id"), req.body);
     if (!candidate) return res.status(404).json({ message: "Not found" });
