@@ -131,6 +131,65 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  app.post("/api/candidates/:id/proof-of-address", uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const documentDate = req.body.documentDate;
+      if (!documentDate) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Document date is required" });
+      }
+      const docDate = new Date(documentDate);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (docDate > today) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Document date cannot be in the future" });
+      }
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      if (docDate < threeMonthsAgo) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: "Document must be dated within the last 3 months" });
+      }
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Not found" });
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const doc = await storage.createDocument({
+        nurseId: candidate.id,
+        type: "Proof of Address",
+        filename: req.file.filename,
+        originalFilename: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: "proof_of_address",
+        expiryDate: documentDate,
+        uploadedBy: "admin",
+      });
+      await storage.createAuditLog({ nurseId: candidate.id, action: "proof_of_address_uploaded", agentName: agentFor(req), detail: { filename: req.file.originalname, documentDate, filePath } });
+      res.json(doc);
+    } catch (err: any) {
+      console.error("[Proof of Address Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload proof of address" });
+    }
+  });
+
+  app.delete("/api/candidates/:id/proof-of-address/:docId", async (req, res) => {
+    try {
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Not found" });
+      const docs = await storage.getDocuments(candidate.id);
+      const doc = docs.find(d => d.id === req.params.docId && d.category === "proof_of_address");
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      await storage.deleteDocument(doc.id);
+      await storage.createAuditLog({ nurseId: candidate.id, action: "proof_of_address_removed", agentName: agentFor(req), detail: { documentId: doc.id, filename: doc.originalFilename || doc.filename } });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to remove proof of address" });
+    }
+  });
+
   app.delete("/api/candidates/:id/passport-photo", async (req, res) => {
     try {
       const candidate = await storage.getCandidate(param(req, "id"));

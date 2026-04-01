@@ -202,6 +202,201 @@ function PassportPhotoUpload({ candidate }: { candidate: Candidate }) {
   );
 }
 
+function ProofOfAddressUpload({ candidate }: { candidate: Candidate }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [documentDate, setDocumentDate] = useState("");
+
+  const { data: documents = [] } = useQuery<any[]>({
+    queryKey: [`/api/candidates/${candidate.id}/documents`],
+  });
+
+  const proofDocs = documents.filter((d: any) => d.category === "proof_of_address");
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!documentDate) throw new Error("Please select the document date first");
+      const docDate = new Date(documentDate);
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      if (docDate < threeMonthsAgo) throw new Error("Document must be dated within the last 3 months");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("documentDate", documentDate);
+      const res = await fetch(`/api/candidates/${candidate.id}/proof-of-address`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate.id}/documents`] });
+      setDocumentDate("");
+      toast({ title: "Proof of address uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await fetch(`/api/candidates/${candidate.id}/proof-of-address/${docId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to remove");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate.id}/documents`] });
+      toast({ title: "Proof of address removed" });
+    },
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMutation.mutate(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const isDocExpired = (expiryDate: string | null) => {
+    if (!expiryDate) return true;
+    const docDate = new Date(expiryDate);
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    return docDate < threeMonthsAgo;
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">Proof of Address</Label>
+      {proofDocs.length > 0 && (
+        <div className="space-y-2">
+          {proofDocs.map((doc: any) => {
+            const expired = isDocExpired(doc.expiryDate);
+            const isImage = doc.mimeType?.startsWith("image/");
+            return (
+              <div key={doc.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`}>
+                {isImage && doc.filePath ? (
+                  <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
+                ) : (
+                  <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
+                  <div className="flex items-center gap-2">
+                    {doc.expiryDate && (
+                      <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
+                        Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
+                        {expired && " — Older than 3 months"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {doc.filePath && (
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => removeMutation.mutate(doc.id)} disabled={removeMutation.isPending}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="space-y-2">
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <Label className="text-[10px] text-muted-foreground">Document Date</Label>
+            <Input
+              type="date"
+              value={documentDate}
+              onChange={(e) => setDocumentDate(e.target.value)}
+              className="h-8 text-xs"
+              max={new Date().toISOString().split("T")[0]}
+            />
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs gap-1"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!documentDate || uploadMutation.isPending}
+          >
+            {uploadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+            Upload
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground/60">Utility bill, bank statement, or council tax bill dated within 3 months</p>
+      </div>
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleFileChange} />
+    </div>
+  );
+}
+
+function IdentityVerificationStatus({ candidate }: { candidate: Candidate }) {
+  const { data: documents = [] } = useQuery<any[]>({
+    queryKey: [`/api/candidates/${candidate.id}/documents`],
+  });
+
+  const hasPhotoId = !!candidate.passportPhotoPath;
+
+  const proofDocs = documents.filter((d: any) => d.category === "proof_of_address");
+  const validProofDocs = proofDocs.filter((d: any) => {
+    if (!d.expiryDate) return false;
+    const docDate = new Date(d.expiryDate);
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    return docDate >= threeMonthsAgo;
+  });
+  const hasValidProofOfAddress = validProofDocs.length > 0;
+
+  const allMet = hasPhotoId && hasValidProofOfAddress;
+
+  return (
+    <Card className={`border ${allMet ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className={`h-4 w-4 ${allMet ? "text-emerald-500" : "text-amber-500"}`} />
+          <p className="text-sm font-semibold">Identity Verification</p>
+          {allMet ? (
+            <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 bg-emerald-500/10 ml-auto">Complete</Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10 ml-auto">Incomplete</Badge>
+          )}
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {hasPhotoId ? (
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            )}
+            <span className="text-xs">{hasPhotoId ? "Photo ID uploaded" : "Photo ID required"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasValidProofOfAddress ? (
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            )}
+            <span className="text-xs">{hasValidProofOfAddress ? "Proof of address uploaded (within 3 months)" : "Proof of address required (within 3 months)"}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function IdentityTab({ candidate }: { candidate: Candidate }) {
   const [editing, setEditing] = useState(false);
   const { toast } = useToast();
@@ -323,6 +518,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             <div className="space-y-3">
               <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
               <PassportPhotoUpload candidate={candidate} />
+              <ProofOfAddressUpload candidate={candidate} />
               <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
               <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
               <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
@@ -332,6 +528,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             </div>
           </div>
         </div>
+        <IdentityVerificationStatus candidate={candidate} />
       </div>
     );
   }
@@ -377,6 +574,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
           <div className="space-y-3">
             <LockedInput label="Passport Number" value={form.passportNumber} onChange={v => updateField("passportNumber", v)} locked={isFieldLocked("passportNumber", candidate.passportNumber)} onUnlock={() => unlockField("passportNumber")} testId="input-edit-passport" />
             <PassportPhotoUpload candidate={candidate} />
+            <ProofOfAddressUpload candidate={candidate} />
             <LockedInput label="NMC PIN" value={form.nmcPin} onChange={v => updateField("nmcPin", v)} locked={isFieldLocked("nmcPin", candidate.nmcPin)} onUnlock={() => unlockField("nmcPin")} placeholder="e.g. 12A3456B" testId="input-edit-nmc" />
             <LockedInput label="DBS Number" value={form.dbsNumber} onChange={v => updateField("dbsNumber", v)} locked={isFieldLocked("dbsNumber", candidate.dbsNumber)} onUnlock={() => unlockField("dbsNumber")} placeholder="e.g. 001234567890" testId="input-edit-dbs" />
             <LockedInput label="Band" value={form.band} onChange={v => updateField("band", v)} locked={isFieldLocked("band", candidate.band?.toString())} onUnlock={() => unlockField("band")} type="number" min="1" max="9" placeholder="e.g. 5" testId="input-edit-band" />
@@ -385,6 +583,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
           </div>
         </div>
       </div>
+      <IdentityVerificationStatus candidate={candidate} />
     </div>
   );
 }

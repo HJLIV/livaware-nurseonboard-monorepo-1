@@ -43,6 +43,7 @@ export interface IStorage {
   getDocuments(candidateId: string): Promise<Document[]>;
   createDocument(data: InsertDocument): Promise<Document>;
   updateDocument(id: string, data: Partial<InsertDocument>): Promise<Document | undefined>;
+  deleteDocument(id: string): Promise<void>;
 
   getReferences(candidateId: string): Promise<Reference[]>;
   createReference(data: InsertReference): Promise<Reference>;
@@ -175,6 +176,10 @@ export class DatabaseStorage implements IStorage {
   async updateDocument(id: string, data: Partial<InsertDocument>): Promise<Document | undefined> {
     const [result] = await db.update(documents).set(data).where(eq(documents.id, id)).returning();
     return result;
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await db.delete(documents).where(eq(documents.id, id));
   }
 
   async getReferences(candidateId: string): Promise<Reference[]> {
