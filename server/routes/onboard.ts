@@ -482,6 +482,44 @@ export function registerAdminRoutes(app: Express) {
     res.status(201).json(result);
   });
 
+  app.post("/api/candidates/:id/document-upload", uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Not found" });
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const doc = await storage.createDocument({
+        nurseId: candidate.id,
+        type: req.body.type || "Document",
+        filename: req.file.filename,
+        originalFilename: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: req.body.category || "general",
+        expiryDate: req.body.expiryDate || null,
+        uploadedBy: "admin",
+      });
+      if (doc.category === "right_to_work") {
+        const state = await storage.getOnboardingState(candidate.id);
+        if (state) {
+          const statuses = (state.stepStatuses as Record<string, string>) || {};
+          statuses.right_to_work = "in_progress";
+          await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
+        }
+      }
+      await storage.createAuditLog({ nurseId: candidate.id, action: "document_uploaded", agentName: agentFor(req), detail: { type: doc.type, filename: req.file.originalname, category: doc.category } });
+      if (doc.filePath) {
+        triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || 'general');
+        triggerEmailNotification(doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || 'general', 'admin', doc.mimeType || undefined);
+      }
+      res.status(201).json(doc);
+    } catch (err: any) {
+      console.error("[Document Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
   app.get("/api/candidates/:id/employment-history", async (req, res) => {
     const result = await storage.getEmploymentHistory(param(req, "id"));
     res.json(result);

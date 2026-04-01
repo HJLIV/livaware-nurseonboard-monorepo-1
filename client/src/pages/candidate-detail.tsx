@@ -202,153 +202,13 @@ function PassportPhotoUpload({ candidate }: { candidate: Candidate }) {
   );
 }
 
-function ProofOfAddressUpload({ candidate }: { candidate: Candidate }) {
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [documentDate, setDocumentDate] = useState("");
-
-  const { data: documents = [] } = useQuery<any[]>({
-    queryKey: [`/api/candidates/${candidate.id}/documents`],
-  });
-
-  const proofDocs = documents.filter((d: any) => d.category === "proof_of_address");
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      if (!documentDate) throw new Error("Please select the document date first");
-      const docDate = new Date(documentDate);
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      if (docDate < threeMonthsAgo) throw new Error("Document must be dated within the last 3 months");
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("documentDate", documentDate);
-      const res = await fetch(`/api/candidates/${candidate.id}/proof-of-address`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate.id}/documents`] });
-      setDocumentDate("");
-      toast({ title: "Proof of address uploaded" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: async (docId: string) => {
-      const res = await fetch(`/api/candidates/${candidate.id}/proof-of-address/${docId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to remove");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidate.id}/documents`] });
-      toast({ title: "Proof of address removed" });
-    },
-  });
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadMutation.mutate(file);
-    if (e.target) e.target.value = "";
-  };
-
-  const isDocExpired = (expiryDate: string | null) => {
-    if (!expiryDate) return true;
-    const docDate = new Date(expiryDate);
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    return docDate < threeMonthsAgo;
-  };
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-xs text-muted-foreground">Proof of Address</Label>
-      {proofDocs.length > 0 && (
-        <div className="space-y-2">
-          {proofDocs.map((doc: any) => {
-            const expired = isDocExpired(doc.expiryDate);
-            const isImage = doc.mimeType?.startsWith("image/");
-            return (
-              <div key={doc.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`}>
-                {isImage && doc.filePath ? (
-                  <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
-                ) : (
-                  <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
-                  <div className="flex items-center gap-2">
-                    {doc.expiryDate && (
-                      <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
-                        Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
-                        {expired && " — Older than 3 months"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {doc.filePath && (
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => removeMutation.mutate(doc.id)} disabled={removeMutation.isPending}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div className="space-y-2">
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
-            <Label className="text-[10px] text-muted-foreground">Document Date</Label>
-            <Input
-              type="date"
-              value={documentDate}
-              onChange={(e) => setDocumentDate(e.target.value)}
-              className="h-8 text-xs"
-              max={new Date().toISOString().split("T")[0]}
-            />
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs gap-1"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!documentDate || uploadMutation.isPending}
-          >
-            {uploadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-            Upload
-          </Button>
-        </div>
-        <p className="text-[10px] text-muted-foreground/60">Utility bill, bank statement, or council tax bill dated within 3 months</p>
-      </div>
-      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleFileChange} />
-    </div>
-  );
-}
-
 function IdentityVerificationStatus({ candidate }: { candidate: Candidate }) {
   const { data: documents = [] } = useQuery<any[]>({
     queryKey: [`/api/candidates/${candidate.id}/documents`],
   });
 
-  const hasPhotoId = !!candidate.passportPhotoPath;
+  const rtwDocs = documents.filter((d: any) => d.category === "right_to_work");
+  const hasPhotoId = !!candidate.passportPhotoPath || rtwDocs.length > 0;
 
   const proofDocs = documents.filter((d: any) => d.category === "proof_of_address");
   const validProofDocs = proofDocs.filter((d: any) => {
@@ -518,7 +378,6 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             <div className="space-y-3">
               <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
               <PassportPhotoUpload candidate={candidate} />
-              <ProofOfAddressUpload candidate={candidate} />
               <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
               <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
               <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
@@ -574,7 +433,6 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
           <div className="space-y-3">
             <LockedInput label="Passport Number" value={form.passportNumber} onChange={v => updateField("passportNumber", v)} locked={isFieldLocked("passportNumber", candidate.passportNumber)} onUnlock={() => unlockField("passportNumber")} testId="input-edit-passport" />
             <PassportPhotoUpload candidate={candidate} />
-            <ProofOfAddressUpload candidate={candidate} />
             <LockedInput label="NMC PIN" value={form.nmcPin} onChange={v => updateField("nmcPin", v)} locked={isFieldLocked("nmcPin", candidate.nmcPin)} onUnlock={() => unlockField("nmcPin")} placeholder="e.g. 12A3456B" testId="input-edit-nmc" />
             <LockedInput label="DBS Number" value={form.dbsNumber} onChange={v => updateField("dbsNumber", v)} locked={isFieldLocked("dbsNumber", candidate.dbsNumber)} onUnlock={() => unlockField("dbsNumber")} placeholder="e.g. 001234567890" testId="input-edit-dbs" />
             <LockedInput label="Band" value={form.band} onChange={v => updateField("band", v)} locked={isFieldLocked("band", candidate.band?.toString())} onUnlock={() => unlockField("band")} type="number" min="1" max="9" placeholder="e.g. 5" testId="input-edit-band" />
@@ -1387,105 +1245,260 @@ function DbsTab({ candidateId }: { candidateId: string }) {
 
 function RightToWorkTab({ candidateId }: { candidateId: string }) {
   const { data: docs, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/candidates", candidateId, "documents"],
+    queryKey: [`/api/candidates/${candidateId}/documents`],
   });
   const [docType, setDocType] = useState("Passport");
-  const [filename, setFilename] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
+  const [poaDocDate, setPoaDocDate] = useState("");
   const { toast } = useToast();
+  const rtwFileRef = useRef<HTMLInputElement>(null);
+  const poaFileRef = useRef<HTMLInputElement>(null);
 
-  const uploadMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/candidates/${candidateId}/documents`, {
-        type: docType,
-        filename: filename || `${docType.toLowerCase().replace(/\s/g, "_")}_scan.pdf`,
-        category: "right_to_work",
-        expiryDate: expiryDate || null,
+  const rtwUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", docType);
+      formData.append("category", "right_to_work");
+      if (expiryDate) formData.append("expiryDate", expiryDate);
+      const res = await fetch(`/api/candidates/${candidateId}/document-upload`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
       });
+      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
-      setFilename("");
       setExpiryDate("");
-      toast({ title: "Document recorded" });
+      toast({ title: "Document uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const poaUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!poaDocDate) throw new Error("Please select the document date first");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("documentDate", poaDocDate);
+      const res = await fetch(`/api/candidates/${candidateId}/proof-of-address`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      setPoaDocDate("");
+      toast({ title: "Proof of address uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async ({ docId, category }: { docId: string; category: string }) => {
+      const endpoint = category === "proof_of_address"
+        ? `/api/candidates/${candidateId}/proof-of-address/${docId}`
+        : `/api/candidates/${candidateId}/documents`;
+      if (category === "proof_of_address") {
+        const res = await fetch(endpoint, { method: "DELETE", credentials: "include" });
+        if (!res.ok) throw new Error("Failed to remove");
+        return res.json();
+      }
+      return {};
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      toast({ title: "Document removed" });
+    },
+  });
+
+  const handleRtwFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) rtwUploadMutation.mutate(file);
+    if (e.target) e.target.value = "";
+  };
+
+  const handlePoaFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) poaUploadMutation.mutate(file);
+    if (e.target) e.target.value = "";
+  };
 
   if (isLoading) return <Skeleton className="h-40" />;
 
   const rtwDocs = (docs || []).filter((d: any) => d.category === "right_to_work");
+  const poaDocs = (docs || []).filter((d: any) => d.category === "proof_of_address");
+
+  const isPoaExpired = (expiryDate: string | null) => {
+    if (!expiryDate) return true;
+    const docDate = new Date(expiryDate);
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    return docDate < threeMonthsAgo;
+  };
 
   return (
     <div className="space-y-6" data-testid="tab-right-to-work">
-      {rtwDocs.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Uploaded Documents</h4>
-          {rtwDocs.map((doc: any) => (
-            <div key={doc.id} className="flex items-center justify-between rounded-lg border border-card-border p-3" data-testid={`doc-rtw-${doc.id}`}>
-              <div className="flex items-center gap-3">
-                <FileCheck className="h-4 w-4 text-emerald-500" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">{doc.type}</p>
-                  {doc.filePath ? (
-                    <DocumentLink doc={doc} />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{doc.filename}</p>
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Photo ID / Right to Work</h4>
+        {rtwDocs.length > 0 && (
+          <div className="space-y-2">
+            {rtwDocs.map((doc: any) => (
+              <div key={doc.id} className="flex items-center justify-between rounded-lg border border-card-border p-3" data-testid={`doc-rtw-${doc.id}`}>
+                <div className="flex items-center gap-3">
+                  <FileCheck className="h-4 w-4 text-emerald-500" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{doc.type}</p>
+                    {doc.filePath ? (
+                      <DocumentLink doc={doc} />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{doc.filename}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {doc.uploadedBy === "nurse" && <PortalBadge />}
+                  {doc.expiryDate && (
+                    <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
+                  )}
+                  {doc.filePath && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </Button>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {doc.uploadedBy === "nurse" && <PortalBadge />}
-                {doc.expiryDate && (
-                  <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
-                )}
-                {doc.filePath && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                    <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      <Card className="border border-card-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">Record Right to Work Document</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+        <Card className="border border-card-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Upload Photo ID / Right to Work</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label>Document Type</Label>
+              <Select value={docType} onValueChange={setDocType}>
+                <SelectTrigger data-testid="select-rtw-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Passport">UK/EU Passport</SelectItem>
+                  <SelectItem value="BRP">Biometric Residence Permit (BRP)</SelectItem>
+                  <SelectItem value="Visa">Visa</SelectItem>
+                  <SelectItem value="EU Settlement">EU Settlement Scheme</SelectItem>
+                  <SelectItem value="Birth Certificate">Birth Certificate</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Expiry Date (if applicable)</Label>
+              <Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} data-testid="input-rtw-expiry" />
+            </div>
+            <Button
+              onClick={() => rtwFileRef.current?.click()}
+              disabled={rtwUploadMutation.isPending}
+              className="gap-1.5"
+              data-testid="button-upload-rtw"
+            >
+              {rtwUploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {rtwUploadMutation.isPending ? "Uploading..." : "Choose File & Upload"}
+            </Button>
+            <input ref={rtwFileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleRtwFile} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Proof of Address</h4>
+        <p className="text-xs text-muted-foreground">Utility bill, bank statement, or council tax bill dated within the last 3 months</p>
+
+        {poaDocs.length > 0 && (
           <div className="space-y-2">
-            <Label>Document Type</Label>
-            <Select value={docType} onValueChange={setDocType}>
-              <SelectTrigger data-testid="select-rtw-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Passport">UK/EU Passport</SelectItem>
-                <SelectItem value="BRP">Biometric Residence Permit (BRP)</SelectItem>
-                <SelectItem value="Visa">Visa</SelectItem>
-                <SelectItem value="EU Settlement">EU Settlement Scheme</SelectItem>
-                <SelectItem value="Birth Certificate">Birth Certificate</SelectItem>
-              </SelectContent>
-            </Select>
+            {poaDocs.map((doc: any) => {
+              const expired = isPoaExpired(doc.expiryDate);
+              const isImage = doc.mimeType?.startsWith("image/");
+              return (
+                <div key={doc.id} className={`flex items-center gap-3 p-3 rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`}>
+                  {isImage && doc.filePath ? (
+                    <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
+                  ) : (
+                    <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
+                    {doc.expiryDate && (
+                      <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
+                        Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
+                        {expired && " — Older than 3 months"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {doc.filePath && (
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                        <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => removeMutation.mutate({ docId: doc.id, category: "proof_of_address" })} disabled={removeMutation.isPending}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="space-y-2">
-            <Label>Document Reference / Filename</Label>
-            <Input value={filename} onChange={e => setFilename(e.target.value)} placeholder="e.g. passport_scan.pdf" data-testid="input-rtw-filename" />
-          </div>
-          <div className="space-y-2">
-            <Label>Expiry Date</Label>
-            <Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} data-testid="input-rtw-expiry" />
-          </div>
-          <Button onClick={() => uploadMutation.mutate()} disabled={uploadMutation.isPending} data-testid="button-record-rtw">
-            {uploadMutation.isPending ? "Recording..." : "Record Document"}
-          </Button>
-        </CardContent>
-      </Card>
+        )}
+
+        <Card className="border border-card-border">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Label className="text-xs">Document Date</Label>
+                <Input
+                  type="date"
+                  value={poaDocDate}
+                  onChange={(e) => setPoaDocDate(e.target.value)}
+                  className="h-8 text-xs"
+                  max={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={() => poaFileRef.current?.click()}
+                disabled={!poaDocDate || poaUploadMutation.isPending}
+              >
+                {poaUploadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                Upload Proof
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        <input ref={poaFileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handlePoaFile} />
+      </div>
     </div>
   );
 }
@@ -1801,7 +1814,7 @@ function TrainingTab({ candidateId }: { candidateId: string }) {
     queryKey: ["/api/candidates", candidateId, "mandatory-training"],
   });
   const { data: docs } = useQuery<any[]>({
-    queryKey: ["/api/candidates", candidateId, "documents"],
+    queryKey: [`/api/candidates/${candidateId}/documents`],
   });
   const { toast } = useToast();
   const [certUploading, setCertUploading] = useState(false);
@@ -1845,7 +1858,7 @@ function TrainingTab({ candidateId }: { candidateId: string }) {
       const result = await res.json();
       setLastUploadResult({ autoRecorded: result.autoRecorded, totalModulesMatched: result.totalModulesMatched });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
       toast({
         title: "Certificate processed",
@@ -2560,7 +2573,7 @@ function IndemnityTab({ candidateId }: { candidateId: string }) {
     queryKey: ["/api/candidates", candidateId, "professional-indemnity"],
   });
   const { data: docs } = useQuery<any[]>({
-    queryKey: ["/api/candidates", candidateId, "documents"],
+    queryKey: [`/api/candidates/${candidateId}/documents`],
   });
   const [provider, setProvider] = useState("");
   const [policyNum, setPolicyNum] = useState("");
@@ -2710,7 +2723,7 @@ function DocumentAiIssues({ issues, status }: { issues?: string[] | null; status
 
 function DocumentsTab({ candidateId }: { candidateId: string }) {
   const { data: docs, isLoading } = useQuery<any[]>({
-    queryKey: ["/api/candidates", candidateId, "documents"],
+    queryKey: [`/api/candidates/${candidateId}/documents`],
     refetchInterval: (query) => {
       const data = query.state.data as any[] | undefined;
       if (data?.some((d: any) => d.aiStatus === "pending")) return 5000;
@@ -2753,7 +2766,7 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
         confidence: result.classification.confidence,
         summary: result.classification.summary,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
       toast({
