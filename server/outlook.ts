@@ -147,7 +147,7 @@ export async function sendPortalInviteEmail(
         </p>
 
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${portalUrl}" style="display: inline-block; background: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
+          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
             ${content.buttonLabel}
           </a>
         </div>
@@ -308,7 +308,7 @@ export function buildReferenceRequestHtml(
         ${bodyHtml}
 
         <div style="text-align: center; margin: 28px 0;">
-          <a href="${refereeFormUrl}" style="display: inline-block; background: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
+          <a href="${refereeFormUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
             Complete Reference Form
           </a>
         </div>

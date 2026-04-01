@@ -29,6 +29,7 @@ function AddCandidateDialog() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/candidates", {
         fullName, email, phone, band: parseInt(band), status: "application",
+        currentStage: "onboard",
       });
       return res.json();
     },

@@ -84,7 +84,8 @@ export function registerAdminRoutes(app: Express) {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
-        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, "preboard");
+        const emailStage = candidate.currentStage === "onboard" ? "onboard" : candidate.currentStage === "skills_arcade" ? "skills_arcade" : "preboard";
+        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, emailStage);
         emailSent = true;
         await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
