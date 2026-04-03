@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Users, Shield, Stethoscope, GraduationCap, ChevronDown, ChevronUp,
   CheckCircle2, XCircle, Lock, Clock, BookOpen, Trophy, ShieldAlert, Info,
@@ -22,7 +23,7 @@ import {
   ClipboardList, Brain, UserCheck, CircleDot, Gauge, Search,
   Beaker, Waves, CloudFog, MonitorCheck, HeartHandshake,
   HandHelping, Soup, GlassWater, PersonStanding, UserPlus, Mail, Loader2,
-  Copy, CheckCheck,
+  Copy, CheckCheck, PlusCircle,
 } from "lucide-react";
 
 type UserDetail = {
@@ -104,7 +105,7 @@ function UserProgressPanel({ userId }: { userId: string }) {
   const notStarted = modules.filter((m) => m.totalAttempts === 0 && !m.isLocked);
 
   return (
-    <div className="space-y-4 pt-3 border-t mt-3">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="rounded-md bg-muted/50 p-3 text-center">
           <p className="text-lg font-bold">{summary.totalModules}</p>
@@ -406,10 +407,151 @@ function InviteNurseDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
+type ModuleInfo = {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  scenarioCount: number;
+  assignmentCount: number;
+};
+
+function AssignModulesDialog({
+  open,
+  onOpenChange,
+  userId,
+  userName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  userId: string;
+  userName: string;
+}) {
+  const { toast } = useToast();
+  const [selectedModules, setSelectedModules] = useState<Set<string>>(new Set());
+
+  const { data: allModules, isLoading: modulesLoading } = useQuery<ModuleInfo[]>({
+    queryKey: ["/api/admin/modules"],
+    enabled: open,
+  });
+
+  const { data: userProgress } = useQuery<UserProgress>({
+    queryKey: [`/api/admin/users/${userId}/progress`],
+    enabled: open,
+  });
+
+  const alreadyAssignedIds = new Set(
+    (userProgress?.modules || []).map((m) => m.moduleId)
+  );
+
+  const availableModules = (allModules || []).filter((m) => !alreadyAssignedIds.has(m.id));
+
+  const assignMutation = useMutation({
+    mutationFn: async () => {
+      const results = [];
+      for (const moduleId of selectedModules) {
+        const res = await apiRequest("POST", "/api/admin/assign", {
+          moduleId,
+          userIds: [userId],
+        });
+        results.push(await res.json());
+      }
+      return results;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${userId}/progress`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users-detail"] });
+      toast({
+        title: "Modules assigned",
+        description: `${selectedModules.size} module${selectedModules.size !== 1 ? "s" : ""} assigned to ${userName}.`,
+      });
+      setSelectedModules(new Set());
+      onOpenChange(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleModule = (moduleId: string) => {
+    setSelectedModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(moduleId)) {
+        next.delete(moduleId);
+      } else {
+        next.add(moduleId);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PlusCircle className="w-5 h-5 text-primary" />
+            Assign Modules
+          </DialogTitle>
+          <DialogDescription>
+            Select training modules to assign to {userName}.
+          </DialogDescription>
+        </DialogHeader>
+
+        {modulesLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}
+          </div>
+        ) : availableModules.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            All available modules are already assigned to this nurse.
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {availableModules.map((mod) => {
+              const ModIcon = iconMap[mod.icon] || BookOpen;
+              return (
+                <label
+                  key={mod.id}
+                  className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <Checkbox
+                    checked={selectedModules.has(mod.id)}
+                    onCheckedChange={() => toggleModule(mod.id)}
+                  />
+                  <ModIcon className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{mod.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {mod.scenarioCount} scenario{mod.scenarioCount !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            disabled={selectedModules.size === 0 || assignMutation.isPending}
+            onClick={() => assignMutation.mutate()}
+          >
+            {assignMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+            Assign {selectedModules.size > 0 ? `(${selectedModules.size})` : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminUsers() {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data: users, isLoading } = useQuery<UserDetail[]>({
     queryKey: ["/api/admin/users-detail"],
@@ -439,6 +581,14 @@ export default function AdminUsers() {
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <InviteNurseDialog open={showInviteDialog} onOpenChange={setShowInviteDialog} />
+      {assignTarget && (
+        <AssignModulesDialog
+          open={!!assignTarget}
+          onOpenChange={(open) => { if (!open) setAssignTarget(null); }}
+          userId={assignTarget.id}
+          userName={assignTarget.name}
+        />
+      )}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Pre-Induction</p>
@@ -521,7 +671,24 @@ export default function AdminUsers() {
                     </button>
 
                     {isExpanded && user.role === "nurse" && (
-                      <UserProgressPanel userId={user.id} />
+                      <>
+                        <div className="flex items-center justify-between pt-3 border-t mt-3 mb-2">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Training Progress</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-2 font-semibold"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAssignTarget({ id: user.id, name: user.name });
+                            }}
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            Assign Modules
+                          </Button>
+                        </div>
+                        <UserProgressPanel userId={user.id} />
+                      </>
                     )}
                   </CardContent>
                 </Card>
