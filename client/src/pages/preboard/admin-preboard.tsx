@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/app-layout";
 import { RegisterNurseDialog } from "@/pages/nurses";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ClipboardCheck, Eye, Brain, Calendar, User } from "lucide-react";
+import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface PreboardAssessment {
   id: number;
@@ -91,14 +93,71 @@ function AssessmentDetailDialog({
   );
 }
 
+interface Nurse {
+  id: string;
+  fullName: string;
+  currentStage: string;
+}
+
 export default function AdminPreboard() {
   const [search, setSearch] = useState("");
   const [selectedAssessment, setSelectedAssessment] = useState<PreboardAssessment | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const { toast } = useToast();
 
   const { data: assessments, isLoading } = useQuery<PreboardAssessment[]>({
     queryKey: ["/api/preboard/assessments"],
   });
+
+  const { data: allNurses } = useQuery<Nurse[]>({
+    queryKey: ["/api/nurses"],
+  });
+
+  const preboardNurseIds = new Set(
+    (allNurses || []).filter(n => n.currentStage === "preboard").map(n => n.id)
+  );
+
+  const advanceMutation = useMutation({
+    mutationFn: async (nurseId: string) => {
+      const res = await apiRequest("POST", `/api/nurses/${nurseId}/advance-stage`, { expectedFromStage: "preboard" });
+      return res.json();
+    },
+    onSuccess: (_data, nurseId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/preboard/assessments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Advanced to Onboarding", description: "Applicant has been moved to the onboarding stage." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/backfill-preboard-completions");
+      return res.json();
+    },
+    onSuccess: (data: { advanced: number; names: string[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/preboard/assessments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: `Advanced ${data.advanced} applicant${data.advanced !== 1 ? "s" : ""}`,
+        description: data.advanced > 0
+          ? `Moved to onboarding: ${data.names.join(", ")}`
+          : "No applicants needed advancing.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const assessedPreboardNurseIds = new Set(
+    (assessments || []).filter(a => a.nurseId && preboardNurseIds.has(String(a.nurseId))).map(a => String(a.nurseId))
+  );
+  const assessedPreboardCount = assessedPreboardNurseIds.size;
 
   const filtered = assessments?.filter((a) => {
     if (!search.trim()) return true;
@@ -121,7 +180,20 @@ export default function AdminPreboard() {
               Manage and review applicant assessments
             </p>
           </div>
-          <RegisterNurseDialog />
+          <div className="flex items-center gap-3">
+            {assessedPreboardCount > 0 && (
+              <Button
+                variant="default"
+                className="gap-2 font-semibold"
+                onClick={() => backfillMutation.mutate()}
+                disabled={backfillMutation.isPending}
+              >
+                <Zap className="h-4 w-4" />
+                {backfillMutation.isPending ? "Advancing..." : `Advance All Assessed (${assessedPreboardCount})`}
+              </Button>
+            )}
+            <RegisterNurseDialog />
+          </div>
         </div>
 
         <div className="flex items-center gap-4 animate-fade-in-up animate-delay-100">
@@ -178,15 +250,31 @@ export default function AdminPreboard() {
                         AI analysis available
                       </div>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-2 font-semibold gap-2"
-                      onClick={() => { setSelectedAssessment(assessment); setDetailOpen(true); }}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      View Detail
-                    </Button>
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 font-semibold gap-2"
+                        onClick={() => { setSelectedAssessment(assessment); setDetailOpen(true); }}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View Detail
+                      </Button>
+                      {assessment.nurseId && preboardNurseIds.has(String(assessment.nurseId)) && (
+                        <Button
+                          size="sm"
+                          className="flex-1 font-semibold gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            advanceMutation.mutate(String(assessment.nurseId));
+                          }}
+                          disabled={advanceMutation.isPending}
+                        >
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                          Advance
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               </div>

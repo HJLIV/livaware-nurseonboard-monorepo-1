@@ -146,6 +146,11 @@ export function registerNurseRoutes(app: Express) {
       return res.status(400).json({ message: "Nurse is already at the final stage" });
     }
 
+    const expectedFrom = req.body?.expectedFromStage;
+    if (expectedFrom && nurse.currentStage !== expectedFrom) {
+      return res.status(409).json({ message: `Nurse is no longer in ${expectedFrom} stage (currently ${nurse.currentStage})` });
+    }
+
     const nextStage = stageOrder[currentIdx + 1];
     const statusUpdates: Record<string, string> = {};
     if (nurse.currentStage === "preboard") statusUpdates.preboardStatus = "completed";
