@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../preboard-storage";
+import { storage as appStorage } from "../storage";
 import { insertAssessmentSchema, assessmentResponseSchema, portalLinks, nurses } from "@shared/schema";
 import { analyzeAssessment } from "../preboard-ai";
 import { sendEmail } from "../preboard-outlook";
@@ -86,6 +87,31 @@ export async function registerRoutes(
           });
         } catch (auditErr) {
           console.error("Failed to log assessment audit:", auditErr);
+        }
+
+        try {
+          const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
+          if (nurse && nurse.currentStage === "preboard") {
+            await db.update(nurses).set({
+              currentStage: "onboard",
+              preboardStatus: "completed",
+              updatedAt: new Date(),
+            }).where(eq(nurses.id, nurseId));
+
+            const existing = await appStorage.getOnboardingState(nurseId);
+            if (!existing) {
+              await appStorage.createOnboardingState({
+                nurseId,
+                currentStep: 1,
+                stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
+              });
+            }
+
+            await logAction(nurseId, "system", "stage_advanced", "assessment_auto", { from: "preboard", to: "onboard", trigger: "assessment_completed" });
+            console.log(`[Preboard] Auto-advanced nurse ${nurseId} to onboard after assessment completion`);
+          }
+        } catch (advanceErr) {
+          console.error("Failed to auto-advance nurse after assessment:", advanceErr);
         }
       }
 
