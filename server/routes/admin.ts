@@ -3,6 +3,7 @@ import { db } from "../db";
 import { nurses, portalLinks, auditLogs, preboardAssessments, nmcVerifications, dbsVerifications } from "@shared/schema";
 import { eq, desc, and, gt } from "drizzle-orm";
 import { logAction } from "../services/audit";
+import { storage } from "../storage";
 import crypto from "crypto";
 
 function agentFor(req: Request): string {
@@ -154,8 +155,56 @@ export function registerNurseRoutes(app: Express) {
       currentStage: nextStage, ...statusUpdates, updatedAt: new Date(),
     }).where(eq(nurses.id, req.params.id)).returning();
 
+    if (nurse.currentStage === "preboard" && nextStage === "onboard") {
+      const existing = await storage.getOnboardingState(nurse.id);
+      if (!existing) {
+        await storage.createOnboardingState({
+          nurseId: nurse.id,
+          currentStep: 1,
+          stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
+        });
+      }
+    }
+
     await logAction(nurse.id, "admin", "stage_advanced", agentFor(req), { from: nurse.currentStage, to: nextStage });
     res.json(updated);
+  });
+
+  app.post("/api/admin/backfill-preboard-completions", async (req, res) => {
+    try {
+      const allPreboard = await db.select().from(nurses).where(eq(nurses.currentStage, "preboard"));
+      const allAssessments = await db.select().from(preboardAssessments);
+      const assessedNurseIds = new Set(allAssessments.filter(a => a.nurseId).map(a => a.nurseId));
+
+      const toAdvance = allPreboard.filter(n => assessedNurseIds.has(n.id));
+      const advanced: string[] = [];
+
+      for (const nurse of toAdvance) {
+        await db.update(nurses).set({
+          currentStage: "onboard",
+          preboardStatus: "completed",
+          updatedAt: new Date(),
+        }).where(eq(nurses.id, nurse.id));
+
+        const existing = await storage.getOnboardingState(nurse.id);
+        if (!existing) {
+          await storage.createOnboardingState({
+            nurseId: nurse.id,
+            currentStep: 1,
+            stepStatuses: { identity: "in_progress", nmc: "pending", dbs: "pending", right_to_work: "pending", profile: "pending", competency: "pending", training: "pending", health: "pending", references: "pending", induction: "pending", indemnity: "pending", equal_opportunities: "pending" },
+          });
+        }
+
+        await logAction(nurse.id, "system", "stage_advanced", agentFor(req), { from: "preboard", to: "onboard", trigger: "admin_backfill" });
+        advanced.push(nurse.fullName || nurse.id);
+      }
+
+      console.log(`[Backfill] Advanced ${advanced.length} nurses from preboard to onboard`);
+      res.json({ advanced: advanced.length, names: advanced });
+    } catch (err: any) {
+      console.error("[Backfill] Error:", err.message);
+      res.status(500).json({ message: "Failed to run backfill" });
+    }
   });
 
   app.get("/api/portal/:token", async (req, res) => {

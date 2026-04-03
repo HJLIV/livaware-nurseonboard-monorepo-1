@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { getStageDisplayName } from "@shared/schema";
 
 interface Nurse {
@@ -171,7 +171,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
   );
 }
 
-function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => void; index: number }) {
+function NurseCard({ nurse, onClick, onAdvance, isAdvancing, index }: { nurse: Nurse; onClick: () => void; onAdvance?: () => void; isAdvancing?: boolean; index: number }) {
   const stage = stageConfig[nurse.currentStage] || stageConfig.preboard;
   const nameParts = nurse.fullName.split(" ");
   const initials = nameParts.length >= 2
@@ -217,9 +217,23 @@ function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => voi
                 <StatusBadge status={nurse.arcadeStatus} />
               </div>
 
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
-                <Calendar className="h-2.5 w-2.5" />
-                {new Date(nurse.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                  <Calendar className="h-2.5 w-2.5" />
+                  {new Date(nurse.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </div>
+                {nurse.currentStage === "preboard" && onAdvance && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] gap-1 px-2"
+                    onClick={(e) => { e.stopPropagation(); onAdvance(); }}
+                    disabled={isAdvancing}
+                  >
+                    {isAdvancing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ChevronRight className="h-2.5 w-2.5" />}
+                    Advance to Onboarding
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -232,9 +246,49 @@ function NurseCard({ nurse, onClick, index }: { nurse: Nurse; onClick: () => voi
 export default function NursesPage() {
   const [search, setSearch] = useState("");
   const [, setLocation] = useLocation();
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: nursesList, isLoading } = useQuery<Nurse[]>({
     queryKey: ["/api/nurses"],
+  });
+
+  const advanceMutation = useMutation({
+    mutationFn: async (nurseId: string) => {
+      setAdvancingId(nurseId);
+      const res = await apiRequest("POST", `/api/nurses/${nurseId}/advance-stage`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Advanced to Onboarding", description: `${data.fullName} has been moved to the onboarding stage.` });
+      setAdvancingId(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to advance", description: err.message, variant: "destructive" });
+      setAdvancingId(null);
+    },
+  });
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/backfill-preboard-completions", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      if (data.advanced > 0) {
+        toast({ title: `${data.advanced} applicant${data.advanced > 1 ? "s" : ""} advanced`, description: `Moved to onboarding: ${data.names.join(", ")}` });
+      } else {
+        toast({ title: "No applicants to advance", description: "All applicants with completed assessments have already been moved." });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Backfill failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const filtered = nursesList?.filter((nurse) => {
@@ -245,6 +299,8 @@ export default function NursesPage() {
       nurse.email.toLowerCase().includes(q)
     );
   });
+
+  const preboardCount = nursesList?.filter(n => n.currentStage === "preboard").length ?? 0;
 
   return (
     <AppLayout>
@@ -261,7 +317,21 @@ export default function NursesPage() {
               Manage candidate onboarding and compliance
             </p>
           </div>
-          <RegisterNurseDialog />
+          <div className="flex items-center gap-2">
+            {preboardCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => backfillMutation.mutate()}
+                disabled={backfillMutation.isPending}
+              >
+                {backfillMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Advance All Assessed
+              </Button>
+            )}
+            <RegisterNurseDialog />
+          </div>
         </div>
 
         <div className="flex items-center gap-4 animate-fade-in-up animate-delay-100">
@@ -294,6 +364,8 @@ export default function NursesPage() {
                 key={nurse.id}
                 nurse={nurse}
                 onClick={() => setLocation(`/candidates/${nurse.id}`)}
+                onAdvance={() => advanceMutation.mutate(nurse.id)}
+                isAdvancing={advancingId === nurse.id}
                 index={i}
               />
             ))}
