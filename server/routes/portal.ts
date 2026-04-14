@@ -488,6 +488,9 @@ export function registerPortalRoutes(app: Express) {
       });
     } catch (err: any) {
       console.error("[Portal Training Cert AI] Error:", err.message);
+      if (err.message?.includes("API key is not configured")) {
+        return res.status(503).json({ message: "AI certificate analysis is currently unavailable. Please enter your training details manually." });
+      }
       res.status(500).json({ message: "Failed to analyze certificate with AI. Please try again or enter details manually." });
     }
   });

@@ -9,6 +9,7 @@ import { parseTrainingCertificate } from "../training-cert-service";
 import { triggerSharePointUpload, triggerEmailNotification } from "../sharepoint-helper";
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
 import { classifyDocumentSmart } from "../document-ai";
+import { analyzeCertificateWithAI } from "../certificate-ai";
 import type { HealthDeclaration } from "@shared/schema";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 import { generateAuditSummary, isAuditSummaryAvailable } from "../audit-summary-ai";
@@ -740,21 +741,54 @@ export function registerAdminRoutes(app: Express) {
 
       const autoRecorded: string[] = [];
       if (classification.matchedTrainingModules.length > 0) {
+        let certAnalysis = null;
+        try {
+          certAnalysis = await analyzeCertificateWithAI(absolutePath, req.file.mimetype);
+        } catch (certErr: any) {
+          console.error("[Smart Document Upload] Certificate date extraction failed, falling back to defaults:", certErr.message);
+        }
+
+        const safeDate = (dateStr: string | null): string | null => {
+          if (!dateStr) return null;
+          const d = new Date(dateStr);
+          return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+        };
+
         const existing = await storage.getMandatoryTraining(nurseId);
         for (const moduleName of classification.matchedTrainingModules) {
           const alreadyDone = existing.find((t: any) => t.moduleName === moduleName);
           if (!alreadyDone) {
             const modDef = MANDATORY_TRAINING_MODULES.find(m => m.name === moduleName);
             const renewalFreq = modDef?.renewalFrequency || "Annual";
+
+            const certModule = certAnalysis?.modules.find(
+              (m: any) => m.matchedModule === moduleName
+            );
+
+            const extractedCompletedDate = safeDate(certModule?.completedDate ?? null);
+            const extractedExpiryDate = safeDate(certModule?.expiryDate ?? null);
+            const completedDate = extractedCompletedDate || new Date().toISOString().split("T")[0];
+            let expiryDate = extractedExpiryDate;
+            if (!expiryDate) {
+              const completed = new Date(completedDate);
+              const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+              expiryDate = renewalFreq === "Annual"
+                ? new Date(completed.getTime() + msPerYear).toISOString().split("T")[0]
+                : new Date(completed.getTime() + 3 * msPerYear).toISOString().split("T")[0];
+            }
+            const issuingBody = certModule?.issuingBody || "Auto-detected from document";
+
+            if (!extractedCompletedDate || !extractedExpiryDate) {
+              console.warn(`[Smart Document Upload] Using fallback dates for module "${moduleName}" (nurse ${nurseId}): completedDate=${extractedCompletedDate ? "extracted" : "fallback"}, expiryDate=${extractedExpiryDate ? "extracted" : "calculated"}`);
+            }
+
             await storage.createMandatoryTraining({
               nurseId,
               moduleName,
               renewalFrequency: renewalFreq,
-              completedDate: new Date().toISOString().split("T")[0],
-              expiryDate: renewalFreq === "Annual"
-                ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-                : new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-              issuingBody: "Auto-detected from document",
+              completedDate,
+              expiryDate,
+              issuingBody,
               certificateUploaded: true,
               certificateDocumentId: doc.id,
               status: "completed",
@@ -785,6 +819,9 @@ export function registerAdminRoutes(app: Express) {
       });
     } catch (err: any) {
       console.error("[Smart Document Upload] Error:", err.message);
+      if (err.message?.includes("API key is not configured")) {
+        return res.status(503).json({ message: "AI document analysis is currently unavailable. Please contact your administrator." });
+      }
       res.status(500).json({ message: "Failed to process document" });
     }
   });

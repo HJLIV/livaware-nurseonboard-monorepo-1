@@ -2,10 +2,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
+function getAnthropicClient(): Anthropic {
+  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI features are unavailable: Anthropic API key is not configured. Please set the AI_INTEGRATIONS_ANTHROPIC_API_KEY environment variable.");
+  }
+  return new Anthropic({
+    apiKey,
+    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  });
+}
 
 export interface DocumentAnalysisResult {
   status: "pass" | "warning" | "fail";
@@ -159,6 +165,7 @@ Be precise about training module matching — only match if the document clearly
     text: "Classify this document. Identify what type of document it is, which category it belongs to, and whether it matches any mandatory training modules.",
   });
 
+  const anthropic = getAnthropicClient();
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 2048,
@@ -286,6 +293,7 @@ Keep issues concise and actionable. If no issues, return an empty array.`;
     text: `Analyze this document for completeness and quality. It was uploaded as "${documentType}" (category: ${category}). Check legibility, completeness, correct document type, and flag any issues.`,
   });
 
+  const anthropic = getAnthropicClient();
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 4096,

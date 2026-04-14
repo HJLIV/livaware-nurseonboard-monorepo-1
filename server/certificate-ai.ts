@@ -3,10 +3,16 @@ import fs from "fs";
 import path from "path";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
+function getAnthropicClient(): Anthropic {
+  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI features are unavailable: Anthropic API key is not configured. Please set the AI_INTEGRATIONS_ANTHROPIC_API_KEY environment variable.");
+  }
+  return new Anthropic({
+    apiKey,
+    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  });
+}
 
 export interface CertificateAnalysisResult {
   modules: DetectedModule[];
@@ -116,6 +122,7 @@ Respond ONLY with valid JSON in this exact format:
     throw new Error(`Unsupported file type for AI analysis: ${mimeType}`);
   }
 
+  const anthropic = getAnthropicClient();
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
@@ -173,6 +180,7 @@ export async function generateCompetencyGuidance(
 ): Promise<CompetencyGuidance> {
   const specialtyContext = specialty ? ` The nurse's specialty area is: ${specialty}.` : "";
 
+  const anthropic = getAnthropicClient();
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 512,
