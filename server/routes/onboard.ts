@@ -722,25 +722,39 @@ export function registerAdminRoutes(app: Express) {
       const absolutePath = path.join(uploadsDir, req.file.filename);
       const moduleNames = MANDATORY_TRAINING_MODULES.map(m => m.name);
 
-      const classification = await classifyDocumentSmart(absolutePath, req.file.mimetype, moduleNames);
+      let classification: Awaited<ReturnType<typeof classifyDocumentSmart>> | null = null;
+      let aiAvailable = true;
+      try {
+        classification = await classifyDocumentSmart(absolutePath, req.file.mimetype, moduleNames);
+      } catch (classifyErr: any) {
+        if (classifyErr.message?.includes("API key is not configured")) {
+          console.warn("[Smart Document Upload] AI unavailable, falling back to manual upload mode");
+          aiAvailable = false;
+        } else {
+          throw classifyErr;
+        }
+      }
+
+      const detectedCategory = classification?.detectedCategory || "general";
+      const detectedType = classification?.detectedType || req.file.originalname || "Document";
 
       const doc = await storage.createDocument({
         nurseId,
-        type: classification.detectedType,
+        type: detectedType,
         filename: req.file.filename,
         originalFilename: req.file.originalname,
         filePath,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
-        category: classification.detectedCategory,
+        category: detectedCategory,
         uploadedBy: "admin",
       });
 
-      triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, classification.detectedCategory);
-      triggerEmailNotification(nurseId, filePath, req.file.originalname, classification.detectedCategory, 'admin', req.file.mimetype);
+      triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, detectedCategory);
+      triggerEmailNotification(nurseId, filePath, req.file.originalname, detectedCategory, 'admin', req.file.mimetype);
 
       const autoRecorded: string[] = [];
-      if (classification.matchedTrainingModules.length > 0) {
+      if (classification && classification.matchedTrainingModules.length > 0) {
         let certAnalysis = null;
         try {
           certAnalysis = await analyzeCertificateWithAI(absolutePath, req.file.mimetype);
@@ -803,25 +817,30 @@ export function registerAdminRoutes(app: Express) {
         action: "smart_document_uploaded",
         agentName: agentFor(req),
         detail: {
-          detectedCategory: classification.detectedCategory,
-          detectedType: classification.detectedType,
-          matchedTrainingModules: classification.matchedTrainingModules,
+          detectedCategory,
+          detectedType,
+          matchedTrainingModules: classification?.matchedTrainingModules || [],
           autoRecorded,
-          confidence: classification.confidence,
+          confidence: classification?.confidence || "none",
           documentId: doc.id,
+          aiAvailable,
         },
       });
 
       res.json({
         document: doc,
-        classification,
+        classification: classification || {
+          detectedCategory,
+          detectedType,
+          matchedTrainingModules: [],
+          confidence: "none",
+          summary: "Document saved without AI classification (AI service unavailable).",
+        },
         autoRecorded,
+        aiAvailable,
       });
     } catch (err: any) {
       console.error("[Smart Document Upload] Error:", err.message);
-      if (err.message?.includes("API key is not configured")) {
-        return res.status(503).json({ message: "AI document analysis is currently unavailable. Please contact your administrator." });
-      }
       res.status(500).json({ message: "Failed to process document" });
     }
   });

@@ -2770,8 +2770,10 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
       toast({
-        title: "Document Uploaded & Classified",
-        description: `Identified as: ${result.classification.detectedType}${result.autoRecorded.length > 0 ? ` — ${result.autoRecorded.length} training module(s) auto-recorded` : ""}`,
+        title: result.aiAvailable === false ? "Document Uploaded" : "Document Uploaded & Classified",
+        description: result.aiAvailable === false
+          ? "Document saved successfully. AI classification is currently unavailable — you can categorise it manually."
+          : `Identified as: ${result.classification.detectedType}${result.autoRecorded.length > 0 ? ` — ${result.autoRecorded.length} training module(s) auto-recorded` : ""}`,
       });
     } catch (err: any) {
       toast({ title: "Upload Failed", description: err.message || "Could not process document", variant: "destructive" });
