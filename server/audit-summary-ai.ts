@@ -4,12 +4,12 @@ import type { AuditLog } from "@shared/schema";
 const MAX_LOG_ENTRIES = 200;
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
 export function isAuditSummaryAvailable(): boolean {
-  return !!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  return !!(process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
 function formatTimestamp(ts: Date | string | null | undefined): string {

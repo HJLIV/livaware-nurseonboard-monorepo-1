@@ -3,12 +3,12 @@ import { storage } from "./storage";
 import { MANDATORY_TRAINING_MODULES, COMPETENCY_MATRIX } from "@shared/schema";
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
 export function isComplianceCheckAvailable(): boolean {
-  return !!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  return !!(process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
 type ComplianceStatus = "met" | "partially_met" | "not_met";

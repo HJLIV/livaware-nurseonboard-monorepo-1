@@ -6,7 +6,8 @@ export interface HealthTriageResult {
 }
 
 export function isTriageAvailable(): boolean {
-  return !!(process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL);
+  const hasKey = !!(process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
+  return hasKey;
 }
 
 export async function triageHealthDeclaration(declaration: {
@@ -22,7 +23,7 @@ export async function triageHealthDeclaration(declaration: {
   }
 
   const anthropic = new Anthropic({
-    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
     baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
   });
 

@@ -4,9 +4,9 @@ import path from "path";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 
 function getAnthropicClient(): Anthropic {
-  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("AI features are unavailable: Anthropic API key is not configured. Please set the AI_INTEGRATIONS_ANTHROPIC_API_KEY environment variable.");
+    throw new Error("AI features are unavailable: Anthropic API key is not configured. Please set the ANTHROPIC_API_KEY environment variable.");
   }
   return new Anthropic({
     apiKey,

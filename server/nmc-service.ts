@@ -259,7 +259,7 @@ function isParseResultIncomplete(result: NmcPdfParseResult): boolean {
 export async function extractNmcDataWithAI(pdfBuffer: Buffer): Promise<NmcPdfParseResult> {
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const anthropic = new Anthropic({
-    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
     baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
   });
 
@@ -375,7 +375,7 @@ export async function parseNmcPdfWithFallback(buffer: Buffer): Promise<NmcPdfPar
     console.log("[NMC PDF] Regex parsing returned incomplete data, attempting AI extraction...");
   }
 
-  if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
+  if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY) {
     console.warn("[NMC PDF] AI extraction skipped — no Anthropic API key configured");
     if (regexResult) {
       console.log("[NMC PDF] Returning partial regex result for admin review");
