@@ -104,7 +104,7 @@ function AddCandidateDialog() {
   );
 }
 
-function RunComplianceCheckOnAllButton() {
+export function RunComplianceCheckOnAllButton() {
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState<{
     total: number;
@@ -255,7 +255,7 @@ function RunComplianceCheckOnAllButton() {
   );
 }
 
-function SendAllPortalInvitesButton() {
+export function SendAllPortalInvitesButton() {
   const [open, setOpen] = useState(false);
   const [forceRegenerate, setForceRegenerate] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
