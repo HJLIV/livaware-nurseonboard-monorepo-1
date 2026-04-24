@@ -112,13 +112,17 @@ function RunComplianceCheckOnAllButton() {
     skipped: number;
     failed: number;
     totalDocumentsScanned: number;
+    totalDocumentsReclassified: number;
     totalCvEntriesAdded: number;
+    totalCvEducationAdded: number;
     totalTrainingAdded: number;
     results: Array<{
       nurseId: string;
       name: string;
       documentsScanned: number;
+      documentsReclassified: number;
       cvEntriesAdded: number;
+      cvEducationAdded: number;
       trainingModulesAdded: number;
       errors: string[];
       status: "ok" | "skipped" | "failed";
@@ -138,7 +142,7 @@ function RunComplianceCheckOnAllButton() {
       queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
       toast({
         title: "AI document scan complete",
-        description: `${data.succeeded} candidate${data.succeeded === 1 ? "" : "s"} scanned · ${data.totalCvEntriesAdded} work history entr${data.totalCvEntriesAdded === 1 ? "y" : "ies"} and ${data.totalTrainingAdded} training record${data.totalTrainingAdded === 1 ? "" : "s"} added`,
+        description: `${data.succeeded} candidate${data.succeeded === 1 ? "" : "s"} scanned · ${data.totalCvEntriesAdded} work, ${data.totalCvEducationAdded} education and ${data.totalTrainingAdded} training record${data.totalTrainingAdded === 1 ? "" : "s"} added`,
       });
     },
     onError: (err: Error) => {
@@ -207,12 +211,21 @@ function RunComplianceCheckOnAllButton() {
               <div className="rounded-md border p-3">
                 <p className="text-xs text-muted-foreground">Documents scanned</p>
                 <p className="text-2xl font-light">{summary.totalDocumentsScanned}</p>
+                {summary.totalDocumentsReclassified > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {summary.totalDocumentsReclassified} re-classified
+                  </p>
+                )}
               </div>
               <div className="rounded-md border p-3">
                 <p className="text-xs text-muted-foreground">Work history added</p>
                 <p className="text-2xl font-light">{summary.totalCvEntriesAdded}</p>
               </div>
               <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Education added</p>
+                <p className="text-2xl font-light">{summary.totalCvEducationAdded}</p>
+              </div>
+              <div className="rounded-md border p-3 col-span-2">
                 <p className="text-xs text-muted-foreground">Training records added</p>
                 <p className="text-2xl font-light">{summary.totalTrainingAdded}</p>
               </div>

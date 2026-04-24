@@ -478,9 +478,12 @@ export async function runComplianceCheck(candidateId: string): Promise<Complianc
     console.error("[Compliance Check] Document scan failed:", scanErr.message);
     scan = {
       documentsScanned: 0,
+      documentsReclassified: 0,
       cvDocsScanned: 0,
       cvEntriesAdded: 0,
       cvEntriesSkipped: 0,
+      cvEducationAdded: 0,
+      cvEducationSkipped: 0,
       certDocsScanned: 0,
       trainingModulesAdded: 0,
       errors: [scanErr.message || "Document scan failed"],

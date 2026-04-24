@@ -10,15 +10,34 @@ const uploadsDir = path.join(process.cwd(), "uploads");
 
 export interface DocumentScanSummary {
   documentsScanned: number;
+  documentsReclassified: number;
   cvDocsScanned: number;
   cvEntriesAdded: number;
   cvEntriesSkipped: number;
+  cvEducationAdded: number;
+  cvEducationSkipped: number;
   certDocsScanned: number;
   trainingModulesAdded: number;
   errors: string[];
 }
 
 const CV_NAME_REGEX = /\b(cv|c\.v\.|résumé|resume|curriculum.?vitae)\b/i;
+const CERT_NAME_REGEX = /\b(certificate|cert\.?|training|completion|course|module)\b/i;
+
+// Categories where we already know how to handle the document — no need to
+// re-classify with the AI on every scan.
+const KNOWN_ROUTED_CATEGORIES = new Set([
+  "profile",
+  "training_certificate",
+  "identity",
+  "right_to_work",
+  "competency_evidence",
+  "health",
+  "indemnity",
+  "dbs",
+  "nmc",
+  "proof_of_address",
+]);
 
 function looksLikeCvDoc(doc: any): boolean {
   if (doc.category === "profile") return true;
@@ -29,7 +48,7 @@ function looksLikeCvDoc(doc: any): boolean {
 function looksLikeTrainingCertDoc(doc: any): boolean {
   if (doc.category === "training_certificate") return true;
   const name = (doc.originalFilename || doc.filename || doc.type || "").toString();
-  return /\b(certificate|cert\.?|training|completion)\b/i.test(name);
+  return CERT_NAME_REGEX.test(name);
 }
 
 function resolveDocPath(doc: any): string | null {
@@ -45,18 +64,29 @@ function safeDate(value: string | null | undefined): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
 }
 
+const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+
 /**
  * Re-scan all of a candidate's existing documents with AI and push any new
- * data into the relevant slots (work history from CVs, mandatory training
- * records from certificates). Idempotent — duplicates are skipped on
- * subsequent runs.
+ * data into the relevant slots:
+ *   - Work history extracted from CVs → employment_history
+ *   - Education / qualifications extracted from CVs → education_history
+ *   - Mandatory training certificates → mandatory_training (linked to doc)
+ *
+ * Idempotent — duplicates are skipped on subsequent runs. Documents that
+ * were uploaded with an unknown / generic category get re-classified by the
+ * AI first so previously-uncategorised CVs and certificates finally land
+ * in the right place without a re-upload.
  */
 export async function scanCandidateDocuments(nurseId: string): Promise<DocumentScanSummary> {
   const summary: DocumentScanSummary = {
     documentsScanned: 0,
+    documentsReclassified: 0,
     cvDocsScanned: 0,
     cvEntriesAdded: 0,
     cvEntriesSkipped: 0,
+    cvEducationAdded: 0,
+    cvEducationSkipped: 0,
     certDocsScanned: 0,
     trainingModulesAdded: 0,
     errors: [],
@@ -66,13 +96,81 @@ export async function scanCandidateDocuments(nurseId: string): Promise<DocumentS
   if (!docs.length) return summary;
   summary.documentsScanned = docs.length;
 
-  const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+  // ── Step 1: re-classify any document we don't already know how to route ──
+  // This lets old uploads sitting under category="general" / "other" /
+  // null get pushed into the CV or training-cert pipeline below without
+  // requiring the user to re-upload them.
+  const moduleNames = MANDATORY_TRAINING_MODULES.map((m) => m.name);
+  for (const doc of docs) {
+    const cat = (doc.category || "").toLowerCase();
+    if (KNOWN_ROUTED_CATEGORIES.has(cat)) continue;
 
-  // ── CV / résumé extraction ───────────────────────────────────────────────
+    // If filename heuristics already point to CV or training cert, set the
+    // category directly without spending an AI call. This still counts as a
+    // re-classification so the audit trail accurately reflects the change.
+    if (looksLikeCvDoc(doc)) {
+      try {
+        await storage.updateDocument(doc.id, { category: "profile" });
+        (doc as any).category = "profile";
+        summary.documentsReclassified += 1;
+      } catch (updateErr: any) {
+        summary.errors.push(`Doc ${doc.id}: filename re-classify failed (${updateErr.message})`);
+      }
+      continue;
+    }
+    if (looksLikeTrainingCertDoc(doc)) {
+      try {
+        await storage.updateDocument(doc.id, { category: "training_certificate" });
+        (doc as any).category = "training_certificate";
+        summary.documentsReclassified += 1;
+      } catch (updateErr: any) {
+        summary.errors.push(`Doc ${doc.id}: filename re-classify failed (${updateErr.message})`);
+      }
+      continue;
+    }
+
+    const absPath = resolveDocPath(doc);
+    if (!absPath) {
+      summary.errors.push(`Doc ${doc.id}: file missing on disk`);
+      continue;
+    }
+
+    try {
+      const classification = await classifyDocumentSmart(
+        absPath,
+        doc.mimeType || "application/pdf",
+        moduleNames,
+      );
+      const newCategory = classification?.detectedCategory;
+      if (newCategory && newCategory !== doc.category) {
+        try {
+          await storage.updateDocument(doc.id, {
+            category: newCategory,
+            type: doc.type || classification.detectedType || doc.type,
+          });
+          (doc as any).category = newCategory;
+          summary.documentsReclassified += 1;
+        } catch (updateErr: any) {
+          summary.errors.push(`Doc ${doc.id}: re-classify update failed (${updateErr.message})`);
+        }
+      }
+    } catch (err: any) {
+      summary.errors.push(`Doc ${doc.id}: classification failed (${err.message || "unknown"})`);
+    }
+  }
+
+  // ── Step 2: CV / résumé extraction ──────────────────────────────────────
   const existingEmployment = await storage.getEmploymentHistory(nurseId);
   const seenEmpKeys = new Set<string>(
     existingEmployment.map((e: any) =>
       `${norm(e.employer)}|${norm(e.jobTitle)}|${norm(e.startDate)}`,
+    ),
+  );
+
+  const existingEducation = await storage.getEducationHistory(nurseId);
+  const seenEduKeys = new Set<string>(
+    existingEducation.map((e: any) =>
+      `${norm(e.institution)}|${norm(e.qualification)}|${norm(e.subject)}`,
     ),
   );
 
@@ -86,7 +184,9 @@ export async function scanCandidateDocuments(nurseId: string): Promise<DocumentS
     summary.cvDocsScanned += 1;
     try {
       const cv = await parseCvWorkHistory(absPath, doc.mimeType || "application/pdf");
-      if (!cv.isCv || cv.entries.length === 0) continue;
+      if (!cv.isCv) continue;
+
+      // Work history
       for (const entry of cv.entries) {
         const key = `${norm(entry.employer)}|${norm(entry.jobTitle)}|${norm(entry.startDate)}`;
         if (!entry.startDate || seenEmpKeys.has(key)) {
@@ -107,19 +207,38 @@ export async function scanCandidateDocuments(nurseId: string): Promise<DocumentS
         seenEmpKeys.add(key);
         summary.cvEntriesAdded += 1;
       }
+
+      // Education / qualifications
+      for (const edu of cv.education) {
+        const key = `${norm(edu.institution)}|${norm(edu.qualification)}|${norm(edu.subject)}`;
+        if (seenEduKeys.has(key)) {
+          summary.cvEducationSkipped += 1;
+          continue;
+        }
+        await storage.createEducationHistory({
+          nurseId,
+          institution: edu.institution,
+          qualification: edu.qualification,
+          subject: edu.subject,
+          startDate: edu.startDate,
+          endDate: edu.endDate,
+          grade: edu.grade,
+        });
+        seenEduKeys.add(key);
+        summary.cvEducationAdded += 1;
+      }
     } catch (err: any) {
       summary.errors.push(`CV ${doc.id}: ${err.message || "parse failed"}`);
     }
   }
 
-  // ── Training certificate extraction ──────────────────────────────────────
+  // ── Step 3: Training certificate extraction ─────────────────────────────
   const existingTraining = await storage.getMandatoryTraining(nurseId);
   const trainingByModule = new Set<string>(existingTraining.map((t: any) => norm(t.moduleName)));
   const trainingByDocId = new Set<string>(
     existingTraining.filter((t: any) => t.certificateDocumentId).map((t: any) => t.certificateDocumentId),
   );
 
-  const moduleNames = MANDATORY_TRAINING_MODULES.map((m) => m.name);
   const certDocs = docs.filter(
     (d) => looksLikeTrainingCertDoc(d) && !trainingByDocId.has(d.id),
   );
@@ -137,8 +256,7 @@ export async function scanCandidateDocuments(nurseId: string): Promise<DocumentS
         doc.mimeType || "application/pdf",
         moduleNames,
       );
-      // Dedupe within a single classification result (the AI occasionally
-      // returns the same module twice) and against existing records.
+      // Dedupe within a single classification result and against existing.
       const matchedModules = Array.from(
         new Set(
           classification.matchedTrainingModules.filter(

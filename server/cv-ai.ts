@@ -35,9 +35,19 @@ export interface ParsedCvWorkEntry {
   duties: string | null;
 }
 
+export interface ParsedCvEducationEntry {
+  institution: string;
+  qualification: string;
+  subject: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  grade: string | null;
+}
+
 export interface ParsedCvResult {
   isCv: boolean;
   entries: ParsedCvWorkEntry[];
+  education: ParsedCvEducationEntry[];
   candidateName: string | null;
   confidence: "high" | "medium" | "low";
   notes: string | null;
@@ -63,7 +73,7 @@ export async function parseCvWorkHistory(
   const isPdf = mimeType === "application/pdf";
 
   if (!isImage && !isPdf) {
-    return { isCv: false, entries: [], candidateName: null, confidence: "low", notes: "Unsupported file type" };
+    return { isCv: false, entries: [], education: [], candidateName: null, confidence: "low", notes: "Unsupported file type" };
   }
 
   const fileBuffer = fs.readFileSync(absolutePath);
@@ -75,7 +85,9 @@ export async function parseCvWorkHistory(
 
 Today's date: ${todayIso}.
 
-Read the document and produce one record per role the candidate has held (paid or voluntary nursing/healthcare/clinical roles take priority — also include other professional roles if they fill employment gaps). Focus on the EMPLOYMENT HISTORY / WORK EXPERIENCE section. Ignore Education, References, Skills, Personal Statement, and Hobbies — they go elsewhere.
+Read the document and extract TWO structured lists:
+  1. EMPLOYMENT HISTORY / WORK EXPERIENCE — paid or voluntary nursing/healthcare/clinical roles take priority; also include other professional roles if they fill employment gaps.
+  2. EDUCATION / QUALIFICATIONS — formal academic and professional qualifications (degrees, diplomas, NVQs, A-Levels, GCSEs, BSc / MSc Nursing, Postgraduate, etc.). Do NOT include short CPD courses or mandatory training certificates here — those are handled separately.
 
 Respond ONLY with valid JSON, no prose, in exactly this shape:
 {
@@ -94,17 +106,27 @@ Respond ONLY with valid JSON, no prose, in exactly this shape:
       "reasonForLeaving": "string or null",
       "duties": "string or null (1-3 short sentences summarising key responsibilities)"
     }
+  ],
+  "education": [
+    {
+      "institution": "string (school / college / university name, required)",
+      "qualification": "string (required, e.g. 'BSc (Hons) Adult Nursing', 'A-Level', 'NVQ Level 3', 'GCSE')",
+      "subject": "string or null (subject / specialism / field of study, e.g. 'Adult Nursing', 'Biology')",
+      "startDate": "YYYY-MM-DD or null",
+      "endDate": "YYYY-MM-DD or null (date awarded / expected)",
+      "grade": "string or null (e.g. '2:1', 'Distinction', 'Merit', 'Pass', 'A*', null if not stated)"
+    }
   ]
 }
 
 Rules:
-- Set "isCv" to false if the document is clearly NOT a CV / résumé (e.g. it's a certificate, ID, or unrelated form). In that case return an empty entries array.
-- Order entries from MOST RECENT first.
+- Set "isCv" to false if the document is clearly NOT a CV / résumé (e.g. it's a certificate, ID, or unrelated form). In that case return empty entries and education arrays.
+- Order entries and education from MOST RECENT first.
 - If a date is given as "Jan 2020" use "2020-01-01". If only a year is given use "<year>-01-01". If unknown use null.
-- "isCurrent" must be true ONLY when the CV explicitly says "Present", "Current", "to date", "ongoing" etc. for the end date. When isCurrent is true, set endDate to null.
+- "isCurrent" applies to employment only and must be true ONLY when the CV explicitly says "Present", "Current", "to date", "ongoing" etc. for the end date. When isCurrent is true, set endDate to null.
 - When isCurrent is false and endDate is unknown, leave endDate as null.
-- Never invent employer names, dates, or duties. If you can't read it, leave the field null and lower confidence.
-- Trim entries to the actual roles — do NOT include education entries, qualifications, or training courses.
+- Never invent employer names, institutions, qualifications, dates, grades, or duties. If you can't read it, leave the field null and lower confidence.
+- Group multiple GCSEs sat at the same school in the same year into ONE education entry whose qualification is "GCSEs" and whose subject lists the subjects (e.g. "English, Maths, Science"). Same applies to A-Levels.
 - Keep duties concise (max ~280 chars).`;
 
   const userContent: Anthropic.MessageCreateParams["messages"][0]["content"] = [];
@@ -150,14 +172,20 @@ Rules:
     const parsed = JSON.parse(jsonMatch[0]);
 
     const rawEntries: any[] = Array.isArray(parsed.entries) ? parsed.entries : [];
+    const rawEducation: any[] = Array.isArray(parsed.education) ? parsed.education : [];
 
     const entries: ParsedCvWorkEntry[] = rawEntries
       .map((e: any) => normaliseEntry(e))
       .filter((e): e is ParsedCvWorkEntry => e !== null);
 
+    const education: ParsedCvEducationEntry[] = rawEducation
+      .map((e: any) => normaliseEducation(e))
+      .filter((e): e is ParsedCvEducationEntry => e !== null);
+
     return {
-      isCv: parsed.isCv !== false && entries.length > 0,
+      isCv: parsed.isCv !== false && (entries.length > 0 || education.length > 0),
       entries,
+      education,
       candidateName: typeof parsed.candidateName === "string" ? parsed.candidateName : null,
       confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "medium",
       notes: typeof parsed.notes === "string" ? parsed.notes : null,
@@ -167,6 +195,7 @@ Rules:
     return {
       isCv: false,
       entries: [],
+      education: [],
       candidateName: null,
       confidence: "low",
       notes: "AI response could not be parsed",
@@ -192,6 +221,28 @@ function normaliseDate(value: any): string | null {
   const parsed = new Date(/[zZ]|[+\-]\d{2}:?\d{2}$/.test(trimmed) ? trimmed : trimmed + " UTC");
   if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
   return null;
+}
+
+function normaliseEducation(raw: any): ParsedCvEducationEntry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const institution = typeof raw.institution === "string" ? raw.institution.trim() : "";
+  const qualification = typeof raw.qualification === "string" ? raw.qualification.trim() : "";
+  if (!institution || !qualification) return null;
+
+  const trimOrNull = (v: any): string | null => {
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return t ? t.slice(0, 500) : null;
+  };
+
+  return {
+    institution: institution.slice(0, 500),
+    qualification: qualification.slice(0, 500),
+    subject: trimOrNull(raw.subject),
+    startDate: normaliseDate(raw.startDate),
+    endDate: normaliseDate(raw.endDate),
+    grade: trimOrNull(raw.grade),
+  };
 }
 
 function normaliseEntry(raw: any): ParsedCvWorkEntry | null {

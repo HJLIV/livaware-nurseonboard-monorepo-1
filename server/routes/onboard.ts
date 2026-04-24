@@ -754,10 +754,12 @@ export function registerAdminRoutes(app: Express) {
       triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, detectedCategory);
       triggerEmailNotification(nurseId, filePath, req.file.originalname, detectedCategory, 'admin', req.file.mimetype);
 
-      // CV / résumé → auto-populate employment history.
+      // CV / résumé → auto-populate employment history AND education.
       let cvResult: Awaited<ReturnType<typeof parseCvWorkHistory>> | null = null;
       const cvAddedEntries: { id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }[] = [];
+      const cvAddedEducation: { id: string; institution: string; qualification: string; subject: string | null; endDate: string | null }[] = [];
       let cvSkippedAsDuplicate = 0;
+      let cvEducationSkipped = 0;
       const looksLikeCv =
         aiAvailable &&
         (detectedCategory === "profile" ||
@@ -766,46 +768,74 @@ export function registerAdminRoutes(app: Express) {
       if (looksLikeCv) {
         try {
           cvResult = await parseCvWorkHistory(absolutePath, req.file.mimetype);
-          if (cvResult.isCv && cvResult.entries.length > 0) {
-            const existing = await storage.getEmploymentHistory(nurseId);
+          if (cvResult.isCv) {
             const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
-            // Track keys we've already inserted in THIS upload, so duplicate
-            // rows in the AI's response don't create duplicate DB rows.
-            const seenKeys = new Set<string>(
-              existing.map((e: any) => `${norm(e.employer)}|${norm(e.jobTitle)}|${norm(e.startDate)}`),
-            );
-            for (const entry of cvResult.entries) {
-              const key = `${norm(entry.employer)}|${norm(entry.jobTitle)}|${norm(entry.startDate)}`;
-              const isDup = seenKeys.has(key);
-              if (isDup) {
-                cvSkippedAsDuplicate += 1;
-                continue;
+
+            // Work history
+            if (cvResult.entries.length > 0) {
+              const existing = await storage.getEmploymentHistory(nurseId);
+              const seenKeys = new Set<string>(
+                existing.map((e: any) => `${norm(e.employer)}|${norm(e.jobTitle)}|${norm(e.startDate)}`),
+              );
+              for (const entry of cvResult.entries) {
+                const key = `${norm(entry.employer)}|${norm(entry.jobTitle)}|${norm(entry.startDate)}`;
+                if (seenKeys.has(key) || !entry.startDate) {
+                  cvSkippedAsDuplicate += 1;
+                  continue;
+                }
+                const created = await storage.createEmploymentHistory({
+                  nurseId,
+                  employer: entry.employer,
+                  jobTitle: entry.jobTitle,
+                  department: entry.department,
+                  startDate: entry.startDate,
+                  endDate: entry.endDate,
+                  isCurrent: entry.isCurrent,
+                  reasonForLeaving: entry.reasonForLeaving,
+                  duties: entry.duties,
+                });
+                seenKeys.add(key);
+                cvAddedEntries.push({
+                  id: created.id,
+                  employer: created.employer,
+                  jobTitle: created.jobTitle,
+                  startDate: created.startDate,
+                  endDate: created.endDate,
+                  isCurrent: !!created.isCurrent,
+                });
               }
-              if (!entry.startDate) {
-                // schema requires startDate; skip un-dated entries silently
-                cvSkippedAsDuplicate += 1;
-                continue;
+            }
+
+            // Education / qualifications
+            if (cvResult.education.length > 0) {
+              const existingEdu = await storage.getEducationHistory(nurseId);
+              const seenEduKeys = new Set<string>(
+                existingEdu.map((e: any) => `${norm(e.institution)}|${norm(e.qualification)}|${norm(e.subject)}`),
+              );
+              for (const edu of cvResult.education) {
+                const key = `${norm(edu.institution)}|${norm(edu.qualification)}|${norm(edu.subject)}`;
+                if (seenEduKeys.has(key)) {
+                  cvEducationSkipped += 1;
+                  continue;
+                }
+                const createdEdu = await storage.createEducationHistory({
+                  nurseId,
+                  institution: edu.institution,
+                  qualification: edu.qualification,
+                  subject: edu.subject,
+                  startDate: edu.startDate,
+                  endDate: edu.endDate,
+                  grade: edu.grade,
+                });
+                seenEduKeys.add(key);
+                cvAddedEducation.push({
+                  id: createdEdu.id,
+                  institution: createdEdu.institution,
+                  qualification: createdEdu.qualification,
+                  subject: createdEdu.subject,
+                  endDate: createdEdu.endDate,
+                });
               }
-              const created = await storage.createEmploymentHistory({
-                nurseId,
-                employer: entry.employer,
-                jobTitle: entry.jobTitle,
-                department: entry.department,
-                startDate: entry.startDate,
-                endDate: entry.endDate,
-                isCurrent: entry.isCurrent,
-                reasonForLeaving: entry.reasonForLeaving,
-                duties: entry.duties,
-              });
-              seenKeys.add(key);
-              cvAddedEntries.push({
-                id: created.id,
-                employer: created.employer,
-                jobTitle: created.jobTitle,
-                startDate: created.startDate,
-                endDate: created.endDate,
-                isCurrent: !!created.isCurrent,
-              });
             }
           }
         } catch (cvErr: any) {
@@ -887,6 +917,8 @@ export function registerAdminRoutes(app: Express) {
           cvDetected: cvResult?.isCv === true,
           cvEntriesAdded: cvAddedEntries.length,
           cvEntriesSkipped: cvSkippedAsDuplicate,
+          cvEducationAdded: cvAddedEducation.length,
+          cvEducationSkipped,
         },
       });
 
@@ -906,6 +938,8 @@ export function registerAdminRoutes(app: Express) {
               detected: cvResult.isCv,
               addedEntries: cvAddedEntries,
               skippedAsDuplicate: cvSkippedAsDuplicate,
+              addedEducation: cvAddedEducation,
+              educationSkipped: cvEducationSkipped,
               candidateName: cvResult.candidateName,
               confidence: cvResult.confidence,
               notes: cvResult.notes,

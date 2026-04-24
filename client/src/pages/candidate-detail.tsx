@@ -3240,9 +3240,12 @@ export default function CandidateDetail() {
 
 interface ComplianceScanSummary {
   documentsScanned: number;
+  documentsReclassified: number;
   cvDocsScanned: number;
   cvEntriesAdded: number;
   cvEntriesSkipped: number;
+  cvEducationAdded: number;
+  cvEducationSkipped: number;
   certDocsScanned: number;
   trainingModulesAdded: number;
   errors: string[];
@@ -3263,9 +3266,10 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
       setScan(data.scan ?? null);
       setGeneratedAt(new Date().toLocaleString("en-GB"));
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/employment-history`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "employment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "education-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
     },
   });
 
@@ -3337,15 +3341,20 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
                 <p className="text-blue-800 dark:text-blue-200">
                   Scanned {scan.documentsScanned} document{scan.documentsScanned === 1 ? "" : "s"} ·{" "}
                   {scan.cvDocsScanned} CV{scan.cvDocsScanned === 1 ? "" : "s"} ·{" "}
-                  {scan.certDocsScanned} certificate{scan.certDocsScanned === 1 ? "" : "s"}.
+                  {scan.certDocsScanned} certificate{scan.certDocsScanned === 1 ? "" : "s"}
+                  {scan.documentsReclassified > 0 && (
+                    <> · {scan.documentsReclassified} re-classified</>
+                  )}
+                  .
                 </p>
-                {(scan.cvEntriesAdded > 0 || scan.trainingModulesAdded > 0) && (
+                {(scan.cvEntriesAdded > 0 || scan.cvEducationAdded > 0 || scan.trainingModulesAdded > 0) && (
                   <p className="text-blue-800 dark:text-blue-200 mt-1">
-                    Added {scan.cvEntriesAdded} work history entr{scan.cvEntriesAdded === 1 ? "y" : "ies"} and{" "}
+                    Added {scan.cvEntriesAdded} work history entr{scan.cvEntriesAdded === 1 ? "y" : "ies"},{" "}
+                    {scan.cvEducationAdded} education entr{scan.cvEducationAdded === 1 ? "y" : "ies"} and{" "}
                     {scan.trainingModulesAdded} training record{scan.trainingModulesAdded === 1 ? "" : "s"}.
                   </p>
                 )}
-                {scan.cvEntriesAdded === 0 && scan.trainingModulesAdded === 0 && (
+                {scan.cvEntriesAdded === 0 && scan.cvEducationAdded === 0 && scan.trainingModulesAdded === 0 && (
                   <p className="text-blue-800 dark:text-blue-200 mt-1">No new entries — records already up to date.</p>
                 )}
                 {scan.errors.length > 0 && (

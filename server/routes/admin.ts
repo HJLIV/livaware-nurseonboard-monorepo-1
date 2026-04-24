@@ -260,7 +260,9 @@ export function registerNurseRoutes(app: Express) {
       nurseId: string;
       name: string;
       documentsScanned: number;
+      documentsReclassified: number;
       cvEntriesAdded: number;
+      cvEducationAdded: number;
       trainingModulesAdded: number;
       errors: string[];
       status: "ok" | "skipped" | "failed";
@@ -268,7 +270,9 @@ export function registerNurseRoutes(app: Express) {
     }> = [];
 
     let totalDocuments = 0;
+    let totalReclassified = 0;
     let totalCvEntriesAdded = 0;
+    let totalCvEducationAdded = 0;
     let totalTrainingAdded = 0;
     let succeeded = 0;
     let failed = 0;
@@ -289,7 +293,9 @@ export function registerNurseRoutes(app: Express) {
               nurseId: nurse.id,
               name: nurse.fullName,
               documentsScanned: 0,
+              documentsReclassified: 0,
               cvEntriesAdded: 0,
+              cvEducationAdded: 0,
               trainingModulesAdded: 0,
               errors: [],
               status: "skipped",
@@ -299,14 +305,18 @@ export function registerNurseRoutes(app: Express) {
           }
           const scan = await scanCandidateDocuments(nurse.id);
           totalDocuments += scan.documentsScanned;
+          totalReclassified += scan.documentsReclassified;
           totalCvEntriesAdded += scan.cvEntriesAdded;
+          totalCvEducationAdded += scan.cvEducationAdded;
           totalTrainingAdded += scan.trainingModulesAdded;
           succeeded += 1;
           results.push({
             nurseId: nurse.id,
             name: nurse.fullName,
             documentsScanned: scan.documentsScanned,
+            documentsReclassified: scan.documentsReclassified,
             cvEntriesAdded: scan.cvEntriesAdded,
+            cvEducationAdded: scan.cvEducationAdded,
             trainingModulesAdded: scan.trainingModulesAdded,
             errors: scan.errors,
             status: "ok",
@@ -316,7 +326,9 @@ export function registerNurseRoutes(app: Express) {
           try {
             await logAction(nurse.id, "admin", "bulk_compliance_scan", agentFor(req), {
               documentsScanned: scan.documentsScanned,
+              documentsReclassified: scan.documentsReclassified,
               cvEntriesAdded: scan.cvEntriesAdded,
+              cvEducationAdded: scan.cvEducationAdded,
               trainingModulesAdded: scan.trainingModulesAdded,
               errorCount: scan.errors.length,
             });
@@ -329,7 +341,9 @@ export function registerNurseRoutes(app: Express) {
             nurseId: nurse.id,
             name: nurse.fullName,
             documentsScanned: 0,
+            documentsReclassified: 0,
             cvEntriesAdded: 0,
+            cvEducationAdded: 0,
             trainingModulesAdded: 0,
             errors: [err.message || String(err)],
             status: "failed",
@@ -347,7 +361,9 @@ export function registerNurseRoutes(app: Express) {
       skipped,
       failed,
       totalDocumentsScanned: totalDocuments,
+      totalDocumentsReclassified: totalReclassified,
       totalCvEntriesAdded,
+      totalCvEducationAdded,
       totalTrainingAdded,
       results,
     });
