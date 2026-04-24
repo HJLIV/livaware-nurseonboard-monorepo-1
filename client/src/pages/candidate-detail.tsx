@@ -3238,19 +3238,34 @@ export default function CandidateDetail() {
   );
 }
 
+interface ComplianceScanSummary {
+  documentsScanned: number;
+  cvDocsScanned: number;
+  cvEntriesAdded: number;
+  cvEntriesSkipped: number;
+  certDocsScanned: number;
+  trainingModulesAdded: number;
+  errors: string[];
+}
+
 function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: string; candidateName: string }) {
   const [result, setResult] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [scan, setScan] = useState<ComplianceScanSummary | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/candidates/${candidateId}/compliance-check`);
       return res.json();
     },
-    onSuccess: (data: { result: string }) => {
+    onSuccess: (data: { result: string; scan?: ComplianceScanSummary }) => {
       setResult(data.result);
+      setScan(data.scan ?? null);
       setGeneratedAt(new Date().toLocaleString("en-GB"));
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/employment-history`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
     },
   });
 
@@ -3315,6 +3330,30 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
               <p className="text-[10px] text-muted-foreground mb-3 flex items-center gap-1">
                 <Clock className="h-3 w-3" /> Generated {generatedAt}
               </p>
+            )}
+            {scan && scan.documentsScanned > 0 && (
+              <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-900 dark:bg-blue-950/30" data-testid="compliance-check-scan-summary">
+                <p className="font-semibold text-blue-900 dark:text-blue-100 mb-1">Document scan</p>
+                <p className="text-blue-800 dark:text-blue-200">
+                  Scanned {scan.documentsScanned} document{scan.documentsScanned === 1 ? "" : "s"} ·{" "}
+                  {scan.cvDocsScanned} CV{scan.cvDocsScanned === 1 ? "" : "s"} ·{" "}
+                  {scan.certDocsScanned} certificate{scan.certDocsScanned === 1 ? "" : "s"}.
+                </p>
+                {(scan.cvEntriesAdded > 0 || scan.trainingModulesAdded > 0) && (
+                  <p className="text-blue-800 dark:text-blue-200 mt-1">
+                    Added {scan.cvEntriesAdded} work history entr{scan.cvEntriesAdded === 1 ? "y" : "ies"} and{" "}
+                    {scan.trainingModulesAdded} training record{scan.trainingModulesAdded === 1 ? "" : "s"}.
+                  </p>
+                )}
+                {scan.cvEntriesAdded === 0 && scan.trainingModulesAdded === 0 && (
+                  <p className="text-blue-800 dark:text-blue-200 mt-1">No new entries — records already up to date.</p>
+                )}
+                {scan.errors.length > 0 && (
+                  <p className="text-amber-700 dark:text-amber-300 mt-1">
+                    {scan.errors.length} document{scan.errors.length === 1 ? "" : "s"} could not be processed.
+                  </p>
+                )}
+              </div>
             )}
             <AIMarkdown content={result} className="text-sm" data-testid="compliance-check-markdown" />
           </div>

@@ -242,6 +242,117 @@ export function registerNurseRoutes(app: Express) {
     });
   });
 
+  // Bulk AI document scan across every candidate. Re-analyses each
+  // candidate's existing uploaded documents, extracts work history from
+  // any CVs, and records mandatory training certificates that haven't yet
+  // been logged. Skips the markdown report (the per-candidate check still
+  // runs that on demand) so this stays fast over large rosters.
+  app.post("/api/admin/compliance-check/bulk", async (req, res) => {
+    const { scanCandidateDocuments } = await import("../document-extractor");
+    const { stage } = (req.body || {}) as { stage?: string };
+
+    let allNurses = await db.select().from(nurses).orderBy(desc(nurses.createdAt));
+    if (stage) {
+      allNurses = allNurses.filter((n) => n.currentStage === stage);
+    }
+
+    const results: Array<{
+      nurseId: string;
+      name: string;
+      documentsScanned: number;
+      cvEntriesAdded: number;
+      trainingModulesAdded: number;
+      errors: string[];
+      status: "ok" | "skipped" | "failed";
+      message?: string;
+    }> = [];
+
+    let totalDocuments = 0;
+    let totalCvEntriesAdded = 0;
+    let totalTrainingAdded = 0;
+    let succeeded = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    // Run with bounded concurrency so we don't hammer the AI provider.
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < allNurses.length) {
+        const idx = cursor++;
+        const nurse = allNurses[idx];
+        try {
+          const docs = await storage.getDocuments(nurse.id);
+          if (docs.length === 0) {
+            skipped += 1;
+            results.push({
+              nurseId: nurse.id,
+              name: nurse.fullName,
+              documentsScanned: 0,
+              cvEntriesAdded: 0,
+              trainingModulesAdded: 0,
+              errors: [],
+              status: "skipped",
+              message: "No documents on file",
+            });
+            continue;
+          }
+          const scan = await scanCandidateDocuments(nurse.id);
+          totalDocuments += scan.documentsScanned;
+          totalCvEntriesAdded += scan.cvEntriesAdded;
+          totalTrainingAdded += scan.trainingModulesAdded;
+          succeeded += 1;
+          results.push({
+            nurseId: nurse.id,
+            name: nurse.fullName,
+            documentsScanned: scan.documentsScanned,
+            cvEntriesAdded: scan.cvEntriesAdded,
+            trainingModulesAdded: scan.trainingModulesAdded,
+            errors: scan.errors,
+            status: "ok",
+          });
+          // Audit logging is best-effort and must not flip a successful scan
+          // into a failure (which would double-count the nurse).
+          try {
+            await logAction(nurse.id, "admin", "bulk_compliance_scan", agentFor(req), {
+              documentsScanned: scan.documentsScanned,
+              cvEntriesAdded: scan.cvEntriesAdded,
+              trainingModulesAdded: scan.trainingModulesAdded,
+              errorCount: scan.errors.length,
+            });
+          } catch (logErr) {
+            console.error("[Bulk Compliance Scan] Audit log failed:", logErr);
+          }
+        } catch (err: any) {
+          failed += 1;
+          results.push({
+            nurseId: nurse.id,
+            name: nurse.fullName,
+            documentsScanned: 0,
+            cvEntriesAdded: 0,
+            trainingModulesAdded: 0,
+            errors: [err.message || String(err)],
+            status: "failed",
+            message: err.message || "Scan failed",
+          });
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+    res.json({
+      total: allNurses.length,
+      succeeded,
+      skipped,
+      failed,
+      totalDocumentsScanned: totalDocuments,
+      totalCvEntriesAdded,
+      totalTrainingAdded,
+      results,
+    });
+  });
+
   app.get("/api/nurses/:id/audit-log", async (req, res) => {
     const logs = await db.select().from(auditLogs).where(eq(auditLogs.nurseId, req.params.id)).orderBy(desc(auditLogs.timestamp));
     res.json(logs);

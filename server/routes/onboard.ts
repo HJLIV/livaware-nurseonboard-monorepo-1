@@ -1142,7 +1142,7 @@ export function registerAdminRoutes(app: Express) {
         agentName: agentFor(req),
         detail: { generatedAt: new Date().toISOString() },
       });
-      res.json({ result });
+      res.json(result);
     } catch (error: any) {
       console.error("[Compliance Check] Error:", error);
       res.status(500).json({ error: "Failed to run compliance check" });

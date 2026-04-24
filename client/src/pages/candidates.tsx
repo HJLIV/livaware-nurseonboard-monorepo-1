@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2 } from "lucide-react";
+import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +99,144 @@ function AddCandidateDialog() {
             ) : "Register Candidate"}
           </Button>
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RunComplianceCheckOnAllButton() {
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState<{
+    total: number;
+    succeeded: number;
+    skipped: number;
+    failed: number;
+    totalDocumentsScanned: number;
+    totalCvEntriesAdded: number;
+    totalTrainingAdded: number;
+    results: Array<{
+      nurseId: string;
+      name: string;
+      documentsScanned: number;
+      cvEntriesAdded: number;
+      trainingModulesAdded: number;
+      errors: string[];
+      status: "ok" | "skipped" | "failed";
+      message?: string;
+    }>;
+  } | null>(null);
+  const { toast } = useToast();
+
+  const bulkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/compliance-check/bulk", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSummary(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      toast({
+        title: "AI document scan complete",
+        description: `${data.succeeded} candidate${data.succeeded === 1 ? "" : "s"} scanned · ${data.totalCvEntriesAdded} work history entr${data.totalCvEntriesAdded === 1 ? "y" : "ies"} and ${data.totalTrainingAdded} training record${data.totalTrainingAdded === 1 ? "" : "s"} added`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bulk AI check failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setSummary(null); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-compliance-check">
+          <Sparkles className="h-4 w-4" />
+          Run AI Check On All
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl font-light">Run AI Check On All Candidates</DialogTitle>
+        </DialogHeader>
+        {!summary && (
+          <>
+            <div className="space-y-3 py-2 text-sm text-muted-foreground">
+              <p>
+                This re-analyses every uploaded document for every candidate. CVs are parsed for
+                work history and training certificates are matched against the mandatory training
+                catalogue. Existing records are kept — only new entries are added.
+              </p>
+              <p className="text-xs">
+                Each candidate is processed sequentially with bounded concurrency. This may take
+                several minutes depending on the size of your roster.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={bulkMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => bulkMutation.mutate()}
+                disabled={bulkMutation.isPending}
+                className="gap-2"
+                data-testid="button-confirm-bulk-compliance-check"
+              >
+                {bulkMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Scanning…
+                  </>
+                ) : (
+                  <>
+                    <FileSearch className="h-4 w-4" /> Start scan
+                  </>
+                )}
+              </Button>
+            </div>
+          </>
+        )}
+        {summary && (
+          <div className="space-y-3 py-2 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Candidates scanned</p>
+                <p className="text-2xl font-light">{summary.succeeded}</p>
+                <p className="text-xs text-muted-foreground">
+                  of {summary.total} ({summary.skipped} skipped, {summary.failed} failed)
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Documents scanned</p>
+                <p className="text-2xl font-light">{summary.totalDocumentsScanned}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Work history added</p>
+                <p className="text-2xl font-light">{summary.totalCvEntriesAdded}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Training records added</p>
+                <p className="text-2xl font-light">{summary.totalTrainingAdded}</p>
+              </div>
+            </div>
+            {summary.results.some((r) => r.status === "failed" || r.errors.length > 0) && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs dark:bg-amber-950/30">
+                <p className="font-semibold mb-1">Issues</p>
+                <ul className="space-y-1 max-h-32 overflow-y-auto">
+                  {summary.results
+                    .filter((r) => r.status === "failed" || r.errors.length > 0)
+                    .map((r) => (
+                      <li key={r.nurseId}>
+                        <span className="font-medium">{r.name}:</span>{" "}
+                        {r.message || r.errors.join("; ")}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => { setOpen(false); setSummary(null); }}>Close</Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -302,6 +440,7 @@ export default function CandidatesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <RunComplianceCheckOnAllButton />
             <SendAllPortalInvitesButton />
             <AddCandidateDialog />
           </div>

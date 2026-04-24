@@ -454,13 +454,38 @@ function computeComplianceStatuses(data: {
   return statuses;
 }
 
-export async function runComplianceCheck(candidateId: string): Promise<string> {
+export interface ComplianceCheckResult {
+  result: string;
+  scan: import("./document-extractor").DocumentScanSummary;
+}
+
+export async function runComplianceCheck(candidateId: string): Promise<ComplianceCheckResult> {
   if (!isComplianceCheckAvailable()) {
     throw new Error("AI compliance check is not configured");
   }
 
   const candidate = await storage.getCandidate(candidateId);
   if (!candidate) throw new Error("Candidate not found");
+
+  // Re-scan all existing documents and push extracted data into work history
+  // and training records before computing compliance, so the AI sees the
+  // most up-to-date picture.
+  const { scanCandidateDocuments } = await import("./document-extractor");
+  let scan: import("./document-extractor").DocumentScanSummary;
+  try {
+    scan = await scanCandidateDocuments(candidateId);
+  } catch (scanErr: any) {
+    console.error("[Compliance Check] Document scan failed:", scanErr.message);
+    scan = {
+      documentsScanned: 0,
+      cvDocsScanned: 0,
+      cvEntriesAdded: 0,
+      cvEntriesSkipped: 0,
+      certDocsScanned: 0,
+      trainingModulesAdded: 0,
+      errors: [scanErr.message || "Document scan failed"],
+    };
+  }
 
   // AI FIREWALL: Equal opportunities data is NEVER fetched or included in any AI payload.
   // This is a deliberate exclusion to comply with Equality Act 2010 requirements.
@@ -606,5 +631,5 @@ Bullet list of recommended actions for the compliance team, ordered by priority.
     throw new Error("AI returned an empty compliance check");
   }
 
-  return responseText;
+  return { result: responseText, scan };
 }
