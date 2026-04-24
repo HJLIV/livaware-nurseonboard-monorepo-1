@@ -320,22 +320,12 @@ export default function PortalHub() {
               data.status === "cleared" ||
               data.status === "competent";
             const isActive = data.status === "in_progress";
-            const isLocked = data.status === "not_started" || data.status === "locked";
+            // Stages are no longer locked behind one another. The candidate
+            // can jump into onboarding or the skills arcade at any point and
+            // come back to the assessment when convenient.
+            const isLocked = data.status === "locked";
             const Icon = stage.icon;
-
-            const preboardCompleted =
-              journey.preboard.status === "completed" ||
-              journey.preboard.status === "cleared" ||
-              journey.preboard.status === "competent";
-
-            const lockReason =
-              isLocked && stage.key === "onboard" && !preboardCompleted
-                ? "Complete Applicant Assessment first"
-                : isLocked && stage.key === "skillsArcade" && !preboardCompleted
-                  ? "Complete Applicant Assessment first"
-                  : isLocked && stage.key === "skillsArcade"
-                    ? "Complete Onboarding first"
-                    : null;
+            const lockReason: string | null = null;
 
             return (
               <Card

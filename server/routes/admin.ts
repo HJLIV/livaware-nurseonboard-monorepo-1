@@ -371,25 +371,33 @@ export function registerNurseRoutes(app: Express) {
         await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
       }
 
-      const preboardDone = nurse.preboardStatus === "completed" || nurse.currentStage !== "preboard";
-      const onboardDone = nurse.onboardStatus === "cleared" || nurse.currentStage === "skills_arcade" || nurse.currentStage === "completed";
+      // Completion is based purely on the underlying status fields, not on
+      // whether the nurse has been advanced to a later stage. This keeps the
+      // assessment visible as still-to-do even after an admin manually
+      // advances the nurse to onboarding.
+      const preboardDone = nurse.preboardStatus === "completed";
+      const onboardDone = nurse.onboardStatus === "cleared" || nurse.currentStage === "completed";
       const arcadeDone = nurse.arcadeStatus === "competent" || nurse.currentStage === "completed";
 
+      // All three lanes are accessible at the same time. The hub no longer
+      // gates onboarding or the skills arcade behind the assessment — the
+      // candidate can work through any of them in parallel and finish the
+      // assessment when convenient.
       const journey = {
         preboard: {
-          status: preboardDone ? "completed" : nurse.currentStage === "preboard" ? "in_progress" : "not_started",
+          status: preboardDone ? "completed" : "in_progress",
           actionUrl: `/preboard/assessment?token=${link.token}`,
           label: preboardDone ? "Update Details" : "Start Assessment",
         },
         onboard: {
-          status: onboardDone ? "completed" : nurse.currentStage === "onboard" ? "in_progress" : "not_started",
-          actionUrl: !onboardDone && nurse.currentStage === "onboard" ? `/portal/page/${link.token}` : undefined,
-          label: onboardDone ? "Completed" : "Continue Onboarding",
+          status: onboardDone ? "completed" : "in_progress",
+          actionUrl: onboardDone ? `/portal/page/${link.token}` : `/portal/page/${link.token}`,
+          label: onboardDone ? "Update Documents" : "Continue Onboarding",
         },
         skillsArcade: {
-          status: arcadeDone ? "completed" : nurse.currentStage === "skills_arcade" ? "in_progress" : "not_started",
-          actionUrl: !arcadeDone && nurse.currentStage === "skills_arcade" ? `/arcade?token=${link.token}` : undefined,
-          label: arcadeDone ? "Completed" : "Start Skills Arcade",
+          status: arcadeDone ? "completed" : "in_progress",
+          actionUrl: arcadeDone ? `/arcade?token=${link.token}` : `/arcade?token=${link.token}`,
+          label: arcadeDone ? "Review Modules" : "Start Skills Arcade",
         },
       };
 
