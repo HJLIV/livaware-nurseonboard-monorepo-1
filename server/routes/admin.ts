@@ -5,6 +5,7 @@ import { eq, desc, and, gt } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
+import { requireAdmin } from "../middleware";
 import crypto from "crypto";
 
 type PortalModule = "preboard" | "onboard" | "skills_arcade" | "hub";
@@ -542,6 +543,89 @@ export function registerNurseRoutes(app: Express) {
     } catch (err) {
       console.error("Portal token error:", err);
       res.status(500).json({ message: "Failed to load portal" });
+    }
+  });
+
+  // ─── Document Recovery: orphan files ────────────────────────────────
+  app.get("/api/admin/orphan-uploads", requireAdmin, async (_req, res) => {
+    try {
+      const { listOrphanUploads } = await import("../document-recovery");
+      const orphans = await listOrphanUploads();
+      res.json({ orphans });
+    } catch (err: any) {
+      console.error("[Orphan Scan] Failed:", err);
+      res.status(500).json({ message: err.message || "Failed to scan orphan uploads" });
+    }
+  });
+
+  app.post("/api/admin/orphan-uploads/link", requireAdmin, async (req, res) => {
+    try {
+      const { filename, nurseId } = req.body || {};
+      if (!filename || !nurseId) return res.status(400).json({ message: "filename and nurseId are required" });
+      const { linkOrphanUpload } = await import("../document-recovery");
+      const result = await linkOrphanUpload(String(filename), String(nurseId));
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Orphan Link] Failed:", err);
+      res.status(500).json({ message: err.message || "Failed to link orphan file" });
+    }
+  });
+
+  app.post("/api/admin/orphan-uploads/discard", requireAdmin, async (req, res) => {
+    try {
+      const { filename } = req.body || {};
+      if (!filename) return res.status(400).json({ message: "filename is required" });
+      const { discardOrphanUpload } = await import("../document-recovery");
+      discardOrphanUpload(String(filename));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to discard file" });
+    }
+  });
+
+  // ─── Document Recovery: SharePoint pull-back ────────────────────────
+  app.post("/api/admin/sharepoint-pull/:nurseId", requireAdmin, async (req, res) => {
+    try {
+      const { pullSharePointForCandidate } = await import("../document-recovery");
+      const summary = await pullSharePointForCandidate(String(req.params.nurseId));
+      res.json(summary);
+    } catch (err: any) {
+      console.error("[SharePoint Pull] Failed:", err);
+      res.status(500).json({ message: err.message || "SharePoint pull failed" });
+    }
+  });
+
+  app.post("/api/admin/sharepoint-pull/bulk", requireAdmin, async (_req, res) => {
+    try {
+      const { pullSharePointForAll } = await import("../document-recovery");
+      const result = await pullSharePointForAll();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[SharePoint Pull Bulk] Failed:", err);
+      res.status(500).json({ message: err.message || "SharePoint bulk pull failed" });
+    }
+  });
+
+  // ─── Document Recovery: Mailbox scan ────────────────────────────────
+  app.post("/api/admin/mailbox-scan/:nurseId", requireAdmin, async (req, res) => {
+    try {
+      const { scanMailboxForCandidate } = await import("../document-recovery");
+      const summary = await scanMailboxForCandidate(String(req.params.nurseId));
+      res.json(summary);
+    } catch (err: any) {
+      console.error("[Mailbox Scan] Failed:", err);
+      res.status(500).json({ message: err.message || "Mailbox scan failed" });
+    }
+  });
+
+  app.post("/api/admin/mailbox-scan/bulk", requireAdmin, async (_req, res) => {
+    try {
+      const { scanMailboxForAll } = await import("../document-recovery");
+      const result = await scanMailboxForAll();
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Mailbox Scan Bulk] Failed:", err);
+      res.status(500).json({ message: err.message || "Mailbox bulk scan failed" });
     }
   });
 }

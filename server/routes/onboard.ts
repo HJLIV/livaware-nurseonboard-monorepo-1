@@ -719,230 +719,60 @@ export function registerAdminRoutes(app: Express) {
         return res.status(400).json({ message: "Only PDF and image files are accepted" });
       }
 
-      const filePath = `/api/uploads/${req.file.filename}`;
       const absolutePath = path.join(uploadsDir, req.file.filename);
-      const moduleNames = MANDATORY_TRAINING_MODULES.map(m => m.name);
+      const { ingestExistingFile } = await import("../document-ingest");
 
-      let classification: Awaited<ReturnType<typeof classifyDocumentSmart>> | null = null;
-      let aiAvailable = true;
-      try {
-        classification = await classifyDocumentSmart(absolutePath, req.file.mimetype, moduleNames);
-      } catch (classifyErr: any) {
-        if (classifyErr.message?.includes("API key is not configured")) {
-          console.warn("[Smart Document Upload] AI unavailable, falling back to manual upload mode");
-          aiAvailable = false;
-        } else {
-          throw classifyErr;
-        }
-      }
-
-      const detectedCategory = classification?.detectedCategory || "general";
-      const detectedType = classification?.detectedType || req.file.originalname || "Document";
-
-      const doc = await storage.createDocument({
+      const ingest = await ingestExistingFile({
         nurseId,
-        type: detectedType,
-        filename: req.file.filename,
+        absolutePath,
         originalFilename: req.file.originalname,
-        filePath,
-        fileSize: req.file.size,
         mimeType: req.file.mimetype,
-        category: detectedCategory,
+        source: "admin",
         uploadedBy: "admin",
       });
 
-      triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, detectedCategory);
-      triggerEmailNotification(nurseId, filePath, req.file.originalname, detectedCategory, 'admin', req.file.mimetype);
-
-      // CV / résumé → auto-populate employment history AND education.
-      let cvResult: Awaited<ReturnType<typeof parseCvWorkHistory>> | null = null;
-      const cvAddedEntries: { id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }[] = [];
-      const cvAddedEducation: { id: string; institution: string; qualification: string; subject: string | null; endDate: string | null }[] = [];
-      let cvSkippedAsDuplicate = 0;
-      let cvEducationSkipped = 0;
-      const looksLikeCv =
-        aiAvailable &&
-        (detectedCategory === "profile" ||
-          /\b(cv|c\.v\.|résumé|resume|curriculum vitae)\b/i.test(detectedType));
-
-      if (looksLikeCv) {
-        try {
-          cvResult = await parseCvWorkHistory(absolutePath, req.file.mimetype);
-          if (cvResult.isCv) {
-            const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
-
-            // Work history
-            if (cvResult.entries.length > 0) {
-              const existing = await storage.getEmploymentHistory(nurseId);
-              const seenKeys = new Set<string>(
-                existing.map((e: any) => `${norm(e.employer)}|${norm(e.jobTitle)}|${norm(e.startDate)}`),
-              );
-              for (const entry of cvResult.entries) {
-                const key = `${norm(entry.employer)}|${norm(entry.jobTitle)}|${norm(entry.startDate)}`;
-                if (seenKeys.has(key) || !entry.startDate) {
-                  cvSkippedAsDuplicate += 1;
-                  continue;
-                }
-                const created = await storage.createEmploymentHistory({
-                  nurseId,
-                  employer: entry.employer,
-                  jobTitle: entry.jobTitle,
-                  department: entry.department,
-                  startDate: entry.startDate,
-                  endDate: entry.endDate,
-                  isCurrent: entry.isCurrent,
-                  reasonForLeaving: entry.reasonForLeaving,
-                  duties: entry.duties,
-                });
-                seenKeys.add(key);
-                cvAddedEntries.push({
-                  id: created.id,
-                  employer: created.employer,
-                  jobTitle: created.jobTitle,
-                  startDate: created.startDate,
-                  endDate: created.endDate,
-                  isCurrent: !!created.isCurrent,
-                });
-              }
-            }
-
-            // Education / qualifications
-            if (cvResult.education.length > 0) {
-              const existingEdu = await storage.getEducationHistory(nurseId);
-              const seenEduKeys = new Set<string>(
-                existingEdu.map((e: any) => `${norm(e.institution)}|${norm(e.qualification)}|${norm(e.subject)}`),
-              );
-              for (const edu of cvResult.education) {
-                const key = `${norm(edu.institution)}|${norm(edu.qualification)}|${norm(edu.subject)}`;
-                if (seenEduKeys.has(key)) {
-                  cvEducationSkipped += 1;
-                  continue;
-                }
-                const createdEdu = await storage.createEducationHistory({
-                  nurseId,
-                  institution: edu.institution,
-                  qualification: edu.qualification,
-                  subject: edu.subject,
-                  startDate: edu.startDate,
-                  endDate: edu.endDate,
-                  grade: edu.grade,
-                });
-                seenEduKeys.add(key);
-                cvAddedEducation.push({
-                  id: createdEdu.id,
-                  institution: createdEdu.institution,
-                  qualification: createdEdu.qualification,
-                  subject: createdEdu.subject,
-                  endDate: createdEdu.endDate,
-                });
-              }
-            }
-          }
-        } catch (cvErr: any) {
-          console.error("[Smart Document Upload] CV parse failed:", cvErr.message);
-        }
-      }
-
-      const autoRecorded: string[] = [];
-      if (classification && classification.matchedTrainingModules.length > 0) {
-        let certAnalysis = null;
-        try {
-          certAnalysis = await analyzeCertificateWithAI(absolutePath, req.file.mimetype);
-        } catch (certErr: any) {
-          console.error("[Smart Document Upload] Certificate date extraction failed, falling back to defaults:", certErr.message);
-        }
-
-        const safeDate = (dateStr: string | null): string | null => {
-          if (!dateStr) return null;
-          const d = new Date(dateStr);
-          return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
-        };
-
-        const existing = await storage.getMandatoryTraining(nurseId);
-        for (const moduleName of classification.matchedTrainingModules) {
-          const alreadyDone = existing.find((t: any) => t.moduleName === moduleName);
-          if (!alreadyDone) {
-            const modDef = MANDATORY_TRAINING_MODULES.find(m => m.name === moduleName);
-            const renewalFreq = modDef?.renewalFrequency || "Annual";
-
-            const certModule = certAnalysis?.modules.find(
-              (m: any) => m.matchedModule === moduleName
-            );
-
-            const extractedCompletedDate = safeDate(certModule?.completedDate ?? null);
-            const extractedExpiryDate = safeDate(certModule?.expiryDate ?? null);
-            const completedDate = extractedCompletedDate || new Date().toISOString().split("T")[0];
-            let expiryDate = extractedExpiryDate;
-            if (!expiryDate) {
-              const completed = new Date(completedDate);
-              const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
-              expiryDate = renewalFreq === "Annual"
-                ? new Date(completed.getTime() + msPerYear).toISOString().split("T")[0]
-                : new Date(completed.getTime() + 3 * msPerYear).toISOString().split("T")[0];
-            }
-            const issuingBody = certModule?.issuingBody || "Auto-detected from document";
-
-            if (!extractedCompletedDate || !extractedExpiryDate) {
-              console.warn(`[Smart Document Upload] Using fallback dates for module "${moduleName}" (nurse ${nurseId}): completedDate=${extractedCompletedDate ? "extracted" : "fallback"}, expiryDate=${extractedExpiryDate ? "extracted" : "calculated"}`);
-            }
-
-            await storage.createMandatoryTraining({
-              nurseId,
-              moduleName,
-              renewalFrequency: renewalFreq,
-              completedDate,
-              expiryDate,
-              issuingBody,
-              certificateUploaded: true,
-              certificateDocumentId: doc.id,
-              status: "completed",
-            });
-            autoRecorded.push(moduleName);
-          }
-        }
-      }
+      const doc = await storage.getDocument(ingest.documentId);
 
       await storage.createAuditLog({
         nurseId,
         action: "smart_document_uploaded",
         agentName: agentFor(req),
         detail: {
-          detectedCategory,
-          detectedType,
-          matchedTrainingModules: classification?.matchedTrainingModules || [],
-          autoRecorded,
-          confidence: classification?.confidence || "none",
-          documentId: doc.id,
-          aiAvailable,
-          cvDetected: cvResult?.isCv === true,
-          cvEntriesAdded: cvAddedEntries.length,
-          cvEntriesSkipped: cvSkippedAsDuplicate,
-          cvEducationAdded: cvAddedEducation.length,
-          cvEducationSkipped,
+          detectedCategory: ingest.category,
+          detectedType: ingest.type,
+          matchedTrainingModules: ingest.matchedTrainingModules,
+          autoRecorded: ingest.trainingModulesAdded,
+          confidence: ingest.classificationConfidence,
+          documentId: ingest.documentId,
+          aiAvailable: ingest.aiAvailable,
+          cvDetected: ingest.cvDetected,
+          cvEntriesAdded: ingest.cvEntriesAdded,
+          cvEntriesSkipped: ingest.cvEntriesSkipped,
+          cvEducationAdded: ingest.cvEducationAdded,
+          cvEducationSkipped: ingest.cvEducationSkipped,
         },
       });
 
       res.json({
         document: doc,
-        classification: classification || {
-          detectedCategory,
-          detectedType,
-          matchedTrainingModules: [],
-          confidence: "none",
-          summary: "Document saved without AI classification (AI service unavailable).",
+        classification: {
+          detectedCategory: ingest.category,
+          detectedType: ingest.type,
+          matchedTrainingModules: ingest.matchedTrainingModules,
+          confidence: ingest.classificationConfidence,
+          summary: ingest.aiAvailable
+            ? `Classified as ${ingest.category}.`
+            : "Document saved without AI classification (AI service unavailable).",
         },
-        autoRecorded,
-        aiAvailable,
-        cv: cvResult
+        autoRecorded: ingest.trainingModulesAdded,
+        aiAvailable: ingest.aiAvailable,
+        cv: ingest.cvDetected
           ? {
-              detected: cvResult.isCv,
-              addedEntries: cvAddedEntries,
-              skippedAsDuplicate: cvSkippedAsDuplicate,
-              addedEducation: cvAddedEducation,
-              educationSkipped: cvEducationSkipped,
-              candidateName: cvResult.candidateName,
-              confidence: cvResult.confidence,
-              notes: cvResult.notes,
+              detected: true,
+              addedEntries: ingest.cvEntriesAdded,
+              skippedAsDuplicate: ingest.cvEntriesSkipped,
+              addedEducation: ingest.cvEducationAdded,
+              educationSkipped: ingest.cvEducationSkipped,
             }
           : null,
       });

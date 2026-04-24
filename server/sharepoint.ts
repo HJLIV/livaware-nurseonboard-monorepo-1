@@ -49,7 +49,7 @@ async function getAccessToken() {
 
 // WARNING: Never cache this client.
 // Access tokens expire, so a new client must be created each time.
-async function getUncachableSharePointClient() {
+export async function getUncachableSharePointClient() {
   const accessToken = await getAccessToken();
   return Client.initWithMiddleware({
     authProvider: {
@@ -58,13 +58,13 @@ async function getUncachableSharePointClient() {
   });
 }
 
-const ROOT_FOLDER = 'NurseOnboarding';
+export const ROOT_FOLDER = 'NurseOnboarding';
 const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 
 const SHAREPOINT_SITE_ID = process.env.SHAREPOINT_SITE_ID || '';
 const SHAREPOINT_DRIVE_ID = process.env.SHAREPOINT_DRIVE_ID || '';
 
-function getDriveApiBase(): string {
+export function getDriveApiBase(): string {
   if (SHAREPOINT_SITE_ID && SHAREPOINT_DRIVE_ID) {
     return `/sites/${SHAREPOINT_SITE_ID}/drives/${SHAREPOINT_DRIVE_ID}`;
   }
@@ -74,7 +74,7 @@ function getDriveApiBase(): string {
   return '/me/drive';
 }
 
-function sanitizeName(name: string): string {
+export function sanitizeName(name: string): string {
   return name.replace(/[#%&*:<>?/\\{|}~]/g, '_').replace(/\s+/g, '_');
 }
 

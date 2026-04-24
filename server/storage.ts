@@ -168,6 +168,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(documents).where(eq(documents.nurseId, candidateId)).orderBy(desc(documents.uploadedAt));
   }
 
+  async getAllDocuments(): Promise<Document[]> {
+    return db.select().from(documents);
+  }
+
   async createDocument(data: InsertDocument): Promise<Document> {
     const [result] = await db.insert(documents).values(data).returning();
     return result;

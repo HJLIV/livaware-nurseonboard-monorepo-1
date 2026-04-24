@@ -22,7 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { getStageDisplayName } from "@shared/schema";
-import { RunComplianceCheckOnAllButton, SendAllPortalInvitesButton } from "@/pages/candidates";
+import { RunComplianceCheckOnAllButton, SendAllPortalInvitesButton, RecoverDocumentsButton } from "@/pages/candidates";
 
 interface Nurse {
   id: string;
@@ -332,6 +332,7 @@ export default function NursesPage() {
               </Button>
             )}
             <RunComplianceCheckOnAllButton />
+            <RecoverDocumentsButton />
             <SendAllPortalInvitesButton />
             <RegisterNurseDialog />
           </div>

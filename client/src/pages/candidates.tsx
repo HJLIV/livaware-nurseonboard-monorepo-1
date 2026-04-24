@@ -11,7 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch } from "lucide-react";
+import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch, FolderSearch, Cloud, Inbox, ChevronDown, AlertTriangle, CheckCircle2, X, Link2, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DialogDescription } from "@/components/ui/dialog";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -423,6 +427,277 @@ function CandidateRow({ candidate, index }: { candidate: Candidate; index: numbe
   );
 }
 
+interface OrphanFile {
+  filename: string;
+  sizeBytes: number;
+  mtime: string;
+  mimeType: string;
+  hint: string | null;
+}
+
+function OrphanRecoveryDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const { data, isLoading, refetch } = useQuery<{ orphans: OrphanFile[] }>({
+    queryKey: ["/api/admin/orphan-uploads"],
+    enabled: open,
+  });
+  const { data: candidates } = useQuery<Candidate[]>({ queryKey: ["/api/candidates"], enabled: open });
+
+  const linkMut = useMutation({
+    mutationFn: async ({ filename, nurseId }: { filename: string; nurseId: string }) => {
+      return apiRequest("POST", "/api/admin/orphan-uploads/link", { filename, nurseId });
+    },
+    onSuccess: (_d, vars) => {
+      toast({ title: "File linked", description: `Attached ${vars.filename} to candidate.` });
+      setPicks(p => { const n = { ...p }; delete n[vars.filename]; return n; });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+    },
+    onError: (e: any) => toast({ title: "Link failed", description: e.message, variant: "destructive" }),
+  });
+
+  const discardMut = useMutation({
+    mutationFn: async (filename: string) => apiRequest("POST", "/api/admin/orphan-uploads/discard", { filename }),
+    onSuccess: () => { toast({ title: "File discarded" }); refetch(); },
+    onError: (e: any) => toast({ title: "Discard failed", description: e.message, variant: "destructive" }),
+  });
+
+  const orphans = data?.orphans || [];
+  const formatSize = (b: number) => b < 1024 ? `${b} B` : b < 1024*1024 ? `${(b/1024).toFixed(1)} KB` : `${(b/1024/1024).toFixed(1)} MB`;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto" data-testid="dialog-orphan-recovery">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><FolderSearch className="h-5 w-5" /> Recover Orphan Files</DialogTitle>
+          <DialogDescription>Files in the upload folder not linked to any candidate. Pick a candidate to attach, or discard.</DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" /> Scanning uploads…</div>
+        ) : orphans.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-600" />
+            No orphan files found. Everything in the upload folder is linked to a candidate.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>File</TableHead>
+                <TableHead className="w-24">Size</TableHead>
+                <TableHead className="w-44">Hint</TableHead>
+                <TableHead className="w-64">Attach to candidate</TableHead>
+                <TableHead className="w-32 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orphans.map(o => (
+                <TableRow key={o.filename} data-testid={`row-orphan-${o.filename}`}>
+                  <TableCell className="font-mono text-xs break-all">{o.filename}</TableCell>
+                  <TableCell className="text-xs">{formatSize(o.sizeBytes)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{o.hint || "—"}</TableCell>
+                  <TableCell>
+                    <Select value={picks[o.filename] || ""} onValueChange={v => setPicks(p => ({ ...p, [o.filename]: v }))}>
+                      <SelectTrigger className="h-8 text-xs" data-testid={`select-candidate-${o.filename}`}>
+                        <SelectValue placeholder="Choose candidate…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(candidates || []).map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.fullName} — {c.email}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={!picks[o.filename] || linkMut.isPending}
+                        onClick={() => linkMut.mutate({ filename: o.filename, nurseId: picks[o.filename] })}
+                        data-testid={`button-link-${o.filename}`}
+                      >
+                        <Link2 className="h-3 w-3 mr-1" /> Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={discardMut.isPending}
+                        onClick={() => discardMut.mutate(o.filename)}
+                        data-testid={`button-discard-${o.filename}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface BulkResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{
+    nurseId: string;
+    candidateName: string;
+    errors: string[];
+    filesPulled?: number;
+    filesSkippedAlreadyOnFile?: number;
+    attachmentsPulled?: number;
+    attachmentsSkippedAlreadyOnFile?: number;
+  }>;
+}
+
+function BulkRecoveryDialog({
+  open, onOpenChange, kind,
+}: { open: boolean; onOpenChange: (v: boolean) => void; kind: "sharepoint" | "mailbox" }) {
+  const { toast } = useToast();
+  const [result, setResult] = useState<BulkResult | null>(null);
+  const isSP = kind === "sharepoint";
+  const title = isSP ? "Re-pull from SharePoint" : "Scan Microsoft 365 mailboxes";
+  const desc = isSP
+    ? "Walk every candidate's SharePoint folder and pull back any document missing from Livaware. Existing files are skipped — no duplicates created."
+    : "Search the configured mailbox for messages from/to each candidate's email and import any attachments not already on file. Requires Mail.Read.All admin consent.";
+  const endpoint = isSP ? "/api/admin/sharepoint-pull/bulk" : "/api/admin/mailbox-scan/bulk";
+  const Icon = isSP ? Cloud : Inbox;
+
+  const runMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", endpoint, {});
+      return r.json() as Promise<BulkResult>;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      const totalPulled = data.results.reduce((s, r) => s + (r.filesPulled || r.attachmentsPulled || 0), 0);
+      toast({ title: "Recovery complete", description: `${totalPulled} files imported across ${data.total} candidates.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+    },
+    onError: (e: any) => toast({ title: "Recovery failed", description: e.message, variant: "destructive" }),
+  });
+
+  const close = () => { onOpenChange(false); setTimeout(() => setResult(null), 200); };
+
+  return (
+    <Dialog open={open} onOpenChange={v => v ? onOpenChange(v) : close()}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" data-testid={`dialog-bulk-${kind}`}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Icon className="h-5 w-5" /> {title}</DialogTitle>
+          <DialogDescription>{desc}</DialogDescription>
+        </DialogHeader>
+
+        {!result && !runMut.isPending && (
+          <div className="py-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={close}>Cancel</Button>
+            <Button onClick={() => runMut.mutate()} data-testid={`button-run-bulk-${kind}`}>
+              <Icon className="h-4 w-4 mr-2" /> Run for all candidates
+            </Button>
+          </div>
+        )}
+
+        {runMut.isPending && (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+            Working through every candidate — this can take a few minutes…
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded border p-3"><div className="text-2xl font-light">{result.total}</div><div className="text-xs text-muted-foreground">Candidates</div></div>
+              <div className="rounded border p-3"><div className="text-2xl font-light text-green-600">{result.succeeded}</div><div className="text-xs text-muted-foreground">Succeeded</div></div>
+              <div className="rounded border p-3"><div className="text-2xl font-light text-amber-600">{result.failed}</div><div className="text-xs text-muted-foreground">With errors</div></div>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead className="w-20 text-right">Imported</TableHead>
+                  <TableHead className="w-20 text-right">Skipped</TableHead>
+                  <TableHead>Errors</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {result.results.map(r => {
+                  const imported = r.filesPulled ?? r.attachmentsPulled ?? 0;
+                  const skipped = r.filesSkippedAlreadyOnFile ?? r.attachmentsSkippedAlreadyOnFile ?? 0;
+                  return (
+                    <TableRow key={r.nurseId}>
+                      <TableCell className="text-xs">{r.candidateName}</TableCell>
+                      <TableCell className="text-right text-xs font-medium">{imported}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{skipped}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {r.errors.length === 0 ? <span className="text-green-600">OK</span> : r.errors.join("; ")}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <div className="flex justify-end"><Button variant="outline" onClick={close}>Close</Button></div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function RecoverDocumentsButton() {
+  const [openOrphan, setOpenOrphan] = useState(false);
+  const [openSP, setOpenSP] = useState(false);
+  const [openMail, setOpenMail] = useState(false);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" data-testid="button-recover-documents">
+            <FolderSearch className="h-4 w-4 mr-2" />
+            Recover Documents
+            <ChevronDown className="h-3 w-3 ml-2 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel>Recover missing files</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setOpenOrphan(true)} data-testid="menu-orphan-files">
+            <FolderSearch className="h-4 w-4 mr-2" />
+            <div className="flex flex-col">
+              <span>Orphan files</span>
+              <span className="text-[10px] text-muted-foreground">Files on disk not linked to a candidate</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setOpenSP(true)} data-testid="menu-sharepoint-pull">
+            <Cloud className="h-4 w-4 mr-2" />
+            <div className="flex flex-col">
+              <span>SharePoint re-sync</span>
+              <span className="text-[10px] text-muted-foreground">Re-pull from candidate SharePoint folders</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setOpenMail(true)} data-testid="menu-mailbox-scan">
+            <Inbox className="h-4 w-4 mr-2" />
+            <div className="flex flex-col">
+              <span>Mailbox scan</span>
+              <span className="text-[10px] text-muted-foreground">Import attachments from M365 mailbox</span>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <OrphanRecoveryDialog open={openOrphan} onOpenChange={setOpenOrphan} />
+      <BulkRecoveryDialog open={openSP} onOpenChange={setOpenSP} kind="sharepoint" />
+      <BulkRecoveryDialog open={openMail} onOpenChange={setOpenMail} kind="mailbox" />
+    </>
+  );
+}
+
 export default function CandidatesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -454,6 +729,7 @@ export default function CandidatesPage() {
           </div>
           <div className="flex items-center gap-2">
             <RunComplianceCheckOnAllButton />
+            <RecoverDocumentsButton />
             <SendAllPortalInvitesButton />
             <AddCandidateDialog />
           </div>

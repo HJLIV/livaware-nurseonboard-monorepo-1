@@ -19,7 +19,7 @@ function createMsalApp(): ConfidentialClientApplication {
   });
 }
 
-async function getGraphClient(): Promise<Client> {
+export async function getGraphClient(): Promise<Client> {
   const app = createMsalApp();
   const result = await app.acquireTokenByClientCredential({
     scopes: ["https://graph.microsoft.com/.default"],
@@ -402,4 +402,99 @@ export async function sendNurseInviteEmail(
     },
     saveToSentItems: true,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mailbox reading (document recovery): list messages with attachments from a
+// given email address and download attachment bytes.
+//
+// REQUIRES the Azure app registration to have the application permission
+// `Mail.ReadBasic.All` or `Mail.Read.All` granted with admin consent.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface MailboxAttachmentRef {
+  messageId: string;
+  receivedDateTime: string | null;
+  subject: string | null;
+  attachmentId: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+/**
+ * Find every message in SENDER_EMAIL's mailbox that involves `candidateEmail`
+ * (either from or to) and has at least one file attachment, then return a
+ * flat list of attachment references.
+ */
+export async function listMailboxAttachmentsForCandidate(candidateEmail: string): Promise<MailboxAttachmentRef[]> {
+  if (!candidateEmail) return [];
+  const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
+  const client = await getGraphClient();
+
+  // Search both directions. /messages?$search supports KQL-style queries.
+  // We use $search rather than $filter because attachments + from/to filters
+  // require ConsistencyLevel: eventual and complex query strings.
+  const safeEmail = candidateEmail.replace(/"/g, '\\"');
+  const query = `"from:${safeEmail}" OR "to:${safeEmail}"`;
+
+  const results: MailboxAttachmentRef[] = [];
+  let nextLink: string | null = `/users/${SENDER_EMAIL}/messages?$search=${encodeURIComponent(query)}&$top=50&$select=id,subject,receivedDateTime,hasAttachments`;
+  let page = 0;
+  while (nextLink && page < 10) {
+    page += 1;
+    const resp: any = await client
+      .api(nextLink)
+      .header("ConsistencyLevel", "eventual")
+      .get();
+
+    const messages: any[] = resp?.value || [];
+    for (const msg of messages) {
+      if (!msg.hasAttachments) continue;
+      try {
+        const att: any = await client
+          .api(`/users/${SENDER_EMAIL}/messages/${msg.id}/attachments?$select=id,name,contentType,size,isInline`)
+          .get();
+        for (const a of att?.value || []) {
+          if (a.isInline) continue;
+          // Only file attachments (skip item attachments / reference attachments)
+          if (a["@odata.type"] && !String(a["@odata.type"]).includes("fileAttachment")) continue;
+          results.push({
+            messageId: msg.id,
+            subject: msg.subject ?? null,
+            receivedDateTime: msg.receivedDateTime ?? null,
+            attachmentId: a.id,
+            filename: a.name || "attachment",
+            contentType: a.contentType || "application/octet-stream",
+            sizeBytes: a.size || 0,
+          });
+        }
+      } catch (attErr: any) {
+        console.warn(`[listMailboxAttachmentsForCandidate] Could not read attachments for message ${msg.id}:`, attErr.message);
+      }
+    }
+
+    nextLink = resp?.["@odata.nextLink"] || null;
+    // Graph returns absolute URLs in @odata.nextLink, but the SDK's .api()
+    // accepts both relative and absolute, so this works either way.
+  }
+
+  return results;
+}
+
+export async function downloadMailboxAttachment(messageId: string, attachmentId: string): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
+  const client = await getGraphClient();
+  const att: any = await client
+    .api(`/users/${SENDER_EMAIL}/messages/${messageId}/attachments/${attachmentId}`)
+    .get();
+
+  if (!att?.contentBytes) {
+    throw new Error(`Attachment ${attachmentId} on message ${messageId} has no contentBytes`);
+  }
+  return {
+    buffer: Buffer.from(att.contentBytes, "base64"),
+    filename: att.name || "attachment",
+    contentType: att.contentType || "application/octet-stream",
+  };
 }
