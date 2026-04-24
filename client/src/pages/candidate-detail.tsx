@@ -2739,6 +2739,14 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
     autoRecorded: string[];
     confidence: string;
     summary: string;
+    cv?: {
+      detected: boolean;
+      addedEntries: { id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }[];
+      skippedAsDuplicate: number;
+      candidateName: string | null;
+      confidence: string;
+      notes: string | null;
+    } | null;
   } | null>(null);
 
   const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2765,15 +2773,23 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
         autoRecorded: result.autoRecorded,
         confidence: result.classification.confidence,
         summary: result.classification.summary,
+        cv: result.cv ?? null,
       });
       queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/employment-history`] });
+      const cvAdded = result.cv?.addedEntries?.length ?? 0;
+      const trainingAdded = result.autoRecorded?.length ?? 0;
+      const extras = [
+        trainingAdded > 0 ? `${trainingAdded} training module(s) auto-recorded` : null,
+        cvAdded > 0 ? `${cvAdded} work history entr${cvAdded === 1 ? "y" : "ies"} added from CV` : null,
+      ].filter(Boolean).join(" — ");
       toast({
         title: result.aiAvailable === false ? "Document Uploaded" : "Document Uploaded & Classified",
         description: result.aiAvailable === false
           ? "Document saved successfully. AI classification is currently unavailable — you can categorise it manually."
-          : `Identified as: ${result.classification.detectedType}${result.autoRecorded.length > 0 ? ` — ${result.autoRecorded.length} training module(s) auto-recorded` : ""}`,
+          : `Identified as: ${result.classification.detectedType}${extras ? ` — ${extras}` : ""}`,
       });
     } catch (err: any) {
       toast({ title: "Upload Failed", description: err.message || "Could not process document", variant: "destructive" });
@@ -2864,6 +2880,35 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+              {lastClassification.cv?.detected && (
+                <div className="mt-3 rounded-md border border-blue-800/50 bg-blue-950/30 p-3" data-testid="cv-extraction-result">
+                  <p className="text-xs font-medium text-blue-300">
+                    CV detected — work history populated
+                    {lastClassification.cv.candidateName ? ` for ${lastClassification.cv.candidateName}` : ""}
+                  </p>
+                  {lastClassification.cv.addedEntries.length > 0 ? (
+                    <ul className="mt-1.5 list-disc list-inside text-xs text-blue-200/80 space-y-0.5">
+                      {lastClassification.cv.addedEntries.map(entry => (
+                        <li key={entry.id}>
+                          <span className="font-medium">{entry.jobTitle}</span> @ {entry.employer}
+                          <span className="text-muted-foreground ml-1">
+                            ({entry.startDate || "?"} – {entry.isCurrent ? "Present" : (entry.endDate || "?")})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No new entries added — work history already up to date.
+                    </p>
+                  )}
+                  {lastClassification.cv.skippedAsDuplicate > 0 && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {lastClassification.cv.skippedAsDuplicate} entr{lastClassification.cv.skippedAsDuplicate === 1 ? "y" : "ies"} skipped (already on file or missing dates).
+                    </p>
+                  )}
                 </div>
               )}
             </div>

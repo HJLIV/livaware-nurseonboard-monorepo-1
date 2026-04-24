@@ -10,6 +10,7 @@ import { triggerSharePointUpload, triggerEmailNotification } from "../sharepoint
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
 import { classifyDocumentSmart } from "../document-ai";
 import { analyzeCertificateWithAI } from "../certificate-ai";
+import { parseCvWorkHistory } from "../cv-ai";
 import type { HealthDeclaration } from "@shared/schema";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 import { generateAuditSummary, isAuditSummaryAvailable } from "../audit-summary-ai";
@@ -753,6 +754,65 @@ export function registerAdminRoutes(app: Express) {
       triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, detectedCategory);
       triggerEmailNotification(nurseId, filePath, req.file.originalname, detectedCategory, 'admin', req.file.mimetype);
 
+      // CV / résumé → auto-populate employment history.
+      let cvResult: Awaited<ReturnType<typeof parseCvWorkHistory>> | null = null;
+      const cvAddedEntries: { id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }[] = [];
+      let cvSkippedAsDuplicate = 0;
+      const looksLikeCv =
+        aiAvailable &&
+        (detectedCategory === "profile" ||
+          /\b(cv|c\.v\.|résumé|resume|curriculum vitae)\b/i.test(detectedType));
+
+      if (looksLikeCv) {
+        try {
+          cvResult = await parseCvWorkHistory(absolutePath, req.file.mimetype);
+          if (cvResult.isCv && cvResult.entries.length > 0) {
+            const existing = await storage.getEmploymentHistory(nurseId);
+            const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+            // Track keys we've already inserted in THIS upload, so duplicate
+            // rows in the AI's response don't create duplicate DB rows.
+            const seenKeys = new Set<string>(
+              existing.map((e: any) => `${norm(e.employer)}|${norm(e.jobTitle)}|${norm(e.startDate)}`),
+            );
+            for (const entry of cvResult.entries) {
+              const key = `${norm(entry.employer)}|${norm(entry.jobTitle)}|${norm(entry.startDate)}`;
+              const isDup = seenKeys.has(key);
+              if (isDup) {
+                cvSkippedAsDuplicate += 1;
+                continue;
+              }
+              if (!entry.startDate) {
+                // schema requires startDate; skip un-dated entries silently
+                cvSkippedAsDuplicate += 1;
+                continue;
+              }
+              const created = await storage.createEmploymentHistory({
+                nurseId,
+                employer: entry.employer,
+                jobTitle: entry.jobTitle,
+                department: entry.department,
+                startDate: entry.startDate,
+                endDate: entry.endDate,
+                isCurrent: entry.isCurrent,
+                reasonForLeaving: entry.reasonForLeaving,
+                duties: entry.duties,
+              });
+              seenKeys.add(key);
+              cvAddedEntries.push({
+                id: created.id,
+                employer: created.employer,
+                jobTitle: created.jobTitle,
+                startDate: created.startDate,
+                endDate: created.endDate,
+                isCurrent: !!created.isCurrent,
+              });
+            }
+          }
+        } catch (cvErr: any) {
+          console.error("[Smart Document Upload] CV parse failed:", cvErr.message);
+        }
+      }
+
       const autoRecorded: string[] = [];
       if (classification && classification.matchedTrainingModules.length > 0) {
         let certAnalysis = null;
@@ -824,6 +884,9 @@ export function registerAdminRoutes(app: Express) {
           confidence: classification?.confidence || "none",
           documentId: doc.id,
           aiAvailable,
+          cvDetected: cvResult?.isCv === true,
+          cvEntriesAdded: cvAddedEntries.length,
+          cvEntriesSkipped: cvSkippedAsDuplicate,
         },
       });
 
@@ -838,6 +901,16 @@ export function registerAdminRoutes(app: Express) {
         },
         autoRecorded,
         aiAvailable,
+        cv: cvResult
+          ? {
+              detected: cvResult.isCv,
+              addedEntries: cvAddedEntries,
+              skippedAsDuplicate: cvSkippedAsDuplicate,
+              candidateName: cvResult.candidateName,
+              confidence: cvResult.confidence,
+              notes: cvResult.notes,
+            }
+          : null,
       });
     } catch (err: any) {
       console.error("[Smart Document Upload] Error:", err.message);
