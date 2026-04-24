@@ -40,83 +40,24 @@ export function isOutlookConfigured(): boolean {
   return !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET);
 }
 
-type PortalStage = "preboard" | "onboard" | "skills_arcade";
-
-interface StageContent {
-  subject: string;
-  subtitle: string;
-  intro: string;
-  detail: string;
-  buttonLabel: string;
-  infoBoxTitle: string;
-  infoBoxItems: string[];
-}
-
-function getStageContent(stage: PortalStage, recipientName: string): StageContent {
-  switch (stage) {
-    case "preboard":
-      return {
-        subject: "Livaware Ltd — Complete Your Pre-boarding Assessment",
-        subtitle: "Livaware Ltd — Pre-boarding Assessment",
-        intro: `Welcome to Livaware Ltd. Before we begin your onboarding, we'd like to start with a short clinical and situational assessment. This helps us understand how you approach care and whether to proceed with your placement.`,
-        detail: `Please click the button below to access your assessment portal. The preboard assessment typically takes 10–15 minutes and covers clinical scenarios, situational judgement, and competency-based questions.`,
-        buttonLabel: "Start Your Assessment",
-        infoBoxTitle: "What to expect",
-        infoBoxItems: [
-          "A series of clinical and situational questions",
-          "Multiple-choice and short-answer formats",
-          "Takes approximately 10–15 minutes",
-          "You can complete it in one sitting",
-          "Your answers are assessed by our AI-assisted review system",
-          "Results will determine your progression to onboarding",
-        ],
-      };
-    case "onboard":
-      return {
-        subject: "Livaware Ltd — Complete Your Nurse Onboarding",
-        subtitle: "Livaware Ltd — Secure Onboarding Portal",
-        intro: `Congratulations on passing your pre-boarding assessment! We are pleased to invite you to complete your onboarding through our secure NurseOnboard portal. This process covers all the pre-employment checks required under CQC Regulation 19 / Schedule 3.`,
-        detail: `Please click the button below to access your personal onboarding portal. You will be asked to complete 11 steps including identity verification, NMC PIN, DBS details, right to work, competency declarations, mandatory training, and more.`,
-        buttonLabel: "Open Your Onboarding Portal",
-        infoBoxTitle: "What you will need",
-        infoBoxItems: [
-          "Your NMC PIN number",
-          "DBS certificate (number and scan)",
-          "Passport, visa or right to work document (scan/photo)",
-          "CV (PDF format preferred)",
-          "Training certificates for all 15 mandatory modules",
-          "Professional indemnity insurance details",
-          "Two professional referee contact details",
-          "Immunisation records (if available)",
-        ],
-      };
-    case "skills_arcade":
-      return {
-        subject: "Livaware Ltd — Complete Your Clinical Skills Assessment",
-        subtitle: "Livaware Ltd — Clinical Skills Arcade",
-        intro: `Well done on completing your onboarding! The final step is your Clinical Skills Arcade — interactive clinical scenarios that assess your hands-on competency across key nursing skills.`,
-        detail: `Please click the button below to access the Skills Arcade. You will complete interactive assessments covering medication administration, wound care, IV therapy, and other essential clinical competencies.`,
-        buttonLabel: "Start Skills Arcade",
-        infoBoxTitle: "What to expect",
-        infoBoxItems: [
-          "Interactive clinical scenario assessments",
-          "Covers medication administration, wound care, IV therapy, and more",
-          "Takes approximately 30–60 minutes",
-          "You can save progress and return later",
-          "AI-assisted competency evaluation",
-          "Results contribute to your overall readiness profile",
-        ],
-      };
-  }
-}
+const PORTAL_INVITE_SUBJECT = "Livaware Ltd — Your Secure Portal Link";
+const PORTAL_INVITE_SUBTITLE = "Livaware Ltd — Secure Nurse Portal";
+const PORTAL_INVITE_BUTTON_LABEL = "Open Your Portal";
+const PORTAL_INVITE_INFO_TITLE = "What to have handy";
+const PORTAL_INVITE_INFO_ITEMS = [
+  "Your NMC PIN, if you have one",
+  "A right-to-work document (passport, visa or share code)",
+  "Any training or qualification certificates you'd like on file",
+];
 
 export async function sendPortalInviteEmail(
   recipientEmail: string,
   recipientName: string,
   portalUrl: string,
   expiresAt: Date,
-  stage: PortalStage = "onboard"
+  _stage?: string,
 ) {
+  void _stage;
   const client = await getGraphClient();
 
   const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
@@ -125,30 +66,25 @@ export async function sendPortalInviteEmail(
     year: "numeric",
   });
 
-  const content = getStageContent(stage, recipientName);
-  const infoItems = content.infoBoxItems.map(item => `<li>${item}</li>`).join("\n            ");
+  const infoItems = PORTAL_INVITE_INFO_ITEMS.map(item => `<li>${item}</li>`).join("\n            ");
 
   const htmlBody = `
     <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
       <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
         <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px; letter-spacing: -0.01em;">NurseOnboard</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">${content.subtitle}</p>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">${PORTAL_INVITE_SUBTITLE}</p>
       </div>
 
       <div style="padding: 32px;">
         <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
 
         <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          ${content.intro}
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          ${content.detail}
+          Here is your secure personal link to the Livaware nurse portal. You can use it to pick up wherever you left off, update your details, or share anything we still need from you.
         </p>
 
         <div style="text-align: center; margin: 28px 0;">
           <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
-            ${content.buttonLabel}
+            ${PORTAL_INVITE_BUTTON_LABEL}
           </a>
         </div>
 
@@ -158,14 +94,17 @@ export async function sendPortalInviteEmail(
         </p>
 
         <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">${content.infoBoxTitle}</p>
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">${PORTAL_INVITE_INFO_TITLE}</p>
           <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.8; margin: 0; padding-left: 20px;">
             ${infoItems}
           </ul>
+          <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; margin: 12px 0 0;">
+            Only share these if you need to — the portal will let you know what (if anything) is still outstanding.
+          </p>
         </div>
 
         <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          This link is personal to you — please do not share it with anyone else. It will expire on <strong style="color: #C8A96E;">${expiryFormatted}</strong>. You can save your progress at any time and return to complete the remaining steps later.
+          This link is personal to you — please do not share it with anyone else. It will expire on <strong style="color: #C8A96E;">${expiryFormatted}</strong>. You can save your progress at any time and come back to it later.
         </p>
 
         <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
@@ -191,7 +130,7 @@ export async function sendPortalInviteEmail(
 
   await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
-      subject: content.subject,
+      subject: PORTAL_INVITE_SUBJECT,
       body: {
         contentType: 'HTML',
         content: htmlBody,
