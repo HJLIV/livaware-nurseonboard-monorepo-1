@@ -235,8 +235,8 @@ export function registerNurseRoutes(app: Express) {
       const journey = {
         preboard: {
           status: preboardDone ? "completed" : nurse.currentStage === "preboard" ? "in_progress" : "not_started",
-          actionUrl: !preboardDone && nurse.currentStage === "preboard" ? `/preboard/assessment?token=${link.token}` : undefined,
-          label: preboardDone ? "Completed" : "Start Assessment",
+          actionUrl: `/preboard/assessment?token=${link.token}`,
+          label: preboardDone ? "Update Details" : "Start Assessment",
         },
         onboard: {
           status: onboardDone ? "completed" : nurse.currentStage === "onboard" ? "in_progress" : "not_started",

@@ -387,6 +387,15 @@ export default function PortalHub() {
                     </p>
                   </div>
 
+                  {isCompleted && (
+                    <Badge
+                      variant="outline"
+                      className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
+                    >
+                      Done
+                    </Badge>
+                  )}
+
                   {data.actionUrl && isActive && (
                     <Link href={data.actionUrl}>
                       <Button size="sm" className="shrink-0">
@@ -396,13 +405,13 @@ export default function PortalHub() {
                     </Link>
                   )}
 
-                  {isCompleted && (
-                    <Badge
-                      variant="outline"
-                      className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
-                    >
-                      Done
-                    </Badge>
+                  {data.actionUrl && isCompleted && (
+                    <Link href={data.actionUrl}>
+                      <Button size="sm" variant="outline" className="shrink-0">
+                        {data.label || "Update"}
+                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                   )}
                 </CardContent>
               </Card>

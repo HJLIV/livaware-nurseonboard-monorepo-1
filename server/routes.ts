@@ -110,5 +110,9 @@ export async function registerRoutes(
   const { registerAuditRoutes } = await import("./routes/audit");
   registerAuditRoutes(app);
 
+  // === DOCUMENTS BROWSER ===
+  const { registerDocumentRoutes } = await import("./routes/documents");
+  registerDocumentRoutes(app);
+
   return httpServer;
 }

@@ -37,6 +37,7 @@ const ArcadeWalkthrough = lazy(() => import("@/pages/arcade/walkthrough"));
 const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
 const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
 const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
+const DocumentsPage = lazy(() => import("@/pages/documents"));
 
 // Nurse Preboard
 const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
@@ -49,9 +50,23 @@ function LoadingSpinner() {
   );
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: authData, isLoading } = useQuery<{ authenticated: boolean; username: string; role?: string } | null>({
+    queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+  if (isLoading || !authData) {
+    return <LoadingSpinner />;
+  }
+  if (authData.role !== "admin") {
+    return <NotFound />;
+  }
+  return <Component />;
+}
+
 function AuthenticatedRouter() {
   const queryClient = useQueryClient();
-  const { data: authData, isLoading } = useQuery<{ authenticated: boolean; username: string } | null>({
+  const { data: authData, isLoading } = useQuery<{ authenticated: boolean; username: string; role?: string } | null>({
     queryKey: ["/api/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 0,
@@ -102,6 +117,9 @@ function AuthenticatedRouter() {
               <Route path="/arcade/admin/modules">{() => <AppLayout><ArcadeAdminModules /></AppLayout>}</Route>
               <Route path="/arcade/admin/reports">{() => <AppLayout><ArcadeAdminReports /></AppLayout>}</Route>
               <Route path="/arcade/admin/users">{() => <AppLayout><ArcadeAdminUsers /></AppLayout>}</Route>
+
+              {/* Documents */}
+              <Route path="/documents">{() => <AdminRoute component={DocumentsPage} />}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />

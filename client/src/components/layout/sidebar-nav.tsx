@@ -20,6 +20,7 @@ import {
   Shield,
   ChevronDown,
   UserCog,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +72,7 @@ const sections: NavSectionDef[] = [
     title: "System",
     items: [
       { label: "User Management", href: "/arcade/admin/users", icon: UserCog, adminOnly: true },
+      { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },
       { label: "Audit Trail", href: "/audit", icon: ScrollText, adminOnly: true },
       { label: "Admin Guide", href: "/guide", icon: BookOpen },
     ],
