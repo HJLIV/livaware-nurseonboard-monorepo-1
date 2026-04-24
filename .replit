@@ -48,3 +48,6 @@ AZURE_AD_CLIENT_ID = "e52a64ff-991e-4e28-834e-88e2ad2d54da"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-3f20150e-383a-4c65-96ba-981078d9c662"
