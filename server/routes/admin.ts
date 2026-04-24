@@ -4,7 +4,16 @@ import { nurses, portalLinks, auditLogs, preboardAssessments, nmcVerifications, 
 import { eq, desc, and, gt } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
+import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
 import crypto from "crypto";
+
+type PortalModule = "preboard" | "onboard" | "skills_arcade" | "hub";
+function moduleForStage(stage: string | null | undefined): PortalModule {
+  if (stage === "onboard") return "onboard";
+  if (stage === "skills_arcade") return "skills_arcade";
+  if (stage === "completed") return "hub";
+  return "preboard";
+}
 
 function agentFor(req: Request): string {
   return req.session?.username || "system";
@@ -97,6 +106,140 @@ export function registerNurseRoutes(app: Express) {
   app.get("/api/nurses/:id/portal-links", async (req, res) => {
     const links = await db.select().from(portalLinks).where(eq(portalLinks.nurseId, req.params.id)).orderBy(desc(portalLinks.createdAt));
     res.json(links);
+  });
+
+  // Bulk-generate portal links for every nurse on the system. Designed for the
+  // one-shot "open up portals for everyone already loaded" admin operation.
+  // - Reuses the most recent active (non-expired) link per nurse if one exists.
+  // - Otherwise creates a fresh link for the nurse's current stage.
+  // - Optionally sends the portal invite email (default true) when Outlook is configured.
+  // - Returns counts plus a per-nurse summary so the admin can see what happened.
+  app.post("/api/admin/portal-links/bulk", async (req, res) => {
+    const sendEmail = req.body?.sendEmail !== false; // default true
+    const forceRegenerate = req.body?.forceRegenerate === true;
+    const stageFilter: string | undefined = typeof req.body?.stage === "string" ? req.body.stage : undefined;
+
+    const allNurses = await db.select().from(nurses).orderBy(desc(nurses.createdAt));
+    const targetNurses = stageFilter
+      ? allNurses.filter((n) => n.currentStage === stageFilter)
+      : allNurses;
+
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const host = req.headers["host"] || "localhost:5000";
+    const outlookReady = isOutlookConfigured();
+
+    let generated = 0;
+    let reused = 0;
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    let emailsSkipped = 0;
+    const results: Array<{
+      nurseId: string;
+      name: string;
+      email: string;
+      module: PortalModule;
+      url: string;
+      action: "generated" | "reused";
+      emailStatus: "sent" | "failed" | "skipped";
+      emailError?: string;
+    }> = [];
+
+    for (const nurse of targetNurses) {
+      const module = moduleForStage(nurse.currentStage);
+
+      let token: string;
+      let expiresAt: Date;
+      let action: "generated" | "reused";
+
+      const existingActive = forceRegenerate
+        ? []
+        : await db
+            .select()
+            .from(portalLinks)
+            .where(
+              and(
+                eq(portalLinks.nurseId, nurse.id),
+                eq(portalLinks.module, module),
+                gt(portalLinks.expiresAt, new Date()),
+              ),
+            )
+            .orderBy(desc(portalLinks.createdAt))
+            .limit(1);
+
+      if (existingActive.length > 0) {
+        token = existingActive[0].token;
+        expiresAt = existingActive[0].expiresAt;
+        action = "reused";
+        reused += 1;
+      } else {
+        token = crypto.randomBytes(32).toString("hex");
+        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await db.insert(portalLinks).values({
+          nurseId: nurse.id,
+          token,
+          module,
+          expiresAt,
+          createdBy: agentFor(req),
+        });
+        await logAction(nurse.id, "admin", "portal_link_generated", agentFor(req), {
+          module,
+          expiresAt: expiresAt.toISOString(),
+          bulk: true,
+        });
+        action = "generated";
+        generated += 1;
+      }
+
+      const portalUrl = `${protocol}://${host}/portal/${token}`;
+
+      let emailStatus: "sent" | "failed" | "skipped" = "skipped";
+      let emailError: string | undefined;
+      if (sendEmail && nurse.email && outlookReady) {
+        try {
+          await sendPortalInviteEmail(nurse.email, nurse.fullName, portalUrl, expiresAt, module);
+          emailStatus = "sent";
+          emailsSent += 1;
+          await logAction(nurse.id, "admin", "portal_invite_emailed", agentFor(req), {
+            recipientEmail: nurse.email,
+            expiresAt: expiresAt.toISOString(),
+            bulk: true,
+          });
+        } catch (err: any) {
+          emailStatus = "failed";
+          emailError = err?.message || "Unknown error";
+          emailsFailed += 1;
+          await logAction(nurse.id, "admin", "portal_invite_email_failed", agentFor(req), {
+            recipientEmail: nurse.email,
+            error: emailError,
+            bulk: true,
+          });
+        }
+      } else {
+        emailsSkipped += 1;
+      }
+
+      results.push({
+        nurseId: nurse.id,
+        name: nurse.fullName,
+        email: nurse.email,
+        module,
+        url: portalUrl,
+        action,
+        emailStatus,
+        emailError,
+      });
+    }
+
+    res.json({
+      total: targetNurses.length,
+      generated,
+      reused,
+      emailsSent,
+      emailsFailed,
+      emailsSkipped,
+      outlookConfigured: outlookReady,
+      results,
+    });
   });
 
   app.get("/api/nurses/:id/audit-log", async (req, res) => {

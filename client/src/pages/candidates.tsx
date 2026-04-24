@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope } from "lucide-react";
+import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +97,113 @@ function AddCandidateDialog() {
             {createMutation.isPending ? (
               <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
             ) : "Register Candidate"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SendAllPortalInvitesButton() {
+  const [open, setOpen] = useState(false);
+  const [forceRegenerate, setForceRegenerate] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const { toast } = useToast();
+
+  const bulkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/portal-links/bulk", {
+        sendEmail,
+        forceRegenerate,
+      });
+      return res.json() as Promise<{
+        total: number;
+        generated: number;
+        reused: number;
+        emailsSent: number;
+        emailsFailed: number;
+        emailsSkipped: number;
+        outlookConfigured: boolean;
+      }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      const lines: string[] = [
+        `${data.total} candidate${data.total === 1 ? "" : "s"} processed`,
+        `${data.generated} new link${data.generated === 1 ? "" : "s"} created, ${data.reused} reused`,
+      ];
+      if (data.outlookConfigured) {
+        lines.push(`${data.emailsSent} email${data.emailsSent === 1 ? "" : "s"} sent` + (data.emailsFailed > 0 ? `, ${data.emailsFailed} failed` : ""));
+      } else if (sendEmail) {
+        lines.push("Email skipped — Outlook not configured");
+      }
+      toast({ title: "Portal invites processed", description: lines.join(" · ") });
+      setOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bulk invite failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-portal-invites">
+          <Send className="h-4 w-4" />
+          Open Portals For All
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl font-light">Open Portals For All</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Generates a portal link for every candidate already on the system, scoped to their current stage. Existing
+            active links are reused unless you tick "force new links".
+          </p>
+        </DialogHeader>
+        <div className="space-y-3 pt-2 text-sm">
+          <label className="flex items-start gap-2 cursor-pointer" data-testid="checkbox-send-email-label">
+            <input
+              type="checkbox"
+              checked={sendEmail}
+              onChange={(e) => setSendEmail(e.target.checked)}
+              className="mt-1"
+              data-testid="checkbox-send-email"
+            />
+            <span>
+              <span className="font-medium">Email each candidate their portal link</span>
+              <span className="block text-xs text-muted-foreground">Requires Outlook to be configured. If not, links are still created and you can copy them per-candidate.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 cursor-pointer" data-testid="checkbox-force-label">
+            <input
+              type="checkbox"
+              checked={forceRegenerate}
+              onChange={(e) => setForceRegenerate(e.target.checked)}
+              className="mt-1"
+              data-testid="checkbox-force-regenerate"
+            />
+            <span>
+              <span className="font-medium">Force a brand-new link even if one is already active</span>
+              <span className="block text-xs text-muted-foreground">Old links keep working until they expire (30 days).</span>
+            </span>
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={bulkMutation.isPending} data-testid="button-cancel-bulk">
+            Cancel
+          </Button>
+          <Button onClick={() => bulkMutation.mutate()} disabled={bulkMutation.isPending} data-testid="button-confirm-bulk">
+            {bulkMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Processing...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-1.5" /> Run for All Candidates
+              </>
+            )}
           </Button>
         </div>
       </DialogContent>
@@ -194,7 +301,10 @@ export default function CandidatesPage() {
               Manage candidate onboarding applications
             </p>
           </div>
-          <AddCandidateDialog />
+          <div className="flex items-center gap-2">
+            <SendAllPortalInvitesButton />
+            <AddCandidateDialog />
+          </div>
         </div>
 
         <div className="flex items-center gap-3 animate-fade-in-up animate-delay-100">
