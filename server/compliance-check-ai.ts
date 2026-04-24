@@ -167,13 +167,18 @@ function computeComplianceStatuses(data: {
     const gaps: string[] = [];
     if (nmcVerification) {
       const isActive = nmcVerification.registrationStatus === "active" || nmcVerification.status === "verified";
-      const hasConditions = !!nmcVerification.conditions;
+      const conditionsArray = Array.isArray(nmcVerification.conditions)
+        ? (nmcVerification.conditions as string[]).filter((c) => typeof c === "string" && c.trim().length > 0)
+        : [];
+      const hasConditions = conditionsArray.length > 0;
       const hasPin = !!nmcVerification.pin;
       const renewalExpired = isDateExpired(nmcVerification.renewalDate);
       const renewalSoon = isDateWithin90Days(nmcVerification.renewalDate);
       if (!hasPin) gaps.push("NMC PIN not provided");
       if (!isActive) gaps.push("NMC registration is not currently active");
-      if (hasConditions) gaps.push("NMC registration has conditions or restrictions noted");
+      if (hasConditions) {
+        gaps.push(`NMC registration has conditions or restrictions noted: ${conditionsArray.join("; ")}`);
+      }
       if (renewalExpired) gaps.push("NMC registration has expired");
       if (renewalSoon) gaps.push("NMC registration is due for renewal within 90 days");
 
@@ -189,6 +194,7 @@ function computeComplianceStatuses(data: {
           pinProvided: hasPin,
           registrationActive: isActive,
           hasConditions,
+          conditionsCount: conditionsArray.length,
           renewalExpired,
           renewalDueWithin90Days: renewalSoon,
         },

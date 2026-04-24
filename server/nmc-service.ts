@@ -170,18 +170,58 @@ export async function parseNmcPdf(buffer: Buffer): Promise<NmcPdfParseResult> {
     }
   }
 
+  // Conditions detection — only flag when the register entry explicitly indicates
+  // an active sanction/condition. Generic glossary or explanatory text on the
+  // NMC public register page (e.g. describing what conditions of practice are)
+  // must NOT trigger a flag. We require a positive indicator AND no negation
+  // such as "no conditions", "no cautions", "no restrictions" anywhere nearby.
   const lowerText = text.toLowerCase();
-  if (lowerText.includes("caution") && !lowerText.includes("no cautions")) {
-    conditions.push("Caution noted on register");
-  }
-  if (lowerText.includes("conditions of practice") || (lowerText.includes("restriction") && !lowerText.includes("no restriction"))) {
-    conditions.push("Conditions of practice noted");
-  }
-  if (lowerText.includes("suspension") || lowerText.includes("suspended")) {
+  const negations = [
+    "no conditions",
+    "no condition of practice",
+    "no conditions of practice",
+    "no cautions",
+    "no caution",
+    "no restrictions",
+    "no restriction",
+    "no sanctions",
+    "no current sanctions",
+    "no current orders",
+    "no orders",
+    "not currently subject to",
+  ];
+  const hasNegation = negations.some((n) => lowerText.includes(n));
+
+  // Status line is the strongest signal. Only treat the candidate as suspended /
+  // struck off / cautioned when the *registration status* itself reflects it,
+  // not when the words merely appear in glossary text.
+  const statusLower = (registrationStatus || "").toLowerCase();
+  if (statusLower.includes("suspended") || statusLower.includes("suspension")) {
     conditions.push("Suspension noted on register");
   }
-  if (lowerText.includes("striking off") || lowerText.includes("struck off")) {
+  if (statusLower.includes("struck off") || statusLower.includes("striking off")) {
     conditions.push("Struck off noted on register");
+  }
+  if (statusLower.includes("caution") && !hasNegation) {
+    conditions.push("Caution noted on register");
+  }
+
+  // For active conditions/restrictions on practice, look for an explicit
+  // affirmative entry such as "conditions of practice order" or
+  // "interim conditions of practice" appearing alongside the register entry —
+  // and only when there is no negation phrase in the document.
+  const affirmativeConditionPhrases = [
+    "conditions of practice order",
+    "interim conditions of practice",
+    "interim suspension order",
+    "subject to conditions",
+    "subject to a condition",
+    "practice restriction in force",
+    "restriction order",
+  ];
+  const hasAffirmativeCondition = affirmativeConditionPhrases.some((p) => lowerText.includes(p));
+  if (hasAffirmativeCondition && !hasNegation) {
+    conditions.push("Conditions of practice noted");
   }
 
   if (!registeredName) {
@@ -279,7 +319,7 @@ Extract the following fields:
 - effectiveDate: The effective/start date of the current registration entry (format: DD/MM/YYYY)
 - location: Their registered location/region
 - qualifications: Array of recorded qualifications
-- conditions: Array of any conditions, cautions, suspensions or sanctions noted. Use empty array if none.
+- conditions: Array of any ACTIVE conditions, cautions, suspensions, restrictions or sanctions actually noted on THIS nurse's individual register entry. CRITICAL: Use an empty array [] if none are present. Do NOT include glossary text, page headers, footers, explanations of what conditions mean, generic NMC website navigation text, or descriptions of what could appear on a register entry. Only include items that explicitly state this individual nurse currently has a condition/restriction/caution/suspension recorded against their registration. If the document says things like "no conditions of practice", "no cautions", "no restrictions", "no current sanctions", or simply does not list any sanctions for this nurse, return an empty array [].
 
 Respond ONLY with valid JSON in this exact format:
 {
