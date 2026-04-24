@@ -111,16 +111,22 @@ export async function generateCandidatePDF(candidateId: string): Promise<Buffer>
     function ensureSpace(needed: number) {
       if (doc.y + needed > doc.page.height - doc.page.margins.bottom - 30) {
         doc.addPage();
+        doc.x = leftMargin;
+        doc.y = doc.page.margins.top;
         addFooter();
       }
     }
 
     function addFooter() {
+      const savedX = doc.x;
+      const savedY = doc.y;
       const bottom = doc.page.height - 30;
       doc.save();
       doc.fillColor(LIGHT_GREY).fontSize(7).font("Helvetica")
-        .text("Livaware Ltd — NurseOnboard | CQC Regulation 19 / Schedule 3 Compliance Report | CONFIDENTIAL", 50, bottom, { align: "center", width: pageWidth });
+        .text("Livaware Ltd — NurseOnboard | CQC Regulation 19 / Schedule 3 Compliance Report | CONFIDENTIAL", 50, bottom, { align: "center", width: pageWidth, lineBreak: false });
       doc.restore();
+      doc.x = savedX;
+      doc.y = savedY;
     }
 
     // ===== COVER HEADER =====

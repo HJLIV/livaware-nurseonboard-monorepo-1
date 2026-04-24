@@ -50,6 +50,12 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
     const contentWidth = pageWidth - margin * 2;
     const responses = assessment.responses as AssessmentResponse[];
 
+    doc.on("pageAdded", () => {
+      doc.save();
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(COLORS.bg);
+      doc.restore();
+    });
+
     doc.rect(0, 0, pageWidth, doc.page.height).fill(COLORS.bg);
 
     doc.font("Helvetica").fontSize(14).fillColor(COLORS.text).text("LIVAWARE", margin, 60, { characterSpacing: 3 });
@@ -92,10 +98,11 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       y += 20;
 
       for (const line of analysisLines) {
-        if (y > doc.page.height - 80) {
+        if (doc.y < y - 30) y = doc.y;
+
+        if (y > doc.page.height - 80 && y > doc.page.margins.top + 10) {
           doc.addPage();
-          doc.rect(0, 0, pageWidth, doc.page.height).fill(COLORS.bg);
-          y = 60;
+          y = doc.page.margins.top;
         }
 
         const trimmed = line.trim();
@@ -107,28 +114,23 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
         if (trimmed.startsWith("## ")) {
           y += 8;
           doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.accent).text(trimmed.replace("## ", ""), margin + 4, y, { width: contentWidth - 8 });
-          y += doc.heightOfString(trimmed.replace("## ", ""), { width: contentWidth - 8 }) + 6;
+          y = doc.y + 6;
         } else if (trimmed.startsWith("**") && trimmed.endsWith("**")) {
           doc.font("Helvetica-Bold").fontSize(10).fillColor(COLORS.text).text(trimmed.replace(/\*\*/g, ""), margin + 4, y, { width: contentWidth - 8 });
-          y += doc.heightOfString(trimmed.replace(/\*\*/g, ""), { width: contentWidth - 8 }) + 4;
+          y = doc.y + 4;
         } else if (trimmed.startsWith("- ")) {
           const bulletText = trimmed.substring(2);
           doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.muted).text("·", margin + 8, y);
 
           const formattedText = bulletText;
           const boldParts = formattedText.match(/\*\*(.*?)\*\*/g);
-          if (boldParts) {
-            const plainText = formattedText.replace(/\*\*/g, "");
-            doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.text).text(plainText, margin + 18, y, { width: contentWidth - 26 });
-            y += doc.heightOfString(plainText, { width: contentWidth - 26 }) + 3;
-          } else {
-            doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.text).text(bulletText, margin + 18, y, { width: contentWidth - 26 });
-            y += doc.heightOfString(bulletText, { width: contentWidth - 26 }) + 3;
-          }
+          const renderText = boldParts ? formattedText.replace(/\*\*/g, "") : bulletText;
+          doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.text).text(renderText, margin + 18, y, { width: contentWidth - 26 });
+          y = doc.y + 3;
         } else {
           const plainText = trimmed.replace(/\*\*/g, "");
           doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.text).text(plainText, margin + 4, y, { width: contentWidth - 8, lineGap: 3 });
-          y += doc.heightOfString(plainText, { width: contentWidth - 8 }) + 4;
+          y = doc.y + 4;
         }
       }
 
@@ -154,10 +156,11 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       });
       const blockHeight = 60 + responseHeight + 30;
 
-      if (y + blockHeight > doc.page.height - 80) {
+      if (doc.y < y - 30) y = doc.y;
+
+      if (y + blockHeight > doc.page.height - 80 && y > doc.page.margins.top + 10) {
         doc.addPage();
-        doc.rect(0, 0, pageWidth, doc.page.height).fill(COLORS.bg);
-        y = 60;
+        y = doc.page.margins.top;
       }
 
       doc.roundedRect(margin, y, contentWidth, blockHeight, 4).fill(COLORS.card);
@@ -198,10 +201,11 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       y += blockHeight + 12;
     }
 
-    if (y + 60 > doc.page.height - 60) {
+    if (doc.y < y - 30) y = doc.y;
+
+    if (y + 60 > doc.page.height - 60 && y > doc.page.margins.top + 10) {
       doc.addPage();
-      doc.rect(0, 0, pageWidth, doc.page.height).fill(COLORS.bg);
-      y = 60;
+      y = doc.page.margins.top;
     }
 
     y += 16;
@@ -227,8 +231,8 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       doc.font("Helvetica").fontSize(7).fillColor(COLORS.subtle).text(
         `${i + 1} / ${totalPages}`,
         pageWidth - margin - 40,
-        doc.page.height - 40,
-        { width: 40, align: "right" }
+        doc.page.maxY() - 10,
+        { width: 40, align: "right", lineBreak: false }
       );
     }
 

@@ -129,6 +129,7 @@ export async function scanCandidateDocuments(nurseId: string): Promise<DocumentS
       continue;
     }
 
+
     const absPath = resolveDocPath(doc);
     if (!absPath) {
       summary.errors.push(`Doc ${doc.id}: file missing on disk`);
