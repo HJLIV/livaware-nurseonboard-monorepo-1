@@ -906,17 +906,35 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/uploads/:filename", (req, res) => {
     const filename = param(req, "filename");
+    const acceptsHtml = (req.headers.accept || "").includes("text/html");
+    const renderUnavailable = (status: number, title: string, message: string) => {
+      if (acceptsHtml) {
+        res.status(status).type("html").send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#0b0d10; color:#e6e6e6; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:24px; }
+  .card { max-width:480px; text-align:center; padding:32px; border:1px solid #2a2f36; border-radius:12px; background:#13161b; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  p { color:#9aa3ad; font-size:14px; line-height:1.5; margin:0; }
+</style></head>
+<body><div class="card"><h1>${title}</h1><p>${message}</p></div></body></html>`);
+      } else {
+        res.status(status).json({ message: title });
+      }
+    };
     if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
-      return res.status(400).json({ message: "Invalid filename" });
+      return renderUnavailable(400, "Invalid filename", "The requested file path is invalid.");
     }
     const isAdmin = req.session?.isAuthenticated === true;
     const referer = req.headers.referer || req.headers.referrer || "";
     const isPortalAccess = referer.includes("/portal/") || referer.includes("/referee/");
     if (!isAdmin && !isPortalAccess) {
-      return res.status(401).json({ message: "Authentication required" });
+      return renderUnavailable(401, "Authentication required", "You need to sign in to view this file.");
     }
     const filePath = path.join(uploadsDir, filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found" });
+    if (!fs.existsSync(filePath)) {
+      return renderUnavailable(404, "File unavailable", "This file is no longer available on the server. It may have been removed or never finished uploading.");
+    }
     res.sendFile(filePath);
   });
 

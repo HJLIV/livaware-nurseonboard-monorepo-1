@@ -1452,7 +1452,19 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
+                      {doc.filePath ? (
+                        <a
+                          href={doc.filePath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium truncate text-primary hover:underline block"
+                          data-testid={`link-poa-name-${doc.id}`}
+                        >
+                          {doc.originalFilename || doc.filename}
+                        </a>
+                      ) : (
+                        <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
+                      )}
                       {doc.expiryDate && (
                         <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
                           Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}

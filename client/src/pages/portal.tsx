@@ -59,6 +59,36 @@ function serializeNextOfKin(name: string, relationship: string, contactNumber: s
   return JSON.stringify({ name, relationship, contactNumber });
 }
 
+function UploadedDocList({ docs, category, testIdPrefix }: { docs?: any[]; category: string; testIdPrefix: string }) {
+  const matching = (docs || []).filter((d: any) => d.category === category);
+  if (matching.length === 0) return null;
+  return (
+    <div className="space-y-2" data-testid={`${testIdPrefix}-list`}>
+      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Uploaded Files</Label>
+      {matching.map((doc: any) => (
+        <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
+          {doc.filePath ? (
+            <a
+              href={doc.filePath}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+              data-testid={`${testIdPrefix}-view-${doc.id}`}
+            >
+              <ExternalLink className="h-3 w-3" />
+              View
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground shrink-0">File unavailable</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DocumentAiAlert({ docs, category }: { docs?: any[]; category: string }) {
   if (!docs) return null;
   const flaggedDocs = docs.filter((d: any) => d.category === category && (d.aiStatus === "warning" || d.aiStatus === "fail") && Array.isArray(d.aiIssues) && d.aiIssues.length > 0);
@@ -130,6 +160,10 @@ function PassportUpload({ token, existingPassportNumber }: { token: string; exis
   const [parseResult, setParseResult] = useState<any>(null);
   const [passportNumber, setPassportNumber] = useState(existingPassportNumber || "");
   const { toast } = useToast();
+  const { data: identityDocs } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
+  });
+  const passportDocs = (identityDocs || []).filter((d: any) => d.category === "identity" || d.type?.toLowerCase().includes("passport"));
 
   const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -189,6 +223,31 @@ function PassportUpload({ token, existingPassportNumber }: { token: string; exis
             <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
             <span className="text-emerald-300">Passport already uploaded — Number: {existingPassportNumber}</span>
           </div>
+        </div>
+      )}
+
+      {passportDocs.length > 0 && (
+        <div className="space-y-1">
+          {passportDocs.map((doc: any) => (
+            <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
+              {doc.filePath ? (
+                <a
+                  href={doc.filePath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                  data-testid={`link-portal-passport-view-${doc.id}`}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View
+                </a>
+              ) : (
+                <span className="text-xs text-muted-foreground shrink-0">File unavailable</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -372,6 +431,18 @@ function PortalProofOfAddress({ token }: { token: string }) {
                     {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
                     {expired && " — expired"}
                   </span>
+                )}
+                {doc.filePath && (
+                  <a
+                    href={doc.filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                    data-testid={`link-portal-poa-view-${doc.id}`}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    View
+                  </a>
                 )}
               </div>
             );
@@ -674,6 +745,9 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
   const [nmcParseResult, setNmcParseResult] = useState<any>(null);
   const { toast } = useToast();
   const isPinLocked = !!(candidate.nmcPin) && !pinUnlocked;
+  const { data: nmcDocs } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -807,6 +881,7 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
         <Separator />
         <div className="space-y-2">
           <Label>NMC Registration Letter (optional)</Label>
+          <UploadedDocList docs={nmcDocs} category="nmc" testIdPrefix="portal-nmc" />
           <FileUpload
             uploadUrl={`/api/portal/${token}/upload`}
             onUploadComplete={(file) => {
@@ -818,6 +893,8 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
                 fileSize: file.fileSize,
                 mimeType: file.mimeType,
                 category: "nmc",
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
               });
             }}
           />
@@ -883,6 +960,7 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
           <Separator />
           <div className="space-y-2">
             <Label>DBS Certificate Scan Upload</Label>
+            <UploadedDocList docs={dbsDocs} category="dbs" testIdPrefix="portal-dbs-existing" />
             <FileUpload
               uploadUrl={`/api/portal/${token}/upload`}
               onUploadComplete={(file) => {
@@ -894,6 +972,8 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
                   fileSize: file.fileSize,
                   mimeType: file.mimeType,
                   category: "dbs",
+                }).then(() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
                 });
               }}
             />
@@ -968,6 +1048,7 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
         <Separator />
         <div className="space-y-2">
           <Label>DBS Certificate Scan Upload</Label>
+          <UploadedDocList docs={dbsDocs} category="dbs" testIdPrefix="portal-dbs" />
           <FileUpload
             uploadUrl={`/api/portal/${token}/upload`}
             onUploadComplete={(file) => {
@@ -979,6 +1060,8 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
                 fileSize: file.fileSize,
                 mimeType: file.mimeType,
                 category: "dbs",
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
               });
             }}
           />
@@ -1018,8 +1101,20 @@ function RightToWorkStep({ token, status }: { token: string; status?: string }) 
             {rtwDocs.map((doc: any) => (
               <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
                 <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span className="truncate">{doc.originalFilename || doc.filename}</span>
-                {doc.expiryDate && <Badge variant="outline" className="text-xs ml-auto shrink-0">Expires: {doc.expiryDate}</Badge>}
+                <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
+                {doc.expiryDate && <Badge variant="outline" className="text-xs shrink-0">Expires: {doc.expiryDate}</Badge>}
+                {doc.filePath && (
+                  <a
+                    href={doc.filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                    data-testid={`link-portal-rtw-view-${doc.id}`}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    View
+                  </a>
+                )}
               </div>
             ))}
           </div>
@@ -1381,6 +1476,9 @@ function EducationHistoryForm({ token }: { token: string }) {
 }
 
 function ProfileStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
+  const { data: profileDocs } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
+  });
   const [employer, setEmployer] = useState(candidate.currentEmployer || "");
   const [band, setBand] = useState(candidate.band?.toString() || "");
   const [yearsQualified, setYearsQualified] = useState(candidate.yearsQualified?.toString() || "");
@@ -1472,6 +1570,7 @@ function ProfileStep({ token, candidate, status }: { token: string; candidate: C
           <p className="text-xs text-muted-foreground">
             Upload your most recent CV. This supplements the employment and education history above.
           </p>
+          <UploadedDocList docs={profileDocs} category="profile" testIdPrefix="portal-cv" />
           <FileUpload
             uploadUrl={`/api/portal/${token}/upload`}
             accept=".pdf,.doc,.docx"
@@ -1848,6 +1947,10 @@ function TrainingModuleRow({
   const [certDocId, setCertDocId] = useState(existing?.certificateDocumentId || "");
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
+  const { data: allDocs } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
+  });
+  const certDoc = (allDocs || []).find((d: any) => d.id === (existing?.certificateDocumentId || certDocId));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1881,9 +1984,23 @@ function TrainingModuleRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasCert ? (
-            <Badge variant="outline" className="bg-emerald-950/60 text-emerald-300 border-emerald-800/50">
-              <CheckCircle className="h-3 w-3 mr-1" /> Certificate uploaded
-            </Badge>
+            <>
+              <Badge variant="outline" className="bg-emerald-950/60 text-emerald-300 border-emerald-800/50">
+                <CheckCircle className="h-3 w-3 mr-1" /> Certificate uploaded
+              </Badge>
+              {certDoc?.filePath && (
+                <a
+                  href={certDoc.filePath}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  data-testid={`link-portal-training-view-${mod.name.substring(0, 15)}`}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View
+                </a>
+              )}
+            </>
           ) : existing ? (
             <Badge variant="outline">
               <AlertCircle className="h-3 w-3 mr-1" /> Needs certificate
@@ -1940,6 +2057,9 @@ function TrainingModuleRow({
 function HealthStep({ token, status }: { token: string; status?: string }) {
   const { data: existing } = useQuery<HealthDeclaration | null>({
     queryKey: ["/api/portal", token, "health-declaration"],
+  });
+  const { data: healthDocs } = useQuery<any[]>({
+    queryKey: ["/api/portal", token, "documents"],
   });
 
   const [hepB, setHepB] = useState(existing?.hepatitisBVaccinated || false);
@@ -2011,6 +2131,7 @@ function HealthStep({ token, status }: { token: string; status?: string }) {
         <Separator />
         <div className="space-y-2">
           <Label>Immunisation Records Upload (optional)</Label>
+          <UploadedDocList docs={healthDocs} category="health" testIdPrefix="portal-health" />
           <FileUpload
             uploadUrl={`/api/portal/${token}/upload`}
             onUploadComplete={(file) => {
@@ -2022,6 +2143,8 @@ function HealthStep({ token, status }: { token: string; status?: string }) {
                 fileSize: file.fileSize,
                 mimeType: file.mimeType,
                 category: "health",
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
               });
             }}
           />
@@ -2218,6 +2341,7 @@ function IndemnityStep({ token, status }: { token: string; status?: string }) {
         <Separator />
         <div className="space-y-2">
           <Label>Indemnity Certificate Upload</Label>
+          <UploadedDocList docs={indemnityDocs} category="indemnity" testIdPrefix="portal-indemnity" />
           <FileUpload
             uploadUrl={`/api/portal/${token}/upload`}
             onUploadComplete={(file) => {
@@ -2229,6 +2353,8 @@ function IndemnityStep({ token, status }: { token: string; status?: string }) {
                 fileSize: file.fileSize,
                 mimeType: file.mimeType,
                 category: "indemnity",
+              }).then(() => {
+                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
               });
             }}
           />

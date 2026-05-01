@@ -293,23 +293,33 @@ export default function DocumentsPage() {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-end">
-                        {doc.sharepointUrl ? (
+                      <div className="flex items-center justify-end gap-2">
+                        {doc.filePath ? (
+                          <a
+                            href={doc.filePath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                            data-testid={`link-view-${doc.id}`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            View
+                          </a>
+                        ) : !doc.sharepointUrl ? (
+                          <span className="text-[11px] text-muted-foreground/40">—</span>
+                        ) : null}
+                        {doc.sharepointUrl && (
                           <a
                             href={doc.sharepointUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                            className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:underline"
+                            data-testid={`link-sharepoint-${doc.id}`}
+                            title="Open in SharePoint"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                             SharePoint
                           </a>
-                        ) : doc.filePath ? (
-                          <span className="text-[11px] text-muted-foreground/50 truncate max-w-[140px]" title={doc.filePath}>
-                            {doc.filePath}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground/40">—</span>
                         )}
                       </div>
                     </div>
