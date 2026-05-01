@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, boolean, timestamp, jsonb, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, boolean, timestamp, jsonb, json, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -776,6 +776,22 @@ export const registerSchema = z.object({
 }).refine(
   (data) => data.password === data.confirmPassword,
   { message: "Passwords do not match", path: ["confirmPassword"] },
+);
+
+// express-session table managed by `connect-pg-simple`. Declared here so
+// `drizzle-kit push` (run from scripts/post-merge.sh) does not drop it
+// during schema sync. Shape matches connect-pg-simple's createTableIfMissing
+// output (sid PK, sess JSON, expire timestamp + index).
+export const session = pgTable(
+  "session",
+  {
+    sid: varchar("sid").primaryKey().notNull(),
+    sess: json("sess").notNull(),
+    expire: timestamp("expire", { precision: 6, mode: "date" }).notNull(),
+  },
+  (table) => ({
+    expireIdx: index("IDX_session_expire").on(table.expire),
+  }),
 );
 
 // Aliases for preboard-storage compatibility
