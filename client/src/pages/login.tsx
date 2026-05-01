@@ -219,7 +219,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 variant="outline"
                 className="w-full h-11 gap-3 font-medium"
                 onClick={() => {
-                  window.open("/api/auth/microsoft/login", "_blank");
+                  // Navigate the current tab so that, after Microsoft redirects
+                  // back to "/", the user lands on the authenticated app
+                  // instead of being left on the login screen in a stale tab.
+                  window.location.assign("/api/auth/microsoft/login");
                 }}
               >
                 <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">

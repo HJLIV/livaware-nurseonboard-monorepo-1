@@ -20,26 +20,40 @@ export async function registerRoutes(
   app.use("/api", apiLimiter);
 
   // === AUTH ROUTES ===
-  app.post("/api/auth/login", loginLimiter, (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
     }
+    let role: "admin" | "team" | null = null;
     if (username === adminUsername && password === adminPassword) {
+      role = "admin";
+    } else if (teamPassword && username === teamUsername && password === teamPassword) {
+      role = "team";
+    }
+    if (!role) {
+      return res.status(401).json({ message: "Invalid username or password" });
+    }
+    try {
+      // Regenerate to issue a fresh session id post-login (mitigates session
+      // fixation), then explicitly save before responding so the
+      // Postgres-backed store has finished persisting the row before the
+      // client follows up with /api/auth/me.
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => (err ? reject(err) : resolve()));
+      });
       req.session.isAuthenticated = true;
       req.session.username = username;
-      req.session.role = "admin";
+      req.session.role = role;
       req.session.authMethod = "local";
-      return res.json({ ok: true, username, role: "admin" });
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+      return res.json({ ok: true, username, role });
+    } catch (err: any) {
+      console.error("[auth] session save error:", err?.message || err);
+      return res.status(500).json({ message: "Login failed" });
     }
-    if (teamPassword && username === teamUsername && password === teamPassword) {
-      req.session.isAuthenticated = true;
-      req.session.username = username;
-      req.session.role = "team";
-      req.session.authMethod = "local";
-      return res.json({ ok: true, username, role: "team" });
-    }
-    return res.status(401).json({ message: "Invalid username or password" });
   });
 
   app.post("/api/auth/logout", (req, res) => {

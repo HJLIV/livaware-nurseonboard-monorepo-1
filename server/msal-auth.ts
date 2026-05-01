@@ -100,6 +100,15 @@ export function registerMicrosoftAuthRoutes(app: Express) {
       const email = (account.username || "").toLowerCase();
       const displayName = account.name || email;
 
+      // Regenerate to issue a fresh session id post-login (mitigates
+      // session-fixation) and then explicitly save before redirecting so
+      // the Postgres-backed store finishes the write before the browser
+      // follows the redirect — otherwise the cookie can race ahead of the
+      // row and the user lands back on /login.
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => (err ? reject(err) : resolve()));
+      });
+
       req.session.isAuthenticated = true;
       req.session.username = displayName;
       req.session.email = email;
@@ -118,6 +127,10 @@ export function registerMicrosoftAuthRoutes(app: Express) {
       } catch (auditErr: any) {
         console.error("[MSAL] Audit log error:", auditErr.message);
       }
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
 
       return res.redirect("/");
     } catch (err: any) {
