@@ -101,13 +101,20 @@ function documentCell(docs: { aiStatus?: string | null; expiryDate?: string | nu
   if (!docs || docs.length === 0) {
     return { status: "red", label: "Missing" };
   }
-  // Prefer the most recently uploaded record; expiry handled per-record below.
-  const sorted = [...docs].sort((a, b) => {
+  // Pick the best record: prefer the most-recently uploaded *non-expired* doc,
+  // and only fall back to the most-recently uploaded expired doc when no
+  // valid one exists. This matches candidate-detail "current record" logic
+  // and avoids skewing red when a stale re-upload sits alongside a valid one.
+  const byUploadedDesc = [...docs].sort((a, b) => {
     const ta = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
     const tb = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
     return tb - ta;
   });
-  const best = sorted[0];
+  const nonExpired = byUploadedDesc.filter((d) => {
+    const dy = daysUntil(d.expiryDate ?? undefined);
+    return dy === null || dy >= 0;
+  });
+  const best = nonExpired[0] ?? byUploadedDesc[0];
   const days = daysUntil(best.expiryDate ?? undefined);
   if (days !== null && days < 0) {
     return { status: "red", label: `Expired ${formatDate(best.expiryDate)}`, date: best.expiryDate };

@@ -529,6 +529,11 @@ export function ComplianceMatrix({
                                 <TooltipContent side="top" className="text-xs">
                                   <div className="font-semibold">{col.label}</div>
                                   <div>{cell.label}</div>
+                                  {cell.date && (
+                                    <div className="text-muted-foreground mt-0.5" data-testid={`tooltip-date-${c.id}-${col.key}`}>
+                                      Date: {new Date(cell.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                                    </div>
+                                  )}
                                   <div className="text-muted-foreground mt-1">Click to open candidate</div>
                                 </TooltipContent>
                               </Tooltip>
