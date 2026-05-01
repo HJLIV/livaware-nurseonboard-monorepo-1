@@ -417,19 +417,27 @@ export function ComplianceMatrix({
                         >
                           <div className="leading-tight whitespace-normal">{col.label}</div>
                           {gc && gc.gaps > 0 ? (
-                            <div className="mt-1 flex items-center justify-center gap-1 text-[9px] font-semibold">
-                              {gc.red > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400" data-testid={`col-gaps-red-${col.key}`}>
-                                  <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT.red)} />
-                                  {gc.red}
-                                </span>
-                              )}
-                              {gc.amber > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400" data-testid={`col-gaps-amber-${col.key}`}>
-                                  <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT.amber)} />
-                                  {gc.amber}
-                                </span>
-                              )}
+                            <div className="mt-1 space-y-0.5">
+                              <div
+                                className="text-[9px] font-semibold text-muted-foreground"
+                                data-testid={`col-gaps-total-${col.key}`}
+                              >
+                                {gc.gaps} {gc.gaps === 1 ? "gap" : "gaps"}
+                              </div>
+                              <div className="flex items-center justify-center gap-1 text-[9px] font-semibold">
+                                {gc.red > 0 && (
+                                  <span className="inline-flex items-center gap-0.5 text-red-600 dark:text-red-400" data-testid={`col-gaps-red-${col.key}`}>
+                                    <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT.red)} />
+                                    {gc.red}
+                                  </span>
+                                )}
+                                {gc.amber > 0 && (
+                                  <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400" data-testid={`col-gaps-amber-${col.key}`}>
+                                    <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT.amber)} />
+                                    {gc.amber}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           ) : (
                             <div className="mt-1 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium" data-testid={`col-gaps-clear-${col.key}`}>
