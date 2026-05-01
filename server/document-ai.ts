@@ -231,6 +231,54 @@ export async function classifyDocumentSmart(
 2. What specific type of document it is (e.g. "Basic Life Support Certificate", "DBS Certificate", "Passport", etc.)
 3. Whether it matches any of these mandatory training modules: ${trainingModules.join(", ")}
 
+IMPORTANT — multi-page PDFs:
+If this is a PDF, read EVERY page before deciding. Cover sheets, instructions
+or transcripts are often page 1, with the actual certificate on page 2 or
+later. Do not classify based on page 1 alone.
+
+How to recognise a training_certificate (be generous, this is the most
+commonly misclassified category):
+- Any document that evidences completion of a training course, e-learning
+  module, competency, CPD activity or face-to-face session.
+- Wording that ALWAYS indicates a training certificate, even without the
+  word "certificate":
+    * "Certificate of Completion", "Certificate of Achievement",
+      "Certificate of Attendance"
+    * "Record of Attendance", "Statement of Completion",
+      "Statement of Achievement", "Completion Record"
+    * "has successfully completed", "has attended", "has passed"
+    * "CPD certificate", "CPD hours", "CPD points"
+    * "e-learning completion", "course completion"
+- Module-name-only documents (where the prominent title is just the
+  training topic) ARE training certificates if they show a completion or
+  attended-on date and a person's name. Examples: "Basic Life Support",
+  "BLS", "ILS", "ALS", "PMVA", "Manual Handling", "Moving and Handling",
+  "Safeguarding Adults Level 2", "Safeguarding Children", "Fire Safety",
+  "Infection Prevention and Control", "IPC", "Information Governance",
+  "GDPR", "Equality, Diversity and Inclusion", "EDI", "Mental Capacity
+  Act", "MCA", "DoLS", "Prevent", "Conflict Resolution", "Duty of
+  Candour", "Lone Working", "Food Hygiene", "Modern Slavery".
+- Do NOT downgrade to "other" just because the layout is unusual, the
+  certificate is on page 2+, or the issuing body is unfamiliar — if it
+  shows training topic + person + date, it is a training_certificate.
+
+Other useful disambiguators:
+- "DBS" / "Disclosure and Barring Service" → dbs (NOT training_certificate)
+- "NMC" / "Nursing and Midwifery Council" registration → nmc
+- "Indemnity insurance" / "Professional indemnity" / "policy schedule" → indemnity
+- "Passport", "BRP", "visa", "settlement scheme", "birth certificate" → right_to_work
+- "Driving licence", "proof of address", "utility bill", "bank statement" → identity
+- "CV", "resume", "curriculum vitae" → profile
+- "Competency assessment", "sign-off", "supervised practice" → competency_evidence
+- "Immunisation", "vaccination", "occupational health", "fit to work" → health
+
+Confidence rubric (be honest — admins use this to decide whether to manually review):
+- "high"   = unmistakable category, clear key fields visible.
+- "medium" = category is the best fit but one signal is weak (e.g. cover
+             page only, partially obscured, unusual layout).
+- "low"    = you are guessing. Use this rather than picking "other" with
+             false confidence — admins will be warned to review.
+
 Respond ONLY with valid JSON:
 {
   "detectedCategory": "one of: identity, right_to_work, training_certificate, competency_evidence, health, indemnity, dbs, nmc, profile, other",

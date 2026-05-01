@@ -54,6 +54,7 @@ export interface IStorage {
   getMandatoryTraining(candidateId: string): Promise<MandatoryTraining[]>;
   createMandatoryTraining(data: InsertMandatoryTraining): Promise<MandatoryTraining>;
   updateMandatoryTraining(id: string, data: Partial<InsertMandatoryTraining>): Promise<MandatoryTraining | undefined>;
+  deleteMandatoryTrainingByDocumentId(documentId: string): Promise<number>;
 
   getHealthDeclaration(candidateId: string): Promise<HealthDeclaration | undefined>;
   createHealthDeclaration(data: InsertHealthDeclaration): Promise<HealthDeclaration>;
@@ -284,6 +285,14 @@ export class DatabaseStorage implements IStorage {
   async updateMandatoryTraining(id: string, data: Partial<InsertMandatoryTraining>): Promise<MandatoryTraining | undefined> {
     const [result] = await db.update(mandatoryTraining).set(data).where(eq(mandatoryTraining.id, id)).returning();
     return result;
+  }
+
+  async deleteMandatoryTrainingByDocumentId(documentId: string): Promise<number> {
+    const removed = await db
+      .delete(mandatoryTraining)
+      .where(eq(mandatoryTraining.certificateDocumentId, documentId))
+      .returning({ id: mandatoryTraining.id });
+    return removed.length;
   }
 
   async getHealthDeclaration(candidateId: string): Promise<HealthDeclaration | undefined> {

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback, useRef } from "react";
 import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
@@ -2800,11 +2801,19 @@ type AiIssueEntry = string | {
   message?: string;
   nameOnDocument?: string;
   nurseName?: string;
+  from?: string;
+  to?: string;
+  setBy?: string;
+  setAt?: string;
 };
 
 function isNameMismatchIssue(entry: AiIssueEntry): entry is { code: "name_mismatch"; message?: string; nameOnDocument?: string; nurseName?: string } {
   if (typeof entry === "string") return entry.startsWith("name_mismatch");
   return !!(entry && typeof entry === "object" && entry.code === "name_mismatch");
+}
+
+function isManualOverrideIssue(entry: AiIssueEntry): entry is { code: "manual_category_override"; message?: string; from?: string; to?: string; setBy?: string; setAt?: string } {
+  return !!(entry && typeof entry === "object" && entry.code === "manual_category_override");
 }
 
 function describeNameMismatch(entry: AiIssueEntry): { documentName?: string; profileName?: string; message: string } {
@@ -2857,7 +2866,97 @@ function useDocumentMutations(candidateId: string) {
       toast({ title: "Could not confirm", description: err?.message || "Please try again.", variant: "destructive" });
     },
   });
-  return { deleteDoc, confirmName };
+  const changeCategory = useMutation({
+    mutationFn: async ({ docId, category }: { docId: string; category: string }) => {
+      const res = await apiRequest("PATCH", `/api/documents/${docId}/category`, { category });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
+      const added: string[] = data?.trainingModulesAdded || [];
+      const removed: number = data?.removedTrainingRows || 0;
+      let description: string | undefined;
+      if (added.length > 0) {
+        description = `Auto-recorded ${added.length} training module${added.length === 1 ? "" : "s"}: ${added.join(", ")}.`;
+      } else if (removed > 0) {
+        description = `Cleared ${removed} stale training record${removed === 1 ? "" : "s"} from this document.`;
+      }
+      toast({ title: "Category updated", description });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not change category", description: err?.message || "Please try again.", variant: "destructive" });
+    },
+  });
+  return { deleteDoc, confirmName, changeCategory };
+}
+
+// Categories the admin can choose from for a manual override. These mirror
+// the server's ALLOWED_CATEGORIES set in routes/documents.ts. Keeping a
+// dictionary here gives us nicer human labels in the dropdown without
+// shipping a shared constants file.
+const DOCUMENT_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: "training_certificate", label: "Training certificate" },
+  { value: "identity", label: "Identity (passport / ID)" },
+  { value: "right_to_work", label: "Right to work" },
+  { value: "dbs", label: "DBS check" },
+  { value: "nmc", label: "NMC registration" },
+  { value: "health", label: "Health (occ. health, immunisations)" },
+  { value: "indemnity", label: "Professional indemnity" },
+  { value: "proof_of_address", label: "Proof of address" },
+  { value: "competency_evidence", label: "Competency evidence" },
+  { value: "profile", label: "Profile (CV, headshot)" },
+  { value: "other", label: "Other / uncategorised" },
+];
+
+function DocumentCategorySelect({
+  docId,
+  currentCategory,
+  onChange,
+  isPending,
+}: {
+  docId: string;
+  currentCategory?: string | null;
+  onChange: (docId: string, category: string) => void;
+  isPending?: boolean;
+}) {
+  const { user } = useAuth();
+  // Only admins can re-categorise; for everyone else the dropdown is hidden
+  // entirely so the row stays compact and the action is gated server-side.
+  if (user?.role !== "admin") return null;
+
+  const value = currentCategory || "other";
+  const knownValues = new Set(DOCUMENT_CATEGORY_OPTIONS.map((o) => o.value));
+  // If the doc has a legacy/unexpected category, surface it as a one-off
+  // option so the Select doesn't render an empty value.
+  const options = knownValues.has(value)
+    ? DOCUMENT_CATEGORY_OPTIONS
+    : [{ value, label: value }, ...DOCUMENT_CATEGORY_OPTIONS];
+
+  return (
+    <Select
+      value={value}
+      disabled={isPending}
+      onValueChange={(next) => {
+        if (next && next !== value) onChange(docId, next);
+      }}
+    >
+      <SelectTrigger
+        className="h-7 w-[180px] text-xs"
+        data-testid={`select-category-${docId}`}
+        title="Change document category (admin)"
+      >
+        <SelectValue placeholder="Category" />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 function DocumentDeleteButton({ docId, filename, candidateName, onDelete, isDeleting }: { docId: string; filename?: string | null; candidateName?: string | null; onDelete: (docId: string) => void; isDeleting?: boolean }) {
@@ -2903,15 +3002,39 @@ function DocumentAiIssues({
   isDeleting?: boolean;
 }) {
   if (!issues || !Array.isArray(issues) || issues.length === 0) return null;
-  if (!status || status === "pass") return null;
+  const overrideEntries = issues.filter(isManualOverrideIssue);
+  const nameMismatchEntries = issues.filter(isNameMismatchIssue);
+  const otherEntries = issues.filter((e) => !isNameMismatchIssue(e) && !isManualOverrideIssue(e));
+
+  // Show the manual override marker even when status is "pass" so admins can
+  // always tell the category was set by hand. Other issue types only render
+  // when there's an actual problem.
+  const showProblems = !!status && status !== "pass" && (nameMismatchEntries.length > 0 || otherEntries.length > 0);
+  if (overrideEntries.length === 0 && !showProblems) return null;
 
   const borderColor = status === "fail" ? "border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-950/20" : "border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20";
   const textColor = status === "fail" ? "text-red-300" : "text-amber-300";
-  const nameMismatchEntries = issues.filter(isNameMismatchIssue);
-  const otherEntries = issues.filter((e) => !isNameMismatchIssue(e));
 
   return (
-    <div className={`mx-3 mb-1 mt-1 rounded-md border p-2 space-y-2 ${borderColor}`} data-testid="ai-issues-list">
+    <div className="mx-3 mb-1 mt-1 space-y-1.5" data-testid="ai-issues-list">
+      {overrideEntries.length > 0 && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-2">
+          {overrideEntries.map((entry, i) => (
+            <div key={`mo-${i}`} className="flex items-start gap-2 text-xs text-blue-900 dark:text-blue-200">
+              <UserCheck className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+              <div className="flex-1">
+                <p className="font-medium">Category set by admin</p>
+                <p className="text-blue-800/80 dark:text-blue-300/80">
+                  {entry.from && entry.to ? `Was "${entry.from}", now "${entry.to}".` : entry.message}
+                  {entry.setBy ? ` (by ${entry.setBy})` : ""}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {showProblems && (
+        <div className={`rounded-md border p-2 space-y-2 ${borderColor}`}>
       {nameMismatchEntries.length > 0 && (
         <div className="space-y-1.5" data-testid={`ai-name-mismatch-${documentId}`}>
           {nameMismatchEntries.map((entry, i) => {
@@ -2978,6 +3101,8 @@ function DocumentAiIssues({
           ))}
         </ul>
       )}
+        </div>
+      )}
     </div>
   );
 }
@@ -2993,7 +3118,11 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
   });
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
-  const { deleteDoc: deleteDocMutation, confirmName: confirmNameMutation } = useDocumentMutations(candidateId);
+  const {
+    deleteDoc: deleteDocMutation,
+    confirmName: confirmNameMutation,
+    changeCategory: changeCategoryMutation,
+  } = useDocumentMutations(candidateId);
   const [lastClassification, setLastClassification] = useState<{
     detectedCategory: string;
     detectedType: string;
@@ -3230,6 +3359,12 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
                       </a>
                     </Button>
                   )}
+                  <DocumentCategorySelect
+                    docId={doc.id}
+                    currentCategory={doc.category}
+                    onChange={(id, category) => changeCategoryMutation.mutate({ docId: id, category })}
+                    isPending={changeCategoryMutation.isPending && (changeCategoryMutation.variables as any)?.docId === doc.id}
+                  />
                   <Button
                     variant="ghost"
                     size="icon"

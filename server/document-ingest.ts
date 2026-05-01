@@ -118,6 +118,32 @@ export async function ingestExistingFile(opts: {
     console.warn("[ingestExistingFile] AI analysis trigger failed (non-fatal)", e);
   }
 
+  // Surface low-confidence catch-all classifications so admins know to
+  // double-check the category instead of a silent drop into "other"/"general".
+  // Only kicks in when triggerDocumentAnalysis won't itself produce an
+  // aiStatus (which happens for un-analyzable categories like "other").
+  if (
+    classification &&
+    classification.confidence === "low" &&
+    (detectedCategory === "other" || detectedCategory === "general")
+  ) {
+    try {
+      await storage.updateDocument(doc.id, {
+        aiStatus: "warning",
+        aiIssues: [
+          {
+            code: "low_confidence_classification",
+            message:
+              "AI was not confident about this document's category. Please review and override the category if needed (e.g. set to Training Certificate).",
+          },
+        ],
+        aiAnalyzedAt: new Date(),
+      } as any);
+    } catch (e) {
+      console.warn("[ingestExistingFile] Failed to mark low-confidence warning (non-fatal)", e);
+    }
+  }
+
   // ── 4. CV / résumé → employment + education ───────────────────────────
   let cvEntriesAdded = 0;
   let cvEntriesSkipped = 0;
@@ -193,48 +219,15 @@ export async function ingestExistingFile(opts: {
   }
 
   // ── 5. Training certificate → mandatory training rows ─────────────────
-  const trainingAdded: string[] = [];
+  let trainingAdded: string[] = [];
   if (classification && classification.matchedTrainingModules.length > 0) {
-    let certAnalysis: Awaited<ReturnType<typeof analyzeCertificateWithAI>> | null = null;
-    try {
-      certAnalysis = await analyzeCertificateWithAI(absolutePath, mimeType);
-    } catch (e: any) {
-      console.warn("[ingestExistingFile] Cert date extraction failed; using fallbacks:", e.message);
-    }
-
-    const existingTraining = await storage.getMandatoryTraining(nurseId);
-    for (const moduleName of classification.matchedTrainingModules) {
-      if (existingTraining.some((t: any) => t.moduleName === moduleName)) continue;
-
-      const modDef = MANDATORY_TRAINING_MODULES.find((m) => m.name === moduleName);
-      const renewalFreq = modDef?.renewalFrequency || "Annual";
-      const certModule = certAnalysis?.modules.find((m: any) => m.matchedModule === moduleName);
-
-      const completedDate = safeDate(certModule?.completedDate ?? null) || new Date().toISOString().split("T")[0];
-      let expiryDate = safeDate(certModule?.expiryDate ?? null);
-      if (!expiryDate) {
-        const completed = new Date(completedDate);
-        const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
-        expiryDate =
-          renewalFreq === "Annual"
-            ? new Date(completed.getTime() + msPerYear).toISOString().split("T")[0]
-            : new Date(completed.getTime() + 3 * msPerYear).toISOString().split("T")[0];
-      }
-      const issuingBody = certModule?.issuingBody || "Auto-detected from document";
-
-      await storage.createMandatoryTraining({
-        nurseId,
-        moduleName,
-        renewalFrequency: renewalFreq,
-        completedDate,
-        expiryDate,
-        issuingBody,
-        certificateUploaded: true,
-        certificateDocumentId: doc.id,
-        status: "completed",
-      });
-      trainingAdded.push(moduleName);
-    }
+    trainingAdded = await applyTrainingCertExtraction({
+      nurseId,
+      documentId: doc.id,
+      absolutePath,
+      mimeType,
+      matchedTrainingModules: classification.matchedTrainingModules,
+    });
   }
 
   return {
@@ -273,6 +266,89 @@ export function adoptFileIntoUploads(srcAbsolutePath: string, originalFilename: 
     }
   }
   return destAbs;
+}
+
+/**
+ * Run the training-certificate–specific extraction pipeline against an
+ * already-uploaded document. Used by the initial ingest pipeline (after the
+ * smart classifier matches modules) and also by the admin category-override
+ * flow when a doc is manually re-categorised as a training certificate.
+ *
+ * If `matchedTrainingModules` is omitted, the document is re-classified to
+ * discover module matches (which is what the manual override path needs —
+ * the original classification said "other" so there are no matches yet).
+ *
+ * Returns the list of module names added to mandatory_training (already
+ * existing modules for the candidate are skipped).
+ */
+export async function applyTrainingCertExtraction(opts: {
+  nurseId: string;
+  documentId: string;
+  absolutePath: string;
+  mimeType: string;
+  matchedTrainingModules?: string[];
+}): Promise<string[]> {
+  const { nurseId, documentId, absolutePath, mimeType } = opts;
+  const moduleNames = MANDATORY_TRAINING_MODULES.map((m) => m.name);
+
+  let matched = opts.matchedTrainingModules;
+  if (!matched) {
+    try {
+      const classification = await classifyDocumentSmart(absolutePath, mimeType, moduleNames);
+      matched = classification.matchedTrainingModules;
+    } catch (e: any) {
+      console.warn(
+        "[applyTrainingCertExtraction] Classification failed; proceeding with no module matches:",
+        e?.message || e,
+      );
+      matched = [];
+    }
+  }
+
+  if (!matched.length) return [];
+
+  let certAnalysis: Awaited<ReturnType<typeof analyzeCertificateWithAI>> | null = null;
+  try {
+    certAnalysis = await analyzeCertificateWithAI(absolutePath, mimeType);
+  } catch (e: any) {
+    console.warn("[applyTrainingCertExtraction] Cert date extraction failed; using fallbacks:", e?.message || e);
+  }
+
+  const existingTraining = await storage.getMandatoryTraining(nurseId);
+  const trainingAdded: string[] = [];
+  for (const moduleName of matched) {
+    if (existingTraining.some((t: any) => t.moduleName === moduleName)) continue;
+
+    const modDef = MANDATORY_TRAINING_MODULES.find((m) => m.name === moduleName);
+    const renewalFreq = modDef?.renewalFrequency || "Annual";
+    const certModule = certAnalysis?.modules.find((m: any) => m.matchedModule === moduleName);
+
+    const completedDate = safeDate(certModule?.completedDate ?? null) || new Date().toISOString().split("T")[0];
+    let expiryDate = safeDate(certModule?.expiryDate ?? null);
+    if (!expiryDate) {
+      const completed = new Date(completedDate);
+      const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+      expiryDate =
+        renewalFreq === "Annual"
+          ? new Date(completed.getTime() + msPerYear).toISOString().split("T")[0]
+          : new Date(completed.getTime() + 3 * msPerYear).toISOString().split("T")[0];
+    }
+    const issuingBody = certModule?.issuingBody || "Auto-detected from document";
+
+    await storage.createMandatoryTraining({
+      nurseId,
+      moduleName,
+      renewalFrequency: renewalFreq,
+      completedDate,
+      expiryDate,
+      issuingBody,
+      certificateUploaded: true,
+      certificateDocumentId: documentId,
+      status: "completed",
+    });
+    trainingAdded.push(moduleName);
+  }
+  return trainingAdded;
 }
 
 /**

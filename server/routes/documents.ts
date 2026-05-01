@@ -5,8 +5,10 @@ import { db } from "../db";
 import { documents, nurses } from "@shared/schema";
 import { eq, desc, and, ilike, gte, lte, sql } from "drizzle-orm";
 import { storage } from "../storage";
-import { uploadsDir } from "../middleware";
+import { uploadsDir, requireAdmin } from "../middleware";
 import { logAction } from "../services/audit";
+import { applyTrainingCertExtraction } from "../document-ingest";
+import { triggerDocumentAnalysis } from "../document-analysis";
 
 function agentFor(req: Request): string {
   return req.session?.username || "system";
@@ -121,6 +123,167 @@ export function registerDocumentRoutes(app: Express) {
     });
 
     res.json({ ok: true });
+  });
+
+  // ── Admin manual category override ─────────────────────────────────────
+  // Lets an admin correct a misclassified document (e.g. "other" → "training
+  // certificate"). When set to training_certificate, the cert-specific
+  // pipeline (module match + completion/expiry dates + attendee name) is
+  // re-run automatically. When changed AWAY from training_certificate, any
+  // mandatory_training rows that were auto-recorded from this document are
+  // removed so stale entries don't keep showing.
+  const ALLOWED_CATEGORIES = new Set([
+    "identity",
+    "right_to_work",
+    "profile",
+    "competency_evidence",
+    "training_certificate",
+    "health",
+    "indemnity",
+    "dbs",
+    "nmc",
+    "proof_of_address",
+    "other",
+  ]);
+
+  app.patch("/api/documents/:id/category", requireAdmin, async (req, res) => {
+    const docId = String(req.params.id);
+    const newCategory = typeof req.body?.category === "string" ? req.body.category.trim() : "";
+    if (!ALLOWED_CATEGORIES.has(newCategory)) {
+      return res.status(400).json({
+        message: `Invalid category. Must be one of: ${Array.from(ALLOWED_CATEGORIES).join(", ")}`,
+      });
+    }
+
+    const doc = await storage.getDocument(docId);
+    if (!doc) return res.status(404).json({ message: "Document not found" });
+
+    const fromCategory = doc.category || "other";
+    if (fromCategory === newCategory) {
+      return res.json({ ok: true, document: doc, changed: false });
+    }
+
+    // Stamp the override so the UI can show "Set by admin" and admins can see
+    // it wasn't an AI decision. Stored as a structured aiIssues entry rather
+    // than adding a new column — keeps the schema simple and reuses the
+    // existing front-end issue rendering.
+    const overrideMarker = {
+      code: "manual_category_override",
+      message: `Category set by admin (${agentFor(req)}) — was "${fromCategory}", now "${newCategory}".`,
+      from: fromCategory,
+      to: newCategory,
+      setBy: agentFor(req),
+      setAt: new Date().toISOString(),
+    };
+
+    // Always wipe stale AI issues from the previous category — they were
+    // assessed against a different document type and shouldn't leak through.
+    // aiStatus is reset to null; triggerDocumentAnalysis below will flip it
+    // to "pending" then to a real status once the new analysis lands.
+    const updates: Record<string, unknown> = {
+      category: newCategory,
+      aiStatus: null,
+      aiIssues: [overrideMarker],
+      aiAnalyzedAt: null,
+    };
+
+    let updated = await storage.updateDocument(docId, updates as any);
+
+    // If we're moving AWAY from training_certificate, clear any mandatory
+    // training rows we previously auto-recorded from this doc — they will
+    // now be misleading.
+    let removedTrainingRows = 0;
+    if (fromCategory === "training_certificate" && newCategory !== "training_certificate") {
+      try {
+        removedTrainingRows = await storage.deleteMandatoryTrainingByDocumentId(docId);
+      } catch (e: any) {
+        console.warn(
+          `[Document Category Override] Failed to clean training rows for ${docId}:`,
+          e?.message || e,
+        );
+      }
+    }
+
+    // Kick off completeness analysis appropriate to the NEW category.
+    // triggerDocumentAnalysis short-circuits for unsupported categories /
+    // mime types, but in those cases we still want a clean UI state.
+    if (doc.filePath && doc.mimeType) {
+      try {
+        triggerDocumentAnalysis(
+          docId,
+          doc.filePath,
+          doc.mimeType,
+          newCategory,
+          doc.type || newCategory,
+          doc.nurseId,
+        );
+      } catch (e: any) {
+        console.warn(
+          `[Document Category Override] triggerDocumentAnalysis failed for ${docId}:`,
+          e?.message || e,
+        );
+      }
+    }
+
+    // If the new category is training_certificate, run the cert-specific
+    // pipeline (module match + dates + auto-create mandatory_training rows).
+    // We do this in the background so the API response returns promptly.
+    let trainingAddedPromise: Promise<string[]> | null = null;
+    if (newCategory === "training_certificate" && doc.filePath && doc.mimeType) {
+      const basename = path.basename(doc.filePath);
+      const absolutePath = path.join(uploadsDir, basename);
+      if (fs.existsSync(absolutePath)) {
+        trainingAddedPromise = applyTrainingCertExtraction({
+          nurseId: doc.nurseId,
+          documentId: docId,
+          absolutePath,
+          mimeType: doc.mimeType,
+        }).catch((e: any) => {
+          console.warn(
+            `[Document Category Override] Cert extraction failed for ${docId}:`,
+            e?.message || e,
+          );
+          return [];
+        });
+      } else {
+        console.warn(
+          `[Document Category Override] File missing on disk for ${docId} at ${absolutePath}; skipping cert extraction.`,
+        );
+      }
+    }
+
+    await logAction(doc.nurseId, "admin", "document_category_overridden", agentFor(req), {
+      documentId: docId,
+      type: doc.type,
+      filename: doc.originalFilename || doc.filename,
+      fromCategory,
+      toCategory: newCategory,
+      removedTrainingRows,
+      manualOverride: true,
+    });
+
+    // If cert extraction was triggered, await it briefly so the response can
+    // tell the admin which modules (if any) were auto-recorded. We do this
+    // synchronously because the UI already accepts a small wait — the toast
+    // can then say "2 training modules auto-recorded".
+    let trainingAdded: string[] = [];
+    if (trainingAddedPromise) {
+      try {
+        trainingAdded = await trainingAddedPromise;
+      } catch {
+        trainingAdded = [];
+      }
+    }
+
+    res.json({
+      ok: true,
+      document: updated,
+      changed: true,
+      fromCategory,
+      toCategory: newCategory,
+      removedTrainingRows,
+      trainingModulesAdded: trainingAdded,
+    });
   });
 
   app.post("/api/documents/:id/confirm-name-match", async (req, res) => {

@@ -22,7 +22,14 @@ export interface DocumentScanSummary {
 }
 
 const CV_NAME_REGEX = /\b(cv|c\.v\.|résumé|resume|curriculum.?vitae)\b/i;
-const CERT_NAME_REGEX = /\b(certificate|cert\.?|training|completion|course|module)\b/i;
+// Tightened to catch real-world certificate naming. Covers explicit certificate
+// language ("certificate", "record of attendance", "statement of completion"),
+// achievement / pass markers ("passed", "achievement", "CPD"), and the most
+// common UK clinical training module short codes (BLS / ILS / ALS / PMVA,
+// "moving and handling", etc.) so that even a file called e.g. "BLS_2024.pdf"
+// or "Record of Attendance.pdf" is routed to training-cert handling.
+const CERT_NAME_REGEX =
+  /\b(certificate|cert\.?|training|completion|course|module|attendance|achievement|passed|cpd|record\s*of\s*attendance|statement\s*of\s*completion|completion\s*record|bls|ils|als|pmva|mapa|moving\s*and\s*handling|manual\s*handling|safeguarding|fire\s*safety|infection\s*prevention|ipc|gdpr|edi|equality\s*and\s*diversity|mca|dols|prevent|conflict\s*resolution|de.?escalation|food\s*hygiene|lone\s*working|duty\s*of\s*candour|modern\s*slavery|anaphylaxis|venepuncture|cannulation|catheterisation)\b/i;
 
 // Categories where we already know how to handle the document — no need to
 // re-classify with the AI on every scan.

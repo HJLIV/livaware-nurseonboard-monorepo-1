@@ -67,6 +67,24 @@ export function triggerDocumentAnalysis(
 
   setImmediate(async () => {
     try {
+      // Preserve sticky markers (e.g. manual_category_override) that aren't
+      // produced by the AI itself but should keep showing on the document
+      // after analysis re-runs.
+      let stickyEntries: DocumentAiIssueEntry[] = [];
+      try {
+        const existingDoc = await storage.getDocument(documentId);
+        const existingIssues = Array.isArray(existingDoc?.aiIssues)
+          ? (existingDoc?.aiIssues as DocumentAiIssueEntry[])
+          : [];
+        stickyEntries = existingIssues.filter((e) => {
+          if (!e || typeof e !== "object") return false;
+          const code = (e as any).code;
+          return code === "manual_category_override";
+        });
+      } catch {
+        stickyEntries = [];
+      }
+
       const result = await analyzeDocumentCompleteness(
         resolvedPath,
         mimeType,
@@ -74,7 +92,7 @@ export function triggerDocumentAnalysis(
         documentType,
       );
 
-      const issues: DocumentAiIssueEntry[] = [...result.issues];
+      const issues: DocumentAiIssueEntry[] = [...stickyEntries, ...result.issues];
       let status: "pass" | "warning" | "fail" = result.status;
 
       let mismatchDetected: { documentName: string; nurseName: string } | null = null;
