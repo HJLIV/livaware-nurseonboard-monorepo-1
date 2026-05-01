@@ -94,6 +94,11 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - `/arcade/admin/reports` — Reports + CSV export
 - `/arcade/admin/users` — User management
 
+### Compliance Matrix Reports (admin only)
+- `/reports/onboarding` — Onboarding & Documents matrix (candidates × personal info / core docs)
+- `/reports/training` — Mandatory Training matrix (candidates × CSTF modules)
+- `/reports/competency` — Competency & Skills Arcade matrix (candidates × competency domains + arcade modules)
+
 ### System
 - `/audit` — Audit trail (admin only)
 - `/guide` — Admin Guide with walkthroughs & SOPs (step-by-step procedures for all platform features)
@@ -108,6 +113,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - `server/routes/skills-arcade.ts` — Arcade routes (862 lines, full arcade API)
 - `server/routes/dashboard.ts` — Dashboard stats
 - `server/routes/audit.ts` — Audit trail
+- `server/routes/admin-reports.ts` — Whole-roster compliance matrices (onboarding/training/competency), one bulk-fetch endpoint each
 
 ## Schema Compatibility Aliases
 

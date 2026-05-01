@@ -82,6 +82,10 @@ export async function registerRoutes(
   const { registerNurseRoutes } = await import("./routes/admin");
   registerNurseRoutes(app);
 
+  // === ADMIN COMPLIANCE MATRIX REPORTS ===
+  const { registerAdminReportsRoutes } = await import("./routes/admin-reports");
+  registerAdminReportsRoutes(app);
+
   // === DASHBOARD ===
   const { registerDashboardRoutes } = await import("./routes/dashboard");
   registerDashboardRoutes(app);

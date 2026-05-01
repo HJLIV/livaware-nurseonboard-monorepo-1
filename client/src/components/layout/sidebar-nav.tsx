@@ -21,6 +21,9 @@ import {
   ChevronDown,
   UserCog,
   FileText,
+  GraduationCap,
+  Award,
+  TableProperties,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +68,15 @@ const sections: NavSectionDef[] = [
       { label: "Trainer Queue", href: "/arcade/trainer", icon: UserCheck, badgeKey: "trainerQueue", requiredRoles: ["trainer", "admin"] },
       { label: "Modules", href: "/arcade/admin/modules", icon: Shield, adminOnly: true },
       { label: "Reports", href: "/arcade/admin/reports", icon: BarChart3, adminOnly: true },
+    ],
+  },
+  {
+    key: "reports",
+    title: "Reports",
+    items: [
+      { label: "Onboarding Matrix", href: "/reports/onboarding", icon: TableProperties, adminOnly: true },
+      { label: "Training Matrix", href: "/reports/training", icon: GraduationCap, adminOnly: true },
+      { label: "Competency Matrix", href: "/reports/competency", icon: Award, adminOnly: true },
     ],
   },
   {

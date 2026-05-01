@@ -254,7 +254,7 @@ export function registerAdminReportsRoutes(app: Express) {
           name: c.fullName,
           email: c.email,
           band: c.band ?? null,
-          onboardStatus: c.onboardStatus ?? c.status ?? null,
+          onboardStatus: c.onboardStatus ?? null,
           cells,
         };
       });
@@ -345,7 +345,7 @@ export function registerAdminReportsRoutes(app: Express) {
           name: c.fullName,
           email: c.email,
           band: c.band ?? null,
-          onboardStatus: c.onboardStatus ?? c.status ?? null,
+          onboardStatus: c.onboardStatus ?? null,
           cells,
         };
       });
@@ -494,10 +494,11 @@ export function registerAdminReportsRoutes(app: Express) {
             const decl = declMap.get(comp.competency);
             if (comp.mandatory) {
               mandatoryCount++;
+              // Mandatory is "met" only if explicitly approved AND at/above minimum level.
               if (
                 decl &&
+                decl.status === "approved" &&
                 decl.selfAssessedLevel !== "not_declared" &&
-                decl.status !== "flagged" &&
                 levelOrder[decl.selfAssessedLevel] >= levelOrder[comp.minimumLevel]
               ) {
                 mandatoryMet++;
@@ -572,7 +573,7 @@ export function registerAdminReportsRoutes(app: Express) {
           name: c.fullName,
           email: c.email,
           band: c.band ?? null,
-          onboardStatus: c.onboardStatus ?? c.status ?? null,
+          onboardStatus: c.onboardStatus ?? null,
           cells,
         };
       });

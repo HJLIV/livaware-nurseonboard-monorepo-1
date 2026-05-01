@@ -108,6 +108,18 @@ export interface IStorage {
     total: number;
     fields: Record<string, { counts: Record<string, number>; percentages: Record<string, number> }>;
   }>;
+
+  // Bulk getters for cross-candidate reporting (admin compliance matrices, etc.).
+  getAllDocuments(): Promise<Document[]>;
+  getAllMandatoryTraining(): Promise<MandatoryTraining[]>;
+  getAllCompetencyDeclarations(): Promise<CompetencyDeclaration[]>;
+  getAllInductionPolicies(): Promise<InductionPolicy[]>;
+  getAllProfessionalIndemnity(): Promise<ProfessionalIndemnity[]>;
+  getAllHealthDeclarations(): Promise<HealthDeclaration[]>;
+  getAllReferences(): Promise<Reference[]>;
+  getAllNmcVerifications(): Promise<NmcVerification[]>;
+  getAllDbsVerifications(): Promise<DbsVerification[]>;
+  getAllOnboardingStates(): Promise<OnboardingState[]>;
 }
 
 export class DatabaseStorage implements IStorage {

@@ -3593,8 +3593,30 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
   );
 }
 
+function readQueryParams(): { section?: string; tab?: string } {
+  if (typeof window === "undefined") return {};
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return { section: sp.get("section") ?? undefined, tab: sp.get("tab") ?? undefined };
+  } catch {
+    return {};
+  }
+}
+
+const VALID_ONBOARDING_TABS = new Set([
+  "identity", "nmc", "dbs", "right_to_work", "profile", "competency", "health", "references", "indemnity",
+]);
+const VALID_COMPLIANCE_TABS = new Set(["induction", "training_compliance", "documents", "audit"]);
+
 function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { candidateId: string; candidate: Candidate; stepStatuses: Record<string, string>; currentStep: number }) {
-  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance">("onboarding");
+  const initialParams = readQueryParams();
+  const initialSection: "preboard" | "onboarding" | "compliance" =
+    initialParams.section === "preboard" || initialParams.section === "compliance" || initialParams.section === "onboarding"
+      ? initialParams.section
+      : "onboarding";
+  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance">(initialSection);
+  const initialOnboardingTab = initialParams.tab && VALID_ONBOARDING_TABS.has(initialParams.tab) ? initialParams.tab : "identity";
+  const initialComplianceTab = initialParams.tab && VALID_COMPLIANCE_TABS.has(initialParams.tab) ? initialParams.tab : "induction";
 
   const { data: preboardAssessment } = useQuery({
     queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
@@ -3649,7 +3671,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             />
           </CardContent>
         </Card>
-        <Tabs defaultValue="identity">
+        <Tabs defaultValue={initialOnboardingTab}>
           <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1" data-testid="tabs-onboarding">
             <TabsTrigger value="identity" className="text-xs gap-1.5"><User className="h-3 w-3" />Identity<StepStatusDot status={stepStatuses.identity} /></TabsTrigger>
             <TabsTrigger value="nmc" className="text-xs gap-1.5"><Shield className="h-3 w-3" />NMC<StepStatusDot status={stepStatuses.nmc} /></TabsTrigger>
@@ -3683,7 +3705,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
       {section === "compliance" && (
         <>
           <CqcComplianceCheck candidateId={candidateId} candidateName={candidate.fullName} />
-          <Tabs defaultValue="induction">
+          <Tabs defaultValue={initialComplianceTab}>
             <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1" data-testid="tabs-compliance">
               <TabsTrigger value="induction" className="text-xs gap-1.5"><FileText className="h-3 w-3" />Induction</TabsTrigger>
               <TabsTrigger value="training_compliance" className="text-xs gap-1.5"><BookOpen className="h-3 w-3" />Training</TabsTrigger>

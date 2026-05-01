@@ -42,6 +42,11 @@ const DocumentsPage = lazy(() => import("@/pages/documents"));
 // Nurse Preboard
 const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
 
+// Compliance Matrix Reports
+const OnboardingMatrixPage = lazy(() => import("@/pages/reports/onboarding-matrix"));
+const TrainingMatrixPage = lazy(() => import("@/pages/reports/training-matrix"));
+const CompetencyMatrixPage = lazy(() => import("@/pages/reports/competency-matrix"));
+
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -120,6 +125,11 @@ function AuthenticatedRouter() {
 
               {/* Documents */}
               <Route path="/documents">{() => <AdminRoute component={DocumentsPage} />}</Route>
+
+              {/* Compliance Matrix Reports (admin only) */}
+              <Route path="/reports/onboarding">{() => <AppLayout><AdminRoute component={OnboardingMatrixPage} /></AppLayout>}</Route>
+              <Route path="/reports/training">{() => <AppLayout><AdminRoute component={TrainingMatrixPage} /></AppLayout>}</Route>
+              <Route path="/reports/competency">{() => <AppLayout><AdminRoute component={CompetencyMatrixPage} /></AppLayout>}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />
