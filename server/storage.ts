@@ -172,6 +172,42 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(documents);
   }
 
+  async getAllMandatoryTraining(): Promise<MandatoryTraining[]> {
+    return db.select().from(mandatoryTraining);
+  }
+
+  async getAllCompetencyDeclarations(): Promise<CompetencyDeclaration[]> {
+    return db.select().from(competencyDeclarations);
+  }
+
+  async getAllInductionPolicies(): Promise<InductionPolicy[]> {
+    return db.select().from(inductionPolicies);
+  }
+
+  async getAllProfessionalIndemnity(): Promise<ProfessionalIndemnity[]> {
+    return db.select().from(professionalIndemnity);
+  }
+
+  async getAllHealthDeclarations(): Promise<HealthDeclaration[]> {
+    return db.select().from(healthDeclarations);
+  }
+
+  async getAllReferences(): Promise<Reference[]> {
+    return db.select().from(references);
+  }
+
+  async getAllNmcVerifications(): Promise<NmcVerification[]> {
+    return db.select().from(nmcVerifications);
+  }
+
+  async getAllDbsVerifications(): Promise<DbsVerification[]> {
+    return db.select().from(dbsVerifications);
+  }
+
+  async getAllOnboardingStates(): Promise<OnboardingState[]> {
+    return db.select().from(onboardingStates);
+  }
+
   async createDocument(data: InsertDocument): Promise<Document> {
     const [result] = await db.insert(documents).values(data).returning();
     return result;
