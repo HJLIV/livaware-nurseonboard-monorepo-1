@@ -166,7 +166,9 @@ export function ComplianceMatrix({
     });
   }, [data, search, gapsOnly, statusFilter]);
 
-  // Per-column gap counts (red + amber + missing) across visible rows.
+  // Per-column gap counts (red + amber, broken out separately) across visible rows.
+  // Cells without an entry render as the grey "—" placeholder and are not counted
+  // here because they represent N/A items rather than gaps.
   const columnGapCounts = useMemo(() => {
     const out = new Map<string, { red: number; amber: number; gaps: number }>();
     if (!data) return out;
