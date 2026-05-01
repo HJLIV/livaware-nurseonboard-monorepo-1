@@ -21,7 +21,7 @@ import {
   CheckCircle, AlertCircle, Loader2, User, Shield, FileCheck,
   Stethoscope, BookOpen, Heart, Users, FileText, ShieldCheck,
   Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb, Equal,
-  Lock as LockIcon, Unlock
+  Lock as LockIcon, Unlock, X
 } from "lucide-react";
 import {
   PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES
@@ -407,6 +407,164 @@ function PortalProofOfAddress({ token }: { token: string }) {
   );
 }
 
+function PortalHeadshotUpload({ token, candidate }: { token: string; candidate: Candidate }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/portal/${token}/passport-photo`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
+      toast({ title: "Photo uploaded" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/portal/${token}/passport-photo`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to remove");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
+      toast({ title: "Photo removed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Remove failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMutation.mutate(file);
+    if (e.target) e.target.value = "";
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label className="text-sm font-medium">Your Photo</Label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Upload a clear, recent headshot (passport-style). This photo is used on your candidate profile.
+        </p>
+      </div>
+
+      {candidate.passportPhotoPath ? (
+        <div className="space-y-2">
+          <div className="relative group inline-block">
+            <img
+              src={candidate.passportPhotoPath}
+              alt="Your headshot"
+              className="h-32 w-auto rounded-lg border border-border object-cover"
+              data-testid="img-portal-headshot"
+            />
+            <div className="hidden sm:flex absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg items-center justify-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-7 text-xs"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadMutation.isPending || removeMutation.isPending}
+                data-testid="button-portal-headshot-replace"
+              >
+                <Upload className="h-3 w-3 mr-1" /> Replace
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs"
+                onClick={() => removeMutation.mutate()}
+                disabled={uploadMutation.isPending || removeMutation.isPending}
+                data-testid="button-portal-headshot-remove"
+              >
+                <X className="h-3 w-3 mr-1" /> Remove
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:hidden">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending || removeMutation.isPending}
+              data-testid="button-portal-headshot-replace-mobile"
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Upload className="h-3 w-3 mr-1" />
+              )}
+              Replace
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs text-destructive hover:text-destructive"
+              onClick={() => removeMutation.mutate()}
+              disabled={uploadMutation.isPending || removeMutation.isPending}
+              data-testid="button-portal-headshot-remove-mobile"
+            >
+              {removeMutation.isPending ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <X className="h-3 w-3 mr-1" />
+              )}
+              Remove
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors max-w-sm"
+          onClick={() => fileInputRef.current?.click()}
+          data-testid="dropzone-portal-headshot"
+        >
+          {uploadMutation.isPending ? (
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Uploading...</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1">
+              <Upload className="h-5 w-5 text-muted-foreground/50" />
+              <span className="text-xs text-muted-foreground">Click to upload your photo</span>
+              <span className="text-[10px] text-muted-foreground/50">JPG, PNG or WebP up to 10MB</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+        data-testid="input-portal-headshot"
+      />
+    </div>
+  );
+}
+
 function IdentityStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
   const { data: identityDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
@@ -488,6 +646,10 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
           <PortalLockedInput label="Next of Kin — Relationship" value={nokRelationship} onChange={setNokRelationship} locked={isLocked("nokRelationship", parseNextOfKin(candidate.nextOfKin).relationship)} onUnlock={() => unlock("nokRelationship")} placeholder="e.g. Spouse, Parent, Sibling" testId="input-portal-nok-relationship" />
           <PortalLockedInput label="Next of Kin — Contact Number" value={nokContact} onChange={setNokContact} locked={isLocked("nokContact", parseNextOfKin(candidate.nextOfKin).contactNumber)} onUnlock={() => unlock("nokContact")} placeholder="e.g. 07700 900456" testId="input-portal-nok-contact" />
         </div>
+
+        <Separator />
+
+        <PortalHeadshotUpload token={token} candidate={candidate} />
 
         <Separator />
 

@@ -156,6 +156,42 @@ export function registerPortalRoutes(app: Express) {
     });
   });
 
+  app.post("/api/portal/:token/passport-photo", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+      if (!allowedImageTypes.includes(req.file.mimetype)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+        return res.status(400).json({ message: "Only image files (JPG, PNG, WebP) are allowed for passport photos" });
+      }
+      const nurseId = (req as any).nurseId;
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const updated = await storage.updateCandidate(nurseId, { passportPhotoPath: filePath });
+      if (!updated) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+        return res.status(404).json({ message: "Candidate not found" });
+      }
+      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_uploaded", agentName: "nurse_portal", detail: { filename: req.file.originalname, filePath } });
+      res.json({ passportPhotoPath: filePath });
+    } catch (err: any) {
+      console.error("[Portal Passport Photo Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload passport photo" });
+    }
+  });
+
+  app.delete("/api/portal/:token/passport-photo", validatePortalToken, async (req, res) => {
+    try {
+      const nurseId = (req as any).nurseId;
+      const updated = await storage.updateCandidate(nurseId, { passportPhotoPath: null });
+      if (!updated) return res.status(404).json({ message: "Candidate not found" });
+      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_removed", agentName: "nurse_portal", detail: {} });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[Portal Passport Photo Remove] Error:", err.message);
+      res.status(500).json({ message: "Failed to remove passport photo" });
+    }
+  });
+
   app.post("/api/portal/:token/proof-of-address", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
