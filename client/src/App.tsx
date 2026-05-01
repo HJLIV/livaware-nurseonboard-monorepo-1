@@ -64,7 +64,10 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
     return <LoadingSpinner />;
   }
   if (authData.role !== "admin") {
-    return <NotFound />;
+    // Non-admins are redirected to the dashboard rather than shown a NotFound,
+    // matching the task brief's "non-admins are redirected" requirement and
+    // giving signed-in users a clear next destination.
+    return <Redirect to="/" />;
   }
   return <Component />;
 }
