@@ -94,33 +94,82 @@ function profileCell(value: unknown): MatrixCell {
     : { status: "red", label: "Missing" };
 }
 
-function documentCell(docs: { aiStatus?: string | null; expiryDate?: string | null }[]): MatrixCell {
+// Mirrors the candidate-detail Document AI semantics (pass/warning/fail/pending).
+// Picks the "best" candidate document (latest non-expired), honours AI status,
+// and applies the same expiry traffic-lights used elsewhere on the platform.
+function documentCell(docs: { aiStatus?: string | null; expiryDate?: string | null; uploadedAt?: Date | null }[]): MatrixCell {
   if (!docs || docs.length === 0) {
     return { status: "red", label: "Missing" };
   }
+  // Prefer the most recently uploaded record; expiry handled per-record below.
   const sorted = [...docs].sort((a, b) => {
-    const da = daysUntil(a.expiryDate ?? undefined);
-    const db_ = daysUntil(b.expiryDate ?? undefined);
-    if (da === null && db_ === null) return 0;
-    if (da === null) return -1;
-    if (db_ === null) return 1;
-    return db_ - da;
+    const ta = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+    const tb = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+    return tb - ta;
   });
   const best = sorted[0];
   const days = daysUntil(best.expiryDate ?? undefined);
   if (days !== null && days < 0) {
     return { status: "red", label: `Expired ${formatDate(best.expiryDate)}`, date: best.expiryDate };
   }
+  // AI status takes precedence for non-expired docs, mirroring DocumentAiIndicator.
+  if (best.aiStatus === "fail") {
+    return { status: "red", label: "AI: issues found" };
+  }
+  if (best.aiStatus === "warning") {
+    return { status: "amber", label: "AI: review needed" };
+  }
   if (days !== null && days <= 30) {
     return { status: "amber", label: `Expires ${formatDate(best.expiryDate)}`, date: best.expiryDate };
   }
-  if (best.aiStatus === "issues_found") {
-    return { status: "amber", label: "Issues found" };
+  if (best.aiStatus === "pending") {
+    return { status: "amber", label: "AI checking" };
   }
-  if (best.aiStatus === "pending" || !best.aiStatus) {
-    return { status: best.expiryDate ? "green" : "amber", label: best.expiryDate ? "Verified" : "Uploaded" };
+  if (best.aiStatus === "pass") {
+    return { status: "green", label: best.expiryDate ? `Valid to ${formatDate(best.expiryDate)}` : "AI: pass", date: best.expiryDate ?? null };
   }
-  return { status: "green", label: "Verified", date: best.expiryDate ?? null };
+  // No AI verdict yet (legacy / not analysed): treat as uploaded but unverified.
+  return { status: "amber", label: best.expiryDate ? `Uploaded — valid to ${formatDate(best.expiryDate)}` : "Uploaded", date: best.expiryDate ?? null };
+}
+
+// Find documents for a candidate matching a canonical category, with optional
+// type-keyword fallback (e.g. "passport" types under category=identity).
+function pickDocs(
+  nurseDocs: { category?: string | null; type?: string | null; aiStatus?: string | null; expiryDate?: string | null; uploadedAt?: Date | null }[],
+  categories: string[],
+  typeRegex?: RegExp,
+) {
+  return nurseDocs.filter((d) => {
+    if (d.category && categories.includes(d.category)) return true;
+    if (typeRegex && d.type && typeRegex.test(d.type)) return true;
+    return false;
+  });
+}
+
+function verificationCell(
+  v: { status?: string | null; verifiedAt?: Date | null; renewalDate?: string | null } | undefined,
+  expiryField: "renewalDate" | null,
+  presentLabel: string,
+): MatrixCell {
+  if (!v) return { status: "red", label: "Not verified" };
+  const expiry = expiryField === "renewalDate" ? v.renewalDate : null;
+  const days = daysUntil(expiry);
+  if (v.status === "failed") return { status: "red", label: "Verification failed" };
+  if (v.status === "escalated") return { status: "red", label: "Escalated" };
+  if (days !== null && days < 0) {
+    return { status: "red", label: `Expired ${formatDate(expiry)}`, date: expiry };
+  }
+  if (days !== null && days <= 30) {
+    return { status: "amber", label: `Expires ${formatDate(expiry)}`, date: expiry };
+  }
+  if (v.status === "verified") {
+    return {
+      status: "green",
+      label: expiry ? `${presentLabel} — to ${formatDate(expiry)}` : presentLabel,
+      date: expiry,
+    };
+  }
+  return { status: "amber", label: "Pending verification" };
 }
 
 export function registerAdminReportsRoutes(app: Express) {
@@ -133,12 +182,16 @@ export function registerAdminReportsRoutes(app: Express) {
         professionalIndemnityRows,
         healthDeclarationRows,
         inductionPolicyRows,
+        nmcVerifications,
+        dbsVerifications,
       ] = await Promise.all([
         storage.getCandidates(),
         storage.getAllDocuments(),
         storage.getAllProfessionalIndemnity(),
         storage.getAllHealthDeclarations(),
         storage.getAllInductionPolicies(),
+        storage.getAllNmcVerifications(),
+        storage.getAllDbsVerifications(),
       ]);
 
       const docsByNurse = new Map<string, typeof documents>();
@@ -161,22 +214,63 @@ export function registerAdminReportsRoutes(app: Express) {
         policiesByNurse.set(p.nurseId, list);
       }
 
-      const docCategories = [
-        "passport",
-        "proof_of_address",
-        "right_to_work",
-        "nmc_register_check",
-        "dbs_certificate",
-        "cv",
-      ];
+      // For verifications keep the most recent per nurse.
+      const nmcByNurse = new Map<string, (typeof nmcVerifications)[number]>();
+      for (const v of nmcVerifications) {
+        const existing = nmcByNurse.get(v.nurseId);
+        if (!existing || (v.createdAt && existing.createdAt && v.createdAt > existing.createdAt)) {
+          nmcByNurse.set(v.nurseId, v);
+        }
+      }
+      const dbsByNurse = new Map<string, (typeof dbsVerifications)[number]>();
+      for (const v of dbsVerifications) {
+        const existing = dbsByNurse.get(v.nurseId);
+        if (!existing || (v.createdAt && existing.createdAt && v.createdAt > existing.createdAt)) {
+          dbsByNurse.set(v.nurseId, v);
+        }
+      }
 
       const rows: MatrixCandidate[] = candidates.map((c) => {
         const cells: Record<string, MatrixCell> = {};
-
         const nurseDocs = docsByNurse.get(c.id) ?? [];
-        for (const cat of docCategories) {
-          const matching = nurseDocs.filter((d) => d.category === cat);
-          cells[`doc_${cat}`] = documentCell(matching);
+
+        // Document-evidence columns use the canonical taxonomy from
+        // server/document-ai.ts (identity, right_to_work, dbs, nmc, profile,
+        // indemnity, health, training_certificate, competency_evidence, other)
+        // plus a few explicit upload categories used by onboard/portal flows
+        // (proof_of_address). Type regexes provide fallback when a doc was
+        // uploaded with the wrong category.
+        cells["doc_passport"] = documentCell(
+          pickDocs(nurseDocs, ["identity"], /\b(passport|driver|driving|brp|residence permit)\b/i),
+        );
+        cells["doc_proof_of_address"] = documentCell(
+          pickDocs(nurseDocs, ["proof_of_address"], /\b(utility|bank statement|council tax|tenancy|address)\b/i),
+        );
+        cells["doc_right_to_work"] = documentCell(
+          pickDocs(nurseDocs, ["right_to_work"], /\b(right to work|share code|rtw|visa|brp)\b/i),
+        );
+        cells["doc_cv"] = documentCell(
+          pickDocs(nurseDocs, ["profile"], /\b(cv|c\.v\.|résumé|resume|curriculum vitae)\b/i),
+        );
+
+        // NMC: use verification record (source of truth); fall back to a doc.
+        const nmcVerif = nmcByNurse.get(c.id);
+        if (nmcVerif) {
+          cells["doc_nmc_register_check"] = verificationCell(nmcVerif, "renewalDate", "Verified");
+        } else {
+          cells["doc_nmc_register_check"] = documentCell(
+            pickDocs(nurseDocs, ["nmc"], /\bnmc\b/i),
+          );
+        }
+
+        // DBS: use verification record; fall back to a doc.
+        const dbsVerif = dbsByNurse.get(c.id);
+        if (dbsVerif) {
+          cells["doc_dbs_certificate"] = verificationCell(dbsVerif, null, "Verified");
+        } else {
+          cells["doc_dbs_certificate"] = documentCell(
+            pickDocs(nurseDocs, ["dbs"], /\bdbs\b/i),
+          );
         }
 
         // Professional Indemnity
