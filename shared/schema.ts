@@ -57,6 +57,8 @@ export const nurses = pgTable("nurses", {
   fastTracked: boolean("fast_tracked").default(false).notNull(),
   fastTrackReason: text("fast_track_reason"),
   passportPhotoPath: text("passport_photo_path"),
+  archivedAt: timestamp("archived_at"),
+  archivedBy: text("archived_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -7,6 +7,7 @@ import { checkDbsCertificate, isDbsConfigured, DbsUpdateServiceError } from "../
 import { isNmcAgentAvailable, validatePin, parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
 import { triggerSharePointUpload, triggerEmailNotification } from "../sharepoint-helper";
+import { triggerDocumentAnalysis } from "../document-analysis";
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
 import { classifyDocumentSmart } from "../document-ai";
 import { analyzeCertificateWithAI } from "../certificate-ai";
@@ -60,8 +61,11 @@ function agentFor(req: Request): string {
 }
 
 export function registerAdminRoutes(app: Express) {
-  app.get("/api/candidates", async (_req, res) => {
-    const result = await storage.getCandidates();
+  app.get("/api/candidates", async (req, res) => {
+    const status = String(req.query.status || "active").toLowerCase();
+    const includeArchived = req.query.includeArchived === "true" || status === "all";
+    const archivedOnly = status === "archived";
+    const result = await storage.getCandidates({ includeArchived, archivedOnly });
     res.json(result);
   });
 
@@ -170,6 +174,7 @@ export function registerAdminRoutes(app: Express) {
         uploadedBy: "admin",
       });
       await storage.createAuditLog({ nurseId: candidate.id, action: "proof_of_address_uploaded", agentName: agentFor(req), detail: { filename: req.file.originalname, documentDate, filePath } });
+      triggerDocumentAnalysis(doc.id, filePath, doc.mimeType || req.file.mimetype, "proof_of_address", doc.type, candidate.id);
       res.json(doc);
     } catch (err: any) {
       console.error("[Proof of Address Upload] Error:", err.message);
@@ -177,19 +182,13 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  // NOTE: Per-category document deletes have been unified under
+  // DELETE /api/documents/:id in server/routes/documents.ts so the
+  // file is removed from disk and a consistent audit entry is written.
   app.delete("/api/candidates/:id/proof-of-address/:docId", async (req, res) => {
-    try {
-      const candidate = await storage.getCandidate(param(req, "id"));
-      if (!candidate) return res.status(404).json({ message: "Not found" });
-      const docs = await storage.getDocuments(candidate.id);
-      const doc = docs.find(d => d.id === req.params.docId && d.category === "proof_of_address");
-      if (!doc) return res.status(404).json({ message: "Document not found" });
-      await storage.deleteDocument(doc.id);
-      await storage.createAuditLog({ nurseId: candidate.id, action: "proof_of_address_removed", agentName: agentFor(req), detail: { documentId: doc.id, filename: doc.originalFilename || doc.filename } });
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ message: "Failed to remove proof of address" });
-    }
+    res.status(410).json({
+      message: "This endpoint is retired. Use DELETE /api/documents/:id instead.",
+    });
   });
 
   app.delete("/api/candidates/:id/passport-photo", async (req, res) => {
@@ -480,6 +479,7 @@ export function registerAdminRoutes(app: Express) {
     if (result.filePath) {
       triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
       triggerEmailNotification(result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'admin', result.mimeType || undefined);
+      triggerDocumentAnalysis(result.id, result.filePath, result.mimeType || '', result.category || '', result.type, result.nurseId);
     }
     res.status(201).json(result);
   });
@@ -514,6 +514,7 @@ export function registerAdminRoutes(app: Express) {
       if (doc.filePath) {
         triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || 'general');
         triggerEmailNotification(doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || 'general', 'admin', doc.mimeType || undefined);
+        triggerDocumentAnalysis(doc.id, doc.filePath, doc.mimeType || req.file.mimetype, doc.category || '', doc.type, candidate.id);
       }
       res.status(201).json(doc);
     } catch (err: any) {
@@ -659,6 +660,7 @@ export function registerAdminRoutes(app: Express) {
       });
       triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate');
       triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'training_certificate', 'admin', req.file.mimetype);
+      triggerDocumentAnalysis(doc.id, `/api/uploads/${req.file.filename}`, req.file.mimetype, 'training_certificate', doc.type, nurseId);
 
       const autoRecorded: string[] = [];
       for (const match of parseResult.matches) {

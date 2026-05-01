@@ -23,7 +23,7 @@ import {
   Users, FileText, ShieldCheck, Clock, CheckCircle, AlertTriangle,
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
-  ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap
+  ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck
 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1243,7 +1243,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
   );
 }
 
-function RightToWorkTab({ candidateId }: { candidateId: string }) {
+function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; candidateName?: string }) {
   const { data: docs, isLoading } = useQuery<any[]>({
     queryKey: [`/api/candidates/${candidateId}/documents`],
   });
@@ -1307,25 +1307,7 @@ function RightToWorkTab({ candidateId }: { candidateId: string }) {
     },
   });
 
-  const removeMutation = useMutation({
-    mutationFn: async ({ docId, category }: { docId: string; category: string }) => {
-      const endpoint = category === "proof_of_address"
-        ? `/api/candidates/${candidateId}/proof-of-address/${docId}`
-        : `/api/candidates/${candidateId}/documents`;
-      if (category === "proof_of_address") {
-        const res = await fetch(endpoint, { method: "DELETE", credentials: "include" });
-        if (!res.ok) throw new Error("Failed to remove");
-        return res.json();
-      }
-      return {};
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
-      toast({ title: "Document removed" });
-    },
-  });
+  const { deleteDoc: deleteDocMutation, confirmName: confirmNameMutation } = useDocumentMutations(candidateId);
 
   const handleRtwFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1359,31 +1341,52 @@ function RightToWorkTab({ candidateId }: { candidateId: string }) {
         {rtwDocs.length > 0 && (
           <div className="space-y-2">
             {rtwDocs.map((doc: any) => (
-              <div key={doc.id} className="flex items-center justify-between rounded-lg border border-card-border p-3" data-testid={`doc-rtw-${doc.id}`}>
-                <div className="flex items-center gap-3">
-                  <FileCheck className="h-4 w-4 text-emerald-500" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{doc.type}</p>
-                    {doc.filePath ? (
-                      <DocumentLink doc={doc} />
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{doc.filename}</p>
+              <div key={doc.id} className="rounded-lg border border-card-border" data-testid={`doc-rtw-${doc.id}`}>
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3">
+                    <FileCheck className="h-4 w-4 text-emerald-500" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{doc.type}</p>
+                      {doc.filePath ? (
+                        <DocumentLink doc={doc} />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{doc.filename}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {doc.uploadedBy === "nurse" && <PortalBadge />}
+                    {doc.expiryDate && (
+                      <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
                     )}
+                    <DocumentAiIndicator status={doc.aiStatus} />
+                    {doc.filePath && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                        <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </Button>
+                    )}
+                    <DocumentDeleteButton
+                      docId={doc.id}
+                      filename={doc.originalFilename || doc.filename}
+                      candidateName={candidateName}
+                      onDelete={(id) => deleteDocMutation.mutate(id)}
+                      isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                    />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {doc.uploadedBy === "nurse" && <PortalBadge />}
-                  {doc.expiryDate && (
-                    <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
-                  )}
-                  {doc.filePath && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                      <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
+                <DocumentAiIssues
+                  issues={doc.aiIssues}
+                  status={doc.aiStatus}
+                  documentId={doc.id}
+                  filename={doc.originalFilename || doc.filename}
+                  candidateName={candidateName}
+                  onConfirmNameMatch={(id) => confirmNameMutation.mutate(id)}
+                  isConfirming={confirmNameMutation.isPending && confirmNameMutation.variables === doc.id}
+                  onDeleteDocument={(id) => deleteDocMutation.mutate(id)}
+                  isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                />
               </div>
             ))}
           </div>
@@ -1439,33 +1442,51 @@ function RightToWorkTab({ candidateId }: { candidateId: string }) {
               const expired = isPoaExpired(doc.expiryDate);
               const isImage = doc.mimeType?.startsWith("image/");
               return (
-                <div key={doc.id} className={`flex items-center gap-3 p-3 rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`}>
-                  {isImage && doc.filePath ? (
-                    <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
-                  ) : (
-                    <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
+                <div key={doc.id} className={`rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`} data-testid={`doc-poa-${doc.id}`}>
+                  <div className="flex items-center gap-3 p-3">
+                    {isImage && doc.filePath ? (
+                      <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
+                    ) : (
+                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
+                      {doc.expiryDate && (
+                        <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
+                          Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
+                          {expired && " — Older than 3 months"}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
-                    {doc.expiryDate && (
-                      <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
-                        Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
-                        {expired && " — Older than 3 months"}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <DocumentAiIndicator status={doc.aiStatus} />
+                      {doc.filePath && (
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                          <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                        </Button>
+                      )}
+                      <DocumentDeleteButton
+                        docId={doc.id}
+                        filename={doc.originalFilename || doc.filename}
+                        candidateName={candidateName}
+                        onDelete={(id) => deleteDocMutation.mutate(id)}
+                        isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {doc.filePath && (
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
-                        <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => removeMutation.mutate({ docId: doc.id, category: "proof_of_address" })} disabled={removeMutation.isPending}>
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  <DocumentAiIssues
+                    issues={doc.aiIssues}
+                    status={doc.aiStatus}
+                    documentId={doc.id}
+                    filename={doc.originalFilename || doc.filename}
+                    candidateName={candidateName}
+                    onConfirmNameMatch={(id) => confirmNameMutation.mutate(id)}
+                    isConfirming={confirmNameMutation.isPending && confirmNameMutation.variables === doc.id}
+                    onDeleteDocument={(id) => deleteDocMutation.mutate(id)}
+                    isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                  />
                 </div>
               );
             })}
@@ -1809,13 +1830,14 @@ function CompetencyTab({ candidateId }: { candidateId: string }) {
   );
 }
 
-function TrainingTab({ candidateId }: { candidateId: string }) {
+function TrainingTab({ candidateId, candidateName }: { candidateId: string; candidateName?: string }) {
   const { data: training, isLoading } = useQuery<MandatoryTraining[]>({
     queryKey: ["/api/candidates", candidateId, "mandatory-training"],
   });
   const { data: docs } = useQuery<any[]>({
     queryKey: [`/api/candidates/${candidateId}/documents`],
   });
+  const { deleteDoc: deleteDocMutation, confirmName: confirmNameMutation } = useDocumentMutations(candidateId);
   const { toast } = useToast();
   const [certUploading, setCertUploading] = useState(false);
   const [lastUploadResult, setLastUploadResult] = useState<{ autoRecorded: string[]; totalModulesMatched: number } | null>(null);
@@ -1967,6 +1989,43 @@ function TrainingTab({ candidateId }: { candidateId: string }) {
           </tbody>
         </table>
       </div>
+
+      {trainingCerts.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Certificate Files</h4>
+          {trainingCerts.map((doc: any) => (
+            <div key={doc.id} className="rounded-lg border border-card-border" data-testid={`doc-training-${doc.id}`}>
+              <div className="flex items-center gap-2 p-3">
+                <FileCheck className="h-4 w-4 text-emerald-500" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{doc.type}</p>
+                  <DocumentLink doc={doc} />
+                </div>
+                {doc.uploadedBy === "nurse" && <PortalBadge />}
+                <DocumentAiIndicator status={doc.aiStatus} />
+                <DocumentDeleteButton
+                  docId={doc.id}
+                  filename={doc.originalFilename || doc.filename}
+                  candidateName={candidateName}
+                  onDelete={(id) => deleteDocMutation.mutate(id)}
+                  isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                />
+              </div>
+              <DocumentAiIssues
+                issues={doc.aiIssues}
+                status={doc.aiStatus}
+                documentId={doc.id}
+                filename={doc.originalFilename || doc.filename}
+                candidateName={candidateName}
+                onConfirmNameMatch={(id) => confirmNameMutation.mutate(id)}
+                isConfirming={confirmNameMutation.isPending && confirmNameMutation.variables === doc.id}
+                onDeleteDocument={(id) => deleteDocMutation.mutate(id)}
+                isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2568,13 +2627,14 @@ function InductionTab({ candidateId }: { candidateId: string }) {
   );
 }
 
-function IndemnityTab({ candidateId }: { candidateId: string }) {
+function IndemnityTab({ candidateId, candidateName }: { candidateId: string; candidateName?: string }) {
   const { data: indemnity, isLoading } = useQuery<ProfessionalIndemnity | null>({
     queryKey: ["/api/candidates", candidateId, "professional-indemnity"],
   });
   const { data: docs } = useQuery<any[]>({
     queryKey: [`/api/candidates/${candidateId}/documents`],
   });
+  const { deleteDoc: deleteDocMutation, confirmName: confirmNameMutation } = useDocumentMutations(candidateId);
   const [provider, setProvider] = useState("");
   const [policyNum, setPolicyNum] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -2622,10 +2682,33 @@ function IndemnityTab({ candidateId }: { candidateId: string }) {
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Certificate</h4>
                 {indemnityDocs.map((doc: any) => (
-                  <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-card-border p-3">
-                    <FileCheck className="h-4 w-4 text-emerald-500" />
-                    <DocumentLink doc={doc} />
-                    {doc.uploadedBy === "nurse" && <PortalBadge />}
+                  <div key={doc.id} className="rounded-lg border border-card-border" data-testid={`doc-indemnity-${doc.id}`}>
+                    <div className="flex items-center gap-2 p-3">
+                      <FileCheck className="h-4 w-4 text-emerald-500" />
+                      <div className="flex-1 min-w-0">
+                        <DocumentLink doc={doc} />
+                      </div>
+                      {doc.uploadedBy === "nurse" && <PortalBadge />}
+                      <DocumentAiIndicator status={doc.aiStatus} />
+                      <DocumentDeleteButton
+                        docId={doc.id}
+                        filename={doc.originalFilename || doc.filename}
+                        candidateName={candidateName}
+                        onDelete={(id) => deleteDocMutation.mutate(id)}
+                        isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                      />
+                    </div>
+                    <DocumentAiIssues
+                      issues={doc.aiIssues}
+                      status={doc.aiStatus}
+                      documentId={doc.id}
+                      filename={doc.originalFilename || doc.filename}
+                      candidateName={candidateName}
+                      onConfirmNameMatch={(id) => confirmNameMutation.mutate(id)}
+                      isConfirming={confirmNameMutation.isPending && confirmNameMutation.variables === doc.id}
+                      onDeleteDocument={(id) => deleteDocMutation.mutate(id)}
+                      isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+                    />
                   </div>
                 ))}
               </div>
@@ -2700,28 +2783,194 @@ function DocumentAiIndicator({ status }: { status?: string | null }) {
   return null;
 }
 
-function DocumentAiIssues({ issues, status }: { issues?: string[] | null; status?: string | null }) {
+type AiIssueEntry = string | {
+  code?: string;
+  message?: string;
+  nameOnDocument?: string;
+  nurseName?: string;
+};
+
+function isNameMismatchIssue(entry: AiIssueEntry): entry is { code: "name_mismatch"; message?: string; nameOnDocument?: string; nurseName?: string } {
+  if (typeof entry === "string") return entry.startsWith("name_mismatch");
+  return !!(entry && typeof entry === "object" && entry.code === "name_mismatch");
+}
+
+function describeNameMismatch(entry: AiIssueEntry): { documentName?: string; profileName?: string; message: string } {
+  if (typeof entry === "string") {
+    return { message: entry };
+  }
+  return {
+    documentName: entry.nameOnDocument,
+    profileName: entry.nurseName,
+    message: entry.message || "Name on document doesn't match the candidate's profile",
+  };
+}
+
+function describeIssue(entry: AiIssueEntry): string {
+  if (typeof entry === "string") return entry;
+  return entry.message || JSON.stringify(entry);
+}
+
+function useDocumentMutations(candidateId: string) {
+  const { toast } = useToast();
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+    queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+    queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+  };
+  const deleteDoc = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await apiRequest("DELETE", `/api/documents/${docId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Document deleted" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Delete failed", description: err?.message || "Could not delete document", variant: "destructive" });
+    },
+  });
+  const confirmName = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await apiRequest("POST", `/api/documents/${docId}/confirm-name-match`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Name match confirmed", description: "The mismatch warning has been cleared." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not confirm", description: err?.message || "Please try again.", variant: "destructive" });
+    },
+  });
+  return { deleteDoc, confirmName };
+}
+
+function DocumentDeleteButton({ docId, filename, candidateName, onDelete, isDeleting }: { docId: string; filename?: string | null; candidateName?: string | null; onDelete: (docId: string) => void; isDeleting?: boolean }) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
+      disabled={isDeleting}
+      onClick={() => {
+        const fileLabel = filename || "this document";
+        const who = candidateName ? ` from ${candidateName}` : "";
+        if (window.confirm(`Delete "${fileLabel}"${who}? The file will be removed from the record and from disk and cannot be undone.`)) {
+          onDelete(docId);
+        }
+      }}
+      data-testid={`button-delete-doc-${docId}`}
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+function DocumentAiIssues({
+  issues,
+  status,
+  documentId,
+  filename,
+  candidateName,
+  onConfirmNameMatch,
+  isConfirming,
+  onDeleteDocument,
+  isDeleting,
+}: {
+  issues?: AiIssueEntry[] | null;
+  status?: string | null;
+  documentId: string;
+  filename?: string | null;
+  candidateName?: string | null;
+  onConfirmNameMatch?: (docId: string) => void;
+  isConfirming?: boolean;
+  onDeleteDocument?: (docId: string) => void;
+  isDeleting?: boolean;
+}) {
   if (!issues || !Array.isArray(issues) || issues.length === 0) return null;
   if (!status || status === "pass") return null;
 
   const borderColor = status === "fail" ? "border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-950/20" : "border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20";
   const textColor = status === "fail" ? "text-red-300" : "text-amber-300";
+  const nameMismatchEntries = issues.filter(isNameMismatchIssue);
+  const otherEntries = issues.filter((e) => !isNameMismatchIssue(e));
 
   return (
-    <div className={`mx-3 mb-1 mt-1 rounded-md border p-2 ${borderColor}`} data-testid="ai-issues-list">
-      <ul className={`text-xs space-y-1 ${textColor}`}>
-        {issues.map((issue, i) => (
-          <li key={i} className="flex items-start gap-1.5">
-            <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
-            <span>{issue}</span>
-          </li>
-        ))}
-      </ul>
+    <div className={`mx-3 mb-1 mt-1 rounded-md border p-2 space-y-2 ${borderColor}`} data-testid="ai-issues-list">
+      {nameMismatchEntries.length > 0 && (
+        <div className="space-y-1.5" data-testid={`ai-name-mismatch-${documentId}`}>
+          {nameMismatchEntries.map((entry, i) => {
+            const detail = describeNameMismatch(entry);
+            return (
+              <div key={`nm-${i}`} className="flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-100/40 dark:bg-amber-900/20 p-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                <div className="flex-1 text-xs space-y-1">
+                  <p className="font-medium text-amber-900 dark:text-amber-200">Name on document doesn't match the candidate's profile</p>
+                  {(detail.documentName || detail.profileName) && (
+                    <p className="text-amber-800 dark:text-amber-300">
+                      {detail.documentName && (<>Document: <span className="font-mono">"{detail.documentName}"</span></>)}
+                      {detail.documentName && detail.profileName && " · "}
+                      {detail.profileName && (<>Profile: <span className="font-mono">"{detail.profileName}"</span></>)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {onConfirmNameMatch && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] gap-1"
+                      disabled={isConfirming}
+                      onClick={() => onConfirmNameMatch(documentId)}
+                      data-testid={`button-confirm-name-${documentId}`}
+                    >
+                      <UserCheck className="h-3 w-3" />
+                      {isConfirming ? "Confirming..." : "Confirm it's correct"}
+                    </Button>
+                  )}
+                  {onDeleteDocument && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] gap-1 text-red-600 hover:text-red-700 border-red-300/60"
+                      disabled={isDeleting}
+                      onClick={() => {
+                        const fileLabel = filename || "this document";
+                        const who = candidateName ? ` from ${candidateName}` : "";
+                        if (window.confirm(`Delete "${fileLabel}"${who}? The file will be removed from the record and from disk and cannot be undone.`)) {
+                          onDeleteDocument(documentId);
+                        }
+                      }}
+                      data-testid={`button-delete-doc-mismatch-${documentId}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {isDeleting ? "Deleting..." : "Delete document"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {otherEntries.length > 0 && (
+        <ul className={`text-xs space-y-1 ${textColor}`}>
+          {otherEntries.map((issue, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span>{describeIssue(issue)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function DocumentsTab({ candidateId }: { candidateId: string }) {
+function DocumentsTab({ candidateId, candidateName }: { candidateId: string; candidateName?: string }) {
   const { data: docs, isLoading } = useQuery<any[]>({
     queryKey: [`/api/candidates/${candidateId}/documents`],
     refetchInterval: (query) => {
@@ -2732,6 +2981,7 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
   });
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
+  const { deleteDoc: deleteDocMutation, confirmName: confirmNameMutation } = useDocumentMutations(candidateId);
   const [lastClassification, setLastClassification] = useState<{
     detectedCategory: string;
     detectedType: string;
@@ -2968,9 +3218,34 @@ function DocumentsTab({ candidateId }: { candidateId: string }) {
                       </a>
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    onClick={() => {
+                      if (window.confirm(`Delete "${doc.originalFilename || doc.filename}"? This removes it from the candidate's record and from disk and cannot be undone.`)) {
+                        deleteDocMutation.mutate(doc.id);
+                      }
+                    }}
+                    disabled={deleteDocMutation.isPending}
+                    data-testid={`button-delete-doc-${doc.id}`}
+                    title="Delete document"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <DocumentAiIssues issues={doc.aiIssues} status={doc.aiStatus} />
+              <DocumentAiIssues
+                issues={doc.aiIssues}
+                status={doc.aiStatus}
+                documentId={doc.id}
+                filename={doc.originalFilename || doc.filename}
+                candidateName={candidateName}
+                onConfirmNameMatch={(id) => confirmNameMutation.mutate(id)}
+                isConfirming={confirmNameMutation.isPending && confirmNameMutation.variables === doc.id}
+                onDeleteDocument={(id) => deleteDocMutation.mutate(id)}
+                isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
+              />
             </div>
           ))}
         </div>
@@ -3118,6 +3393,40 @@ export default function CandidateDetail() {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/nurses/${candidateId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      toast({ title: "Candidate archived", description: "They've been hidden from the active list — you can restore them at any time." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Archive failed", description: err?.message || "Could not archive candidate", variant: "destructive" });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/nurses/${candidateId}/restore`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      toast({ title: "Candidate restored", description: "They're back on the active list." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Restore failed", description: err?.message || "Could not restore candidate", variant: "destructive" });
+    },
+  });
+
   if (candidateLoading || stateLoading) {
     return (
       <AppLayout>
@@ -3162,10 +3471,15 @@ export default function CandidateDetail() {
               {candidate.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
             </div>
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-xl font-bold text-foreground" data-testid="text-candidate-name">{candidate.fullName}</h1>
                 <StatusBadge status={candidate.currentStage} isStage />
                 <StatusBadge status={candidate.status} />
+                {candidate.archivedAt && (
+                  <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50" data-testid="badge-candidate-archived">
+                    <Archive className="h-3 w-3 mr-1" /> Archived{candidate.archivedBy ? ` by ${candidate.archivedBy}` : ""}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                 {candidate.band && <span>Band {candidate.band}</span>}
@@ -3202,6 +3516,33 @@ export default function CandidateDetail() {
                 <Mail className="h-4 w-4 mr-1.5" />
                 {generateLinkMutation.isPending ? "Sending..." : "Send Portal Invite"}
               </Button>
+              {candidate.archivedAt ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => restoreMutation.mutate()}
+                  disabled={restoreMutation.isPending}
+                  data-testid="button-restore-candidate"
+                >
+                  <ArchiveRestore className="h-4 w-4 mr-1.5" />
+                  {restoreMutation.isPending ? "Restoring..." : "Restore"}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm(`Archive ${candidate.fullName}? They'll be hidden from the active list but can be restored at any time.`)) {
+                      archiveMutation.mutate();
+                    }
+                  }}
+                  disabled={archiveMutation.isPending}
+                  data-testid="button-archive-candidate"
+                >
+                  <Archive className="h-4 w-4 mr-1.5" />
+                  {archiveMutation.isPending ? "Archiving..." : "Archive"}
+                </Button>
+              )}
             </div>
             {magicLinks && magicLinks.length > 0 && (
               <div className="text-xs text-muted-foreground text-right">
@@ -3687,12 +4028,12 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
             <TabsContent value="nmc"><NmcTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="dbs"><DbsTab candidateId={candidateId} /></TabsContent>
-            <TabsContent value="right_to_work"><RightToWorkTab candidateId={candidateId} /></TabsContent>
+            <TabsContent value="right_to_work"><RightToWorkTab candidateId={candidateId} candidateName={candidate.fullName} /></TabsContent>
             <TabsContent value="profile"><ProfileTab candidate={candidate} candidateId={candidateId} /></TabsContent>
             <TabsContent value="competency"><CompetencyTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="health"><HealthTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="references"><ReferencesTab candidateId={candidateId} /></TabsContent>
-            <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} /></TabsContent>
+            <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} candidateName={candidate.fullName} /></TabsContent>
           </div>
         </Tabs>
         </>
@@ -3715,7 +4056,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <div className="mt-6">
               <TabsContent value="induction"><InductionTab candidateId={candidateId} /></TabsContent>
               <TabsContent value="training_compliance"><TrainingComplianceTab candidateId={candidateId} /></TabsContent>
-              <TabsContent value="documents"><DocumentsTab candidateId={candidateId} /></TabsContent>
+              <TabsContent value="documents"><DocumentsTab candidateId={candidateId} candidateName={candidate.fullName} /></TabsContent>
               <TabsContent value="audit"><AuditTimeline candidateId={candidateId} /></TabsContent>
             </div>
           </Tabs>

@@ -111,6 +111,13 @@ export async function ingestExistingFile(opts: {
     }
   }
 
+  try {
+    const { triggerDocumentAnalysis } = await import("./document-analysis");
+    triggerDocumentAnalysis(doc.id, filePath, mimeType, detectedCategory, detectedType, nurseId);
+  } catch (e) {
+    console.warn("[ingestExistingFile] AI analysis trigger failed (non-fatal)", e);
+  }
+
   // ── 4. CV / résumé → employment + education ───────────────────────────
   let cvEntriesAdded = 0;
   let cvEntriesSkipped = 0;

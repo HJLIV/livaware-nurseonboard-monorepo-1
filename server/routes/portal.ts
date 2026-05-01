@@ -8,51 +8,13 @@ import { triggerSharePointUpload, triggerEmailNotification } from "../sharepoint
 import { parsePassportImage } from "../passport-parser";
 import { analyzeCertificateWithAI, generateCompetencyGuidance } from "../certificate-ai";
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
-import { analyzeDocumentCompleteness } from "../document-ai";
+import { triggerDocumentAnalysis } from "../document-analysis";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 import type { HealthDeclaration } from "@shared/schema";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { uploadsDir } from "../middleware";
-
-const ANALYZABLE_CATEGORIES = ["dbs", "indemnity", "right_to_work", "identity", "nmc", "health", "competency_evidence"];
-
-function triggerDocumentAnalysis(documentId: string, filePath: string, mimeType: string, category: string, documentType: string) {
-  const analyzable = ANALYZABLE_CATEGORIES.includes(category);
-  if (!analyzable) return;
-
-  const supportedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
-  if (!supportedTypes.includes(mimeType)) return;
-
-  storage.updateDocument(documentId, { aiStatus: "pending" } as any).catch(() => {});
-
-  let resolvedPath = filePath;
-  if (filePath.startsWith("/api/uploads/")) {
-    resolvedPath = path.join(uploadsDir, path.basename(filePath));
-  } else {
-    resolvedPath = path.resolve(filePath);
-  }
-
-  setImmediate(async () => {
-    try {
-      const result = await analyzeDocumentCompleteness(resolvedPath, mimeType, category, documentType);
-      await storage.updateDocument(documentId, {
-        aiStatus: result.status,
-        aiIssues: result.issues,
-        aiAnalyzedAt: new Date(),
-      } as any);
-      console.log(`[Document AI] Analyzed doc ${documentId}: ${result.status} (${result.issues.length} issues)`);
-    } catch (err: any) {
-      console.error(`[Document AI] Failed to analyze doc ${documentId}:`, err.message);
-      await storage.updateDocument(documentId, {
-        aiStatus: null,
-        aiIssues: null,
-        aiAnalyzedAt: null,
-      } as any).catch(() => {});
-    }
-  });
-}
 
 function triageHealthDeclarationInBackground(declaration: HealthDeclaration) {
   if (!isTriageAvailable()) {
@@ -229,7 +191,7 @@ export function registerPortalRoutes(app: Express) {
       if (doc.filePath) {
         triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address');
         triggerEmailNotification(doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address', 'nurse', doc.mimeType || undefined);
-        triggerDocumentAnalysis(doc.id, doc.filePath, doc.mimeType || '', 'proof_of_address', 'Proof of Address');
+        triggerDocumentAnalysis(doc.id, doc.filePath, doc.mimeType || '', 'proof_of_address', 'Proof of Address', doc.nurseId);
       }
       res.status(201).json(doc);
     } catch (err: any) {
@@ -263,7 +225,7 @@ export function registerPortalRoutes(app: Express) {
     if (result.filePath) {
       triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
       triggerEmailNotification(result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'nurse', result.mimeType || undefined);
-      triggerDocumentAnalysis(result.id, result.filePath, result.mimeType || '', data.category || '', result.type);
+      triggerDocumentAnalysis(result.id, result.filePath, result.mimeType || '', data.category || '', result.type, result.nurseId);
     }
     res.status(201).json(result);
   });

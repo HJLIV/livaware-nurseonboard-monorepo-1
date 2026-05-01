@@ -1,4 +1,4 @@
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   candidates, nmcVerifications, dbsVerifications, competencyDeclarations,
@@ -25,10 +25,12 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
-  getCandidates(): Promise<Candidate[]>;
+  getCandidates(opts?: { includeArchived?: boolean; archivedOnly?: boolean }): Promise<Candidate[]>;
   getCandidate(id: string): Promise<Candidate | undefined>;
   createCandidate(data: InsertCandidate): Promise<Candidate>;
   updateCandidate(id: string, data: Partial<InsertCandidate>): Promise<Candidate | undefined>;
+  archiveCandidate(id: string, archivedBy: string): Promise<Candidate | undefined>;
+  restoreCandidate(id: string): Promise<Candidate | undefined>;
 
   getNmcVerification(candidateId: string): Promise<NmcVerification | undefined>;
   createNmcVerification(data: InsertNmcVerification): Promise<NmcVerification>;
@@ -123,8 +125,14 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getCandidates(): Promise<Candidate[]> {
-    return db.select().from(candidates).orderBy(desc(candidates.createdAt));
+  async getCandidates(opts?: { includeArchived?: boolean; archivedOnly?: boolean }): Promise<Candidate[]> {
+    if (opts?.archivedOnly) {
+      return db.select().from(candidates).where(isNotNull(candidates.archivedAt)).orderBy(desc(candidates.createdAt));
+    }
+    if (opts?.includeArchived) {
+      return db.select().from(candidates).orderBy(desc(candidates.createdAt));
+    }
+    return db.select().from(candidates).where(isNull(candidates.archivedAt)).orderBy(desc(candidates.createdAt));
   }
 
   async getCandidate(id: string): Promise<Candidate | undefined> {
@@ -139,6 +147,22 @@ export class DatabaseStorage implements IStorage {
 
   async updateCandidate(id: string, data: Partial<InsertCandidate>): Promise<Candidate | undefined> {
     const [result] = await db.update(candidates).set({ ...data, updatedAt: new Date() }).where(eq(candidates.id, id)).returning();
+    return result;
+  }
+
+  async archiveCandidate(id: string, archivedBy: string): Promise<Candidate | undefined> {
+    const [result] = await db.update(candidates)
+      .set({ archivedAt: new Date(), archivedBy, updatedAt: new Date() })
+      .where(eq(candidates.id, id))
+      .returning();
+    return result;
+  }
+
+  async restoreCandidate(id: string): Promise<Candidate | undefined> {
+    const [result] = await db.update(candidates)
+      .set({ archivedAt: null, archivedBy: null, updatedAt: new Date() })
+      .where(eq(candidates.id, id))
+      .returning();
     return result;
   }
 

@@ -1,7 +1,7 @@
 import type { Express, Request } from "express";
 import { db } from "../db";
 import { nurses, portalLinks, auditLogs, preboardAssessments, nmcVerifications, dbsVerifications } from "@shared/schema";
-import { eq, desc, and, gt } from "drizzle-orm";
+import { eq, desc, and, gt, isNull, isNotNull } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
@@ -21,8 +21,17 @@ function agentFor(req: Request): string {
 }
 
 export function registerNurseRoutes(app: Express) {
-  app.get("/api/nurses", async (_req, res) => {
-    const result = await db.select().from(nurses).orderBy(desc(nurses.createdAt));
+  app.get("/api/nurses", async (req, res) => {
+    const status = String(req.query.status || "active").toLowerCase();
+    const includeArchived = req.query.includeArchived === "true" || status === "all";
+    const archivedOnly = status === "archived";
+    let query = db.select().from(nurses).$dynamic();
+    if (archivedOnly) {
+      query = query.where(isNotNull(nurses.archivedAt));
+    } else if (!includeArchived) {
+      query = query.where(isNull(nurses.archivedAt));
+    }
+    const result = await query.orderBy(desc(nurses.createdAt));
     res.json(result);
   });
 
@@ -75,10 +84,36 @@ export function registerNurseRoutes(app: Express) {
   app.delete("/api/nurses/:id", async (req, res) => {
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
-    await db.delete(portalLinks).where(eq(portalLinks.nurseId, req.params.id));
-    await db.delete(auditLogs).where(eq(auditLogs.nurseId, req.params.id));
-    await db.delete(nurses).where(eq(nurses.id, req.params.id));
-    res.json({ ok: true });
+    if (nurse.archivedAt) {
+      return res.json({ ok: true, alreadyArchived: true, nurse });
+    }
+    const [updated] = await db.update(nurses)
+      .set({ archivedAt: new Date(), archivedBy: agentFor(req), updatedAt: new Date() })
+      .where(eq(nurses.id, req.params.id))
+      .returning();
+    await logAction(nurse.id, "admin", "nurse_archived", agentFor(req), {
+      name: nurse.fullName,
+      email: nurse.email,
+    });
+    res.json({ ok: true, nurse: updated });
+  });
+
+  app.post("/api/nurses/:id/restore", async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    if (!nurse.archivedAt) {
+      return res.status(400).json({ message: "Nurse is not archived" });
+    }
+    const [updated] = await db.update(nurses)
+      .set({ archivedAt: null, archivedBy: null, updatedAt: new Date() })
+      .where(eq(nurses.id, req.params.id))
+      .returning();
+    await logAction(nurse.id, "admin", "nurse_restored", agentFor(req), {
+      name: nurse.fullName,
+      previouslyArchivedAt: nurse.archivedAt?.toISOString?.() || null,
+      previouslyArchivedBy: nurse.archivedBy || null,
+    });
+    res.json({ ok: true, nurse: updated });
   });
 
   app.post("/api/nurses/:id/portal-link", async (req, res) => {

@@ -20,7 +20,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getStageDisplayName } from "@shared/schema";
 import { RunComplianceCheckOnAllButton, SendAllPortalInvitesButton, RecoverDocumentsButton } from "@/pages/candidates";
 
@@ -33,6 +34,8 @@ interface Nurse {
   onboardStatus: string;
   arcadeStatus: string;
   createdAt: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 }
 
 const stageConfig: Record<string, { bg: string; text: string; dot: string }> = {
@@ -172,7 +175,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
   );
 }
 
-function NurseCard({ nurse, onClick, onAdvance, isAdvancing, index }: { nurse: Nurse; onClick: () => void; onAdvance?: () => void; isAdvancing?: boolean; index: number }) {
+function NurseCard({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestore, isArchiving, isRestoring, index }: { nurse: Nurse; onClick: () => void; onAdvance?: () => void; isAdvancing?: boolean; onArchive?: () => void; onRestore?: () => void; isArchiving?: boolean; isRestoring?: boolean; index: number }) {
   const stage = stageConfig[nurse.currentStage] || stageConfig.preboard;
   const nameParts = nurse.fullName.split(" ");
   const initials = nameParts.length >= 2
@@ -223,18 +226,51 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, index }: { nurse: N
                   <Calendar className="h-2.5 w-2.5" />
                   {new Date(nurse.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                 </div>
-                {nurse.currentStage === "preboard" && onAdvance && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[10px] gap-1 px-2"
-                    onClick={(e) => { e.stopPropagation(); onAdvance(); }}
-                    disabled={isAdvancing}
-                  >
-                    {isAdvancing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ChevronRight className="h-2.5 w-2.5" />}
-                    Advance to Onboarding
-                  </Button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {nurse.currentStage === "preboard" && onAdvance && !nurse.archivedAt && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1 px-2"
+                      onClick={(e) => { e.stopPropagation(); onAdvance(); }}
+                      disabled={isAdvancing}
+                    >
+                      {isAdvancing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ChevronRight className="h-2.5 w-2.5" />}
+                      Advance to Onboarding
+                    </Button>
+                  )}
+                  {nurse.archivedAt && onRestore && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1 px-2"
+                      onClick={(e) => { e.stopPropagation(); onRestore(); }}
+                      disabled={isRestoring}
+                      data-testid={`button-restore-nurse-${nurse.id}`}
+                    >
+                      {isRestoring ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ArchiveRestore className="h-2.5 w-2.5" />}
+                      Restore
+                    </Button>
+                  )}
+                  {!nurse.archivedAt && onArchive && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px] gap-1 px-2 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Archive ${nurse.fullName}? They'll be hidden from the active list and can be restored later.`)) {
+                          onArchive();
+                        }
+                      }}
+                      disabled={isArchiving}
+                      data-testid={`button-archive-nurse-${nurse.id}`}
+                    >
+                      {isArchiving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Archive className="h-2.5 w-2.5" />}
+                      Archive
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -246,13 +282,57 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, index }: { nurse: N
 
 export default function NursesPage() {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "archived">("active");
   const [, setLocation] = useLocation();
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const { data: nursesList, isLoading } = useQuery<Nurse[]>({
-    queryKey: ["/api/nurses"],
+    queryKey: ["/api/nurses", { status: statusFilter }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/nurses?status=${statusFilter}`);
+      return res.json();
+    },
+  });
+  const { data: archivedList } = useQuery<Nurse[]>({
+    queryKey: ["/api/nurses", { status: "archived" }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/nurses?status=archived");
+      return res.json();
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (nurseId: string) => {
+      const res = await apiRequest("DELETE", `/api/nurses/${nurseId}`);
+      return res.json();
+    },
+    onSuccess: (_data, nurseId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      const archived = nursesList?.find((n) => n.id === nurseId);
+      toast({ title: "Candidate archived", description: archived ? `${archived.fullName} moved to Archived.` : undefined });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Archive failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (nurseId: string) => {
+      const res = await apiRequest("POST", `/api/nurses/${nurseId}/restore`, {});
+      return res.json();
+    },
+    onSuccess: (_data, nurseId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      const restored = nursesList?.find((n) => n.id === nurseId);
+      toast({ title: "Candidate restored", description: restored ? `${restored.fullName} is active again.` : undefined });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Restore failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const advanceMutation = useMutation({
@@ -338,7 +418,21 @@ export default function NursesPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 animate-fade-in-up animate-delay-100">
+        <div className="flex items-center gap-4 animate-fade-in-up animate-delay-100 flex-wrap">
+          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as "active" | "archived")}>
+            <TabsList data-testid="tabs-nurse-status">
+              <TabsTrigger value="active" data-testid="tab-status-active">Active</TabsTrigger>
+              <TabsTrigger value="archived" data-testid="tab-status-archived" className="gap-1.5">
+                <Archive className="h-3 w-3" />
+                Archived
+                {archivedList && archivedList.length > 0 && (
+                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-semibold tabular-nums ml-1">
+                    {archivedList.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
             <Input
@@ -370,6 +464,10 @@ export default function NursesPage() {
                 onClick={() => setLocation(`/candidates/${nurse.id}`)}
                 onAdvance={() => advanceMutation.mutate(nurse.id)}
                 isAdvancing={advancingId === nurse.id}
+                onArchive={() => archiveMutation.mutate(nurse.id)}
+                onRestore={() => restoreMutation.mutate(nurse.id)}
+                isArchiving={archiveMutation.isPending && archiveMutation.variables === nurse.id}
+                isRestoring={restoreMutation.isPending && restoreMutation.variables === nurse.id}
                 index={i}
               />
             ))}

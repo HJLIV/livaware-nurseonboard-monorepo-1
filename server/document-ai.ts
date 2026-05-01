@@ -20,6 +20,110 @@ export interface DocumentAnalysisResult {
   confidence: "high" | "medium" | "low";
 }
 
+/**
+ * Normalise a person's name for comparison: lowercase, strip diacritics,
+ * remove punctuation, collapse whitespace, drop single-character middle
+ * initials and common suffixes.
+ */
+export function normalizeNameTokens(name: string | null | undefined): string[] {
+  if (!name) return [];
+  const stripped = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s'-]/g, " ")
+    .replace(/[-']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped) return [];
+  const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+  const TITLES = new Set([
+    "mr", "mrs", "ms", "miss", "mx", "dr", "prof", "rev",
+    "rn", "rgn", "rnc", "msc", "bsc", "phd", "mb", "bsn",
+  ]);
+  return stripped
+    .split(" ")
+    .filter((tok) => tok.length > 0)
+    .filter((tok) => !TITLES.has(tok))
+    .filter((tok) => !SUFFIXES.has(tok))
+    .filter((tok) => tok.length > 1); // drop middle initials like "j"
+}
+
+export interface NameMatchResult {
+  match: boolean;
+  reason: "match" | "missing_document_name" | "missing_profile_name" | "mismatch";
+  documentTokens: string[];
+  profileTokens: string[];
+}
+
+/**
+ * Compare a name extracted from a document against the nurse's profile name.
+ * Case-insensitive, ignores punctuation, middle initials, common titles and
+ * suffixes, and accepts first/last name reordering. The document name is
+ * considered a match if every meaningful token from it is present in the
+ * profile name (so "Jane Doe" on a doc matches "Jane Mary Doe" on file).
+ */
+export function compareNamesForMatch(
+  documentName: string | null | undefined,
+  profileName: string | null | undefined,
+): NameMatchResult {
+  const documentTokens = normalizeNameTokens(documentName);
+  const profileTokens = normalizeNameTokens(profileName);
+  if (documentTokens.length === 0) {
+    return { match: true, reason: "missing_document_name", documentTokens, profileTokens };
+  }
+  if (profileTokens.length === 0) {
+    return { match: true, reason: "missing_profile_name", documentTokens, profileTokens };
+  }
+  const profileSet = new Set(profileTokens);
+  const documentSet = new Set(documentTokens);
+  const documentSubsetOfProfile = documentTokens.every((tok) => profileSet.has(tok));
+  const profileSubsetOfDocument = profileTokens.every((tok) => documentSet.has(tok));
+  if (documentSubsetOfProfile || profileSubsetOfDocument) {
+    return { match: true, reason: "match", documentTokens, profileTokens };
+  }
+  return { match: false, reason: "mismatch", documentTokens, profileTokens };
+}
+
+const NAME_FIELD_KEYS = [
+  "fullName",
+  "registeredName",
+  "policyholderName",
+  "attendeeName",
+  "patientName",
+  "assessedName",
+];
+
+/**
+ * Pick a name from the AI's extractedFields. The CATEGORY_PROMPTS request
+ * fullName for most categories but a few use category-specific keys (e.g.
+ * registeredName for NMC, policyholderName for indemnity).
+ */
+export function pickExtractedName(
+  extractedFields: Record<string, string | null> | null | undefined,
+): string | null {
+  if (!extractedFields) return null;
+  for (const key of NAME_FIELD_KEYS) {
+    const v = extractedFields[key];
+    if (v && typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+export interface DocumentAiIssue {
+  code: string;
+  message: string;
+  nameOnDocument?: string;
+  nurseName?: string;
+}
+
+/**
+ * Issues are persisted as a heterogeneous array containing either plain
+ * strings (legacy AI-detected issues like "expired") or structured objects
+ * with a `code` (e.g. `name_mismatch`).
+ */
+export type DocumentAiIssueEntry = string | DocumentAiIssue;
+
 const CATEGORY_PROMPTS: Record<string, string> = {
   dbs: `This should be a UK Disclosure and Barring Service (DBS) certificate. Check for:
 - Is this actually a DBS certificate (not some other document)?
