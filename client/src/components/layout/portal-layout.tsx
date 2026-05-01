@@ -51,7 +51,10 @@ export function PortalLayout({
           <div className="w-full bg-secondary rounded-full h-2 overflow-hidden" data-testid="portal-progress-bar">
             <div
               className="h-full bg-primary rounded-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                width: `${progressPercent}%`,
+                backgroundColor: `color-mix(in oklch, hsl(var(--primary)), #5DB88A ${progressPercent}%)`,
+              }}
             />
           </div>
         </div>
