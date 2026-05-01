@@ -1,8 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { pool } from "./db";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -35,8 +37,16 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const PgSession = connectPgSimple(session);
+
 app.use(
   session({
+    store: new PgSession({
+      pool,
+      tableName: "session",
+      createTableIfMissing: true,
+      pruneSessionInterval: 60 * 15,
+    }),
     secret: (() => {
       const secret = process.env.SESSION_SECRET;
       if (!secret && process.env.NODE_ENV === "production") {
