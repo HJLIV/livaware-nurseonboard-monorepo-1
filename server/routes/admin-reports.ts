@@ -1,5 +1,5 @@
-import type { Express } from "express";
-import { eq, inArray } from "drizzle-orm";
+import type { Express, Request } from "express";
+import { eq, inArray, sql, and, desc } from "drizzle-orm";
 import { db } from "../db";
 import {
   arcadeUsers,
@@ -7,11 +7,34 @@ import {
   assignments,
   attempts,
   clearances,
+  documents,
   MANDATORY_TRAINING_MODULES,
   COMPETENCY_MATRIX,
 } from "@shared/schema";
 import { storage } from "../storage";
 import { requireAdmin } from "../middleware";
+import { isOutlookConfigured } from "../outlook";
+import { evaluateMandatoryTrainingCell } from "../training-status";
+import {
+  computeOutstandingTrainingForNurse,
+  renderChaseEmail,
+  sendTrainingChaseEmail,
+  scanMailboxForChaseRepliesAll,
+  mintChasePortalLinkForNurse,
+  TRAINING_CHASE_DEFAULT_SUBJECT,
+  TRAINING_CHASE_DEFAULT_BODY,
+  type OutstandingModule,
+} from "../training-notifications";
+
+function portalBaseUrlFromReq(req: Request): string {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = (req.headers["host"] as string) || "localhost:5000";
+  return `${protocol}://${host}`;
+}
+
+function agentNameFor(req: Request): string {
+  return (req as any).session?.username || "admin";
+}
 
 type CellStatus = "green" | "amber" | "red" | "grey";
 
@@ -398,47 +421,12 @@ export function registerAdminReportsRoutes(app: Express) {
         const nurseTraining = trainingByNurse.get(c.id) ?? [];
 
         for (const mod of MANDATORY_TRAINING_MODULES) {
-          const records = nurseTraining.filter((t) => t.moduleName === mod.name);
-          if (records.length === 0) {
-            cells[`mt_${mod.name}`] = { status: "red", label: "Not recorded" };
-            continue;
-          }
-          // Pick the record with the latest expiryDate (or fall back to one with completedDate)
-          const sorted = [...records].sort((a, b) => {
-            const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : 0;
-            const be = b.expiryDate ? new Date(b.expiryDate).getTime() : 0;
-            return be - ae;
-          });
-          const rec = sorted[0];
-          const days = daysUntil(rec.expiryDate);
-
-          if (!rec.certificateUploaded && !rec.completedDate) {
-            cells[`mt_${mod.name}`] = { status: "amber", label: "Started — no cert" };
-          } else if (rec.expiryDate && days !== null && days < 0) {
-            cells[`mt_${mod.name}`] = {
-              status: "red",
-              label: `Expired ${formatDate(rec.expiryDate)}`,
-              date: rec.expiryDate,
-            };
-          } else if (rec.expiryDate && days !== null && days <= 30) {
-            cells[`mt_${mod.name}`] = {
-              status: "amber",
-              label: `Expires ${formatDate(rec.expiryDate)}`,
-              date: rec.expiryDate,
-            };
-          } else if (rec.certificateUploaded) {
-            cells[`mt_${mod.name}`] = {
-              status: "green",
-              label: rec.expiryDate ? `Valid to ${formatDate(rec.expiryDate)}` : "Certificate uploaded",
-              date: rec.expiryDate,
-            };
-          } else {
-            cells[`mt_${mod.name}`] = {
-              status: "amber",
-              label: rec.completedDate ? `Completed ${formatDate(rec.completedDate)} — no cert` : "Pending",
-              date: rec.completedDate,
-            };
-          }
+          const cell = evaluateMandatoryTrainingCell(nurseTraining, mod.name);
+          cells[`mt_${mod.name}`] = {
+            status: cell.status,
+            label: cell.label,
+            ...(cell.date ? { date: cell.date } : {}),
+          };
         }
 
         return {
@@ -460,6 +448,283 @@ export function registerAdminReportsRoutes(app: Express) {
     } catch (err: any) {
       console.error("[admin-reports] training-matrix failed:", err);
       res.status(500).json({ message: err?.message || "Failed to build training matrix" });
+    }
+  });
+
+  // ==================== TRAINING CHASE-EMAIL NOTIFICATIONS ====================
+
+  // Map of "last chase notification" per nurse, used by the matrix UI to
+  // render a "Last chased N days ago" indicator under the candidate name.
+  app.get("/api/admin/reports/training-notifications/last-chased", requireAdmin, async (_req, res) => {
+    try {
+      const map = await storage.getLatestTrainingNotifications();
+      const out: Record<string, {
+        sentAt: string;
+        sentBy: string | null;
+        recipientEmail: string;
+        modulesIncluded: string[];
+        moduleCount: number;
+      }> = {};
+      for (const [nurseId, n] of Array.from(map.entries())) {
+        out[nurseId] = {
+          sentAt: n.sentAt.toISOString(),
+          sentBy: n.sentBy ?? null,
+          recipientEmail: n.recipientEmail,
+          modulesIncluded: Array.isArray(n.modulesIncluded) ? (n.modulesIncluded as string[]) : [],
+          moduleCount: Array.isArray(n.modulesIncluded) ? (n.modulesIncluded as string[]).length : 0,
+        };
+      }
+
+      // Per-nurse counters for chase-reply attachments that need admin
+      // attention on the matrix:
+      //   - needsReviewCount     → AI couldn't auto-attach (cell still red)
+      //   - autoAttachedCount    → AI auto-attached at non-high confidence
+      //                            (cell is now green, but admin should
+      //                            confirm the module/expiry assignment)
+      const pendingRows = await db
+        .select({
+          nurseId: documents.nurseId,
+          uploadedAt: documents.uploadedAt,
+          aiIssues: documents.aiIssues,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.aiStatus, "warning"),
+            sql`(
+              ${documents.aiIssues} @> '[{"code":"chase_reply_low_confidence"}]'::jsonb OR
+              ${documents.aiIssues} @> '[{"code":"chase_reply_upsert_failed"}]'::jsonb OR
+              ${documents.aiIssues} @> '[{"code":"chase_reply_auto_attached"}]'::jsonb
+            )`,
+          ),
+        )
+        .orderBy(desc(documents.uploadedAt));
+
+      const pendingReviewByNurse: Record<string, {
+        needsReviewCount: number;
+        autoAttachedCount: number;
+        latestAt: string;
+      }> = {};
+      for (const row of pendingRows) {
+        const issues = Array.isArray(row.aiIssues) ? (row.aiIssues as any[]) : [];
+        const isAutoAttached = issues.some(
+          (e) => e && typeof e === "object" && e.code === "chase_reply_auto_attached",
+        );
+        const isNeedsReview = issues.some(
+          (e) =>
+            e &&
+            typeof e === "object" &&
+            (e.code === "chase_reply_low_confidence" || e.code === "chase_reply_upsert_failed"),
+        );
+        const uploadedIso = row.uploadedAt?.toISOString?.() ?? new Date().toISOString();
+        const existing = pendingReviewByNurse[row.nurseId] || {
+          needsReviewCount: 0,
+          autoAttachedCount: 0,
+          latestAt: uploadedIso,
+        };
+        if (isNeedsReview) existing.needsReviewCount += 1;
+        if (isAutoAttached) existing.autoAttachedCount += 1;
+        pendingReviewByNurse[row.nurseId] = existing;
+      }
+
+      res.json({
+        outlookConfigured: isOutlookConfigured(),
+        lastChasedByNurse: out,
+        pendingReviewByNurse,
+      });
+    } catch (err: any) {
+      console.error("[admin-reports] last-chased failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load chase history" });
+    }
+  });
+
+  // Build a preview payload the admin dialog uses to seed editable subject /
+  // body fields. Two modes:
+  //   - { nurseId: "..." }                → preview for one nurse
+  //   - { mode: "bulk" }                  → preview for ALL nurses currently
+  //                                         in red/amber on at least one module
+  app.post("/api/admin/reports/training-notifications/prepare", requireAdmin, async (req, res) => {
+    try {
+      const { nurseId, nurseIds } = req.body || {};
+      const allNurses = await storage.getCandidates();
+      const nurseMap = new Map(allNurses.map((n) => [n.id, n]));
+
+      // Resolve the list of candidate IDs the admin actually wants to chase.
+      // The UI sends the explicit nurseIds for both single ("Notify by email"
+      // on one row) and bulk ("Notify all (N)" — which sends the list of
+      // nurseIds currently visible-and-with-gaps in the matrix). This avoids
+      // the previous mismatch where bulk mode silently included candidates
+      // that were filtered out of the visible matrix.
+      let requestedIds: string[] = [];
+      if (Array.isArray(nurseIds) && nurseIds.length > 0) {
+        requestedIds = nurseIds.filter((x: unknown): x is string => typeof x === "string");
+      } else if (typeof nurseId === "string" && nurseId) {
+        requestedIds = [nurseId];
+      } else {
+        return res.status(400).json({ message: "Provide { nurseIds: string[] } (or { nurseId } for single)." });
+      }
+
+      const targets = requestedIds.map((id) => nurseMap.get(id)).filter((n): n is NonNullable<typeof n> => !!n);
+      if (targets.length === 0) {
+        return res.status(404).json({ message: "None of the requested candidates were found." });
+      }
+
+      // Mint a real per-nurse secure portal link per recipient so the
+      // preview shows the actual secure URL the nurse will receive.
+      // Tokens carry the standard 30-day expiry of all portal links;
+      // a separate fresh token is minted at send time so an abandoned
+      // preview can't bind the eventual outgoing email.
+      const portalBaseUrl = portalBaseUrlFromReq(req);
+      const sentBy = agentNameFor(req);
+      const items = await Promise.all(
+        targets.map(async (n) => {
+          const modules = await computeOutstandingTrainingForNurse(n.id);
+          let portalUrl: string | null = null;
+          let portalExpiresAt: string | null = null;
+          if (n.email && modules.length > 0) {
+            try {
+              const minted = await mintChasePortalLinkForNurse({
+                nurseId: n.id,
+                sentBy,
+                portalBaseUrl,
+              });
+              portalUrl = minted.portalUrl;
+              portalExpiresAt = minted.expiresAt.toISOString();
+            } catch (e) {
+              console.warn(
+                "[admin-reports] prepare: could not mint portal link for",
+                n.id,
+                e instanceof Error ? e.message : String(e),
+              );
+            }
+          }
+          return {
+            nurseId: n.id,
+            name: n.fullName,
+            email: n.email || null,
+            modules,
+            moduleCount: modules.length,
+            portalUrl,
+            portalExpiresAt,
+          };
+        }),
+      );
+
+      const sample = items[0];
+      const sampleExpiry = sample?.portalExpiresAt
+        ? new Date(sample.portalExpiresAt)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const samplePreview = sample
+        ? renderChaseEmail(
+            { subject: TRAINING_CHASE_DEFAULT_SUBJECT, body: TRAINING_CHASE_DEFAULT_BODY },
+            {
+              nurseName: sample.name,
+              modules: sample.modules,
+              portalUrl: sample.portalUrl ?? "(no email on file — link cannot be generated)",
+              portalExpiresAt: sampleExpiry,
+            },
+          )
+        : { subject: TRAINING_CHASE_DEFAULT_SUBJECT, body: TRAINING_CHASE_DEFAULT_BODY };
+
+      res.json({
+        outlookConfigured: isOutlookConfigured(),
+        defaultSubject: TRAINING_CHASE_DEFAULT_SUBJECT,
+        defaultBody: TRAINING_CHASE_DEFAULT_BODY,
+        tokens: ["{{NAME}}", "{{MODULES_LIST}}", "{{COUNT}}", "{{PORTAL_URL}}", "{{PORTAL_EXPIRY}}"],
+        items,
+        samplePreview,
+      });
+    } catch (err: any) {
+      console.error("[admin-reports] prepare chase failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to prepare chase email" });
+    }
+  });
+
+  // Send chase emails. Body shape:
+  //   { nurseIds: string[], subject?: string, body?: string }
+  // The same (admin-edited) template applies to every nurse; per-nurse
+  // tokens (name, modules, portal URL/expiry) are filled server-side.
+  app.post("/api/admin/reports/training-notifications/send", requireAdmin, async (req, res) => {
+    try {
+      const { nurseIds, subject, body } = req.body || {};
+      if (!Array.isArray(nurseIds) || nurseIds.length === 0) {
+        return res.status(400).json({ message: "nurseIds[] is required" });
+      }
+      const template = {
+        subject: typeof subject === "string" && subject.trim() ? subject : TRAINING_CHASE_DEFAULT_SUBJECT,
+        body: typeof body === "string" && body.trim() ? body : TRAINING_CHASE_DEFAULT_BODY,
+      };
+      const portalBaseUrl = portalBaseUrlFromReq(req);
+      const sentBy = agentNameFor(req);
+
+      const allNurses = await storage.getCandidates();
+      const byId = new Map(allNurses.map((n) => [n.id, n]));
+
+      const results: Array<{
+        nurseId: string;
+        name: string;
+        ok: boolean;
+        modulesIncluded?: string[];
+        recipientEmail?: string;
+        error?: string;
+      }> = [];
+      let succeeded = 0;
+      let failed = 0;
+      let skipped = 0;
+
+      for (const id of nurseIds) {
+        const n = byId.get(id);
+        if (!n) {
+          results.push({ nurseId: id, name: "(unknown)", ok: false, error: "Candidate not found" });
+          failed += 1;
+          continue;
+        }
+        try {
+          const modules: OutstandingModule[] = await computeOutstandingTrainingForNurse(id);
+          if (modules.length === 0) {
+            results.push({ nurseId: id, name: n.fullName, ok: false, error: "No outstanding training" });
+            skipped += 1;
+            continue;
+          }
+          const r = await sendTrainingChaseEmail({
+            nurse: n,
+            template,
+            modules,
+            sentBy,
+            portalBaseUrl,
+          });
+          results.push({
+            nurseId: id,
+            name: n.fullName,
+            ok: true,
+            modulesIncluded: r.modulesIncluded,
+            recipientEmail: r.recipientEmail,
+          });
+          succeeded += 1;
+        } catch (err: any) {
+          results.push({ nurseId: id, name: n.fullName, ok: false, error: err?.message || String(err) });
+          failed += 1;
+        }
+      }
+
+      res.json({ total: nurseIds.length, succeeded, failed, skipped, results });
+    } catch (err: any) {
+      console.error("[admin-reports] send chase failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to send chase emails" });
+    }
+  });
+
+  // Fire the mailbox auto-ingest scoped to nurses with active chase
+  // notifications. Auto-attaches confident matches; flags low-confidence
+  // attachments into the existing review queue; emails an admin summary.
+  app.post("/api/admin/reports/training-notifications/scan-replies", requireAdmin, async (req, res) => {
+    try {
+      const triggeredBy = agentNameFor(req);
+      const summary = await scanMailboxForChaseRepliesAll(triggeredBy);
+      res.json(summary);
+    } catch (err: any) {
+      console.error("[admin-reports] scan-replies failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to scan mailbox" });
     }
   });
 

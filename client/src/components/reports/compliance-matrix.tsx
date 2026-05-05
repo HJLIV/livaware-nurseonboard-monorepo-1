@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
@@ -58,6 +58,19 @@ interface ComplianceMatrixProps {
   cellToTab?: (columnKey: string) => string | undefined;
   /** Override the section query param per column (rare). */
   cellToSection?: (columnKey: string) => string | undefined;
+  /**
+   * Optional buttons rendered next to Refresh / Export. Receives the data so
+   * page-level toolbars can reason about the visible matrix (e.g. count
+   * candidates with any red/amber cells).
+   */
+  extraToolbarActions?: (ctx: {
+    data: MatrixResponse | undefined;
+    filteredCandidates: MatrixCandidate[];
+  }) => ReactNode;
+  /** Optional small badge / metadata rendered under the candidate name. */
+  getRowMeta?: (candidate: MatrixCandidate) => ReactNode | null;
+  /** Optional action button(s) rendered inline next to the candidate name. */
+  getRowActions?: (candidate: MatrixCandidate) => ReactNode | null;
 }
 
 const STATUS_CLASSES: Record<CellStatus, string> = {
@@ -109,6 +122,9 @@ export function ComplianceMatrix({
   defaultDetailSection,
   cellToTab,
   cellToSection,
+  extraToolbarActions,
+  getRowMeta,
+  getRowActions,
 }: ComplianceMatrixProps) {
   const [search, setSearch] = useState("");
   const [gapsOnly, setGapsOnly] = useState(false);
@@ -290,6 +306,7 @@ export function ComplianceMatrix({
           <Button variant="outline" size="sm" onClick={handleExport} disabled={!data} data-testid="button-export-csv">
             <Download className="h-4 w-4 mr-2" /> Export CSV
           </Button>
+          {extraToolbarActions?.({ data, filteredCandidates })}
         </div>
       </div>
 
@@ -473,31 +490,39 @@ export function ComplianceMatrix({
                         <th
                           scope="row"
                           className={cn(
-                            "sticky left-0 z-10 border-b border-r border-border/60 px-3 py-2 text-left font-normal min-w-[240px] max-w-[280px]",
-                            ri % 2 === 0 ? "bg-background" : "bg-muted/20",
+                            "sticky left-0 z-20 border-b border-r border-border/60 px-3 py-2 text-left font-normal min-w-[240px] max-w-[280px] overflow-hidden",
+                            ri % 2 === 0 ? "bg-background" : "bg-card",
                           )}
                         >
-                          <Link href={candidateLink(c.id)} className="block group" data-testid={`link-candidate-${c.id}`}>
-                            <div className="font-medium text-sm group-hover:text-primary transition-colors truncate">
-                              {c.name}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              {c.email}
-                              {c.band !== null && <span className="ml-2">Band {c.band}</span>}
-                            </div>
-                          </Link>
+                          <div className="flex items-start justify-between gap-2 min-w-0">
+                            <Link href={candidateLink(c.id)} className="block group flex-1 min-w-0" data-testid={`link-candidate-${c.id}`}>
+                              <div className="font-medium text-sm group-hover:text-primary transition-colors truncate">
+                                {c.name}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                {c.email}
+                                {c.band !== null && <span className="ml-2">Band {c.band}</span>}
+                              </div>
+                              {getRowMeta && (
+                                <div className="mt-0.5 min-w-0 [&_*]:min-w-0 [&>div>*]:truncate">{getRowMeta(c)}</div>
+                              )}
+                            </Link>
+                            {getRowActions && (
+                              <div className="shrink-0">{getRowActions(c)}</div>
+                            )}
+                          </div>
                         </th>
                         <td
                           className={cn(
-                            "sticky z-10 border-b border-r border-border/60 px-2 py-2 text-center align-middle min-w-[110px]",
-                            ri % 2 === 0 ? "bg-background" : "bg-muted/20",
+                            "sticky z-20 border-b border-r border-border/60 px-2 py-2 text-center align-middle min-w-[110px]",
+                            ri % 2 === 0 ? "bg-background" : "bg-card",
                           )}
                           style={{ left: "240px" }}
                           data-testid={`completion-${c.id}`}
                         >
                           <div className={cn("text-sm font-semibold tabular-nums", compTone)}>{pct}%</div>
                           <div className="mt-1 h-1 w-full bg-muted rounded-full overflow-hidden">
-                            <div className={cn("h-full transition-all", compBar)} style={{ width: `${pct}%` }} />
+                            <div className={cn("h-full", compBar)} style={{ width: `${pct}%` }} />
                           </div>
                           {comp && (
                             <div className="mt-1 text-[9px] text-muted-foreground tabular-nums">

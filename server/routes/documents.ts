@@ -100,6 +100,17 @@ export function registerDocumentRoutes(app: Express) {
     const doc = await storage.getDocument(docId);
     if (!doc) return res.status(404).json({ message: "Document not found" });
 
+    // Cascade: any mandatory_training row that was auto-recorded against
+    // this document (e.g. by the chase-reply auto-attach pipeline) must be
+    // removed too, otherwise the training matrix keeps a green cell pointing
+    // at a deleted certificate.
+    let removedTrainingRows = 0;
+    try {
+      removedTrainingRows = await storage.deleteMandatoryTrainingByDocumentId(docId);
+    } catch (e: any) {
+      console.warn(`[Document Delete] Failed to clean training rows for ${docId}:`, e?.message || e);
+    }
+
     if (doc.filePath) {
       try {
         const basename = path.basename(doc.filePath);
@@ -120,9 +131,65 @@ export function registerDocumentRoutes(app: Express) {
       category: doc.category,
       filename: doc.originalFilename || doc.filename,
       filePath: doc.filePath,
+      removedTrainingRows,
     });
 
-    res.json({ ok: true });
+    res.json({ ok: true, removedTrainingRows });
+  });
+
+  // ── Admin "keep but don't assign" action for the review queue ──────────
+  // Used when an admin wants to retain a document on the candidate's record
+  // for audit purposes but explicitly NOT credit it against any mandatory
+  // training module / section. Strips any auto-attached mandatory_training
+  // rows linked to the doc, replaces chase-reply / low-confidence markers
+  // with a `manual_unassigned` sticky marker, and clears aiStatus to "pass"
+  // so the row drops out of the review queue.
+  app.post("/api/documents/:id/unassign-training", requireAdmin, async (req, res) => {
+    const docId = String(req.params.id);
+    const doc = await storage.getDocument(docId);
+    if (!doc) return res.status(404).json({ message: "Document not found" });
+
+    let removedTrainingRows = 0;
+    try {
+      removedTrainingRows = await storage.deleteMandatoryTrainingByDocumentId(docId);
+    } catch (e: any) {
+      console.warn(`[Document Unassign] Failed to clean training rows for ${docId}:`, e?.message || e);
+    }
+
+    const prior = Array.isArray(doc.aiIssues) ? (doc.aiIssues as any[]) : [];
+    const filtered = prior.filter(
+      (e) =>
+        !e ||
+        typeof e !== "object" ||
+        (e.code !== "chase_reply_low_confidence" &&
+          e.code !== "chase_reply_upsert_failed" &&
+          e.code !== "chase_reply_auto_attached" &&
+          e.code !== "low_confidence_classification" &&
+          e.code !== "manual_unassigned"),
+    );
+    const marker = {
+      code: "manual_unassigned",
+      message: `Stored on file but explicitly NOT credited against any mandatory training module — set by ${agentFor(req)}.`,
+      setBy: agentFor(req),
+      setAt: new Date().toISOString(),
+      removedTrainingRows,
+    };
+
+    const updated = await storage.updateDocument(docId, {
+      aiStatus: "pass",
+      aiIssues: [...filtered, marker],
+      aiAnalyzedAt: new Date(),
+    } as any);
+
+    await logAction(doc.nurseId, "admin", "document_unassigned_from_training", agentFor(req), {
+      documentId: docId,
+      type: doc.type,
+      category: doc.category,
+      filename: doc.originalFilename || doc.filename,
+      removedTrainingRows,
+    });
+
+    res.json({ ok: true, document: updated, removedTrainingRows });
   });
 
   // ── Admin manual category override ─────────────────────────────────────
@@ -352,7 +419,15 @@ export function registerDocumentRoutes(app: Express) {
       .where(
         and(
           eq(documents.aiStatus, "warning"),
-          sql`${documents.aiIssues} @> '[{"code":"low_confidence_classification"}]'::jsonb`,
+          // Include both the original low-confidence-classification flag
+          // and the chase-reply review markers so attachments auto-ingested
+          // from email replies show up here for admin review.
+          sql`(
+            ${documents.aiIssues} @> '[{"code":"low_confidence_classification"}]'::jsonb OR
+            ${documents.aiIssues} @> '[{"code":"chase_reply_low_confidence"}]'::jsonb OR
+            ${documents.aiIssues} @> '[{"code":"chase_reply_upsert_failed"}]'::jsonb OR
+            ${documents.aiIssues} @> '[{"code":"chase_reply_auto_attached"}]'::jsonb
+          )`,
         ),
       )
       .orderBy(desc(documents.uploadedAt));

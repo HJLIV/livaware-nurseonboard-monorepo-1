@@ -79,7 +79,18 @@ export function triggerDocumentAnalysis(
         stickyEntries = existingIssues.filter((e) => {
           if (!e || typeof e !== "object") return false;
           const code = (e as any).code;
-          return code === "manual_category_override";
+          // Preserve manual overrides AND chase-reply review markers — both
+          // are set outside of analyzeDocumentCompleteness and would
+          // otherwise be wiped every time the AI re-analyses the file
+          // (e.g. the flagDocumentForReview call that runs right after the
+          // chase-reply scanner ingests an attachment).
+          return (
+            code === "manual_category_override" ||
+            code === "manual_unassigned" ||
+            code === "chase_reply_low_confidence" ||
+            code === "chase_reply_upsert_failed" ||
+            code === "chase_reply_auto_attached"
+          );
         });
       } catch {
         stickyEntries = [];

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, serial, boolean, timestamp, jsonb, json, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, boolean, timestamp, jsonb, json, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -509,6 +509,58 @@ export type InsertUser = z.infer<typeof insertArcadeUserSchema>;
 export type Module = ArcadeModule;
 
 // ==================== EQUAL OPPORTUNITIES MONITORING ====================
+
+// Per-nurse record of "outstanding mandatory training" chase emails sent by
+// admins from the Training Matrix. Used to drive a "Last chased N days ago"
+// indicator and to scope the mailbox auto-ingest to attachments received
+// AFTER the most recent chase.
+export const trainingNotifications = pgTable("training_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  sentBy: text("sent_by"),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  // Snapshot of which modules were red/amber at the time of sending, so the
+  // mailbox auto-ingest knows what to look for in the reply.
+  modulesIncluded: jsonb("modules_included").notNull(),
+  portalLinkToken: varchar("portal_link_token"),
+  portalLinkExpiresAt: timestamp("portal_link_expires_at"),
+  // Graph conversationId of the sent chase email. Lets the reply scanner
+  // restrict to attachments that arrived in the same Outlook thread.
+  conversationId: text("conversation_id"),
+}, (table) => [
+  index("training_notifications_nurse_id_idx").on(table.nurseId),
+  index("training_notifications_sent_at_idx").on(table.sentAt),
+]);
+
+export const insertTrainingNotificationSchema = createInsertSchema(trainingNotifications).omit({ id: true, sentAt: true });
+export type TrainingNotification = typeof trainingNotifications.$inferSelect;
+export type InsertTrainingNotification = z.infer<typeof insertTrainingNotificationSchema>;
+
+// Idempotency log for chase-reply mailbox auto-ingest, keyed by Graph
+// (messageId, attachmentId, nurseId).
+export const processedChaseAttachments = pgTable("processed_chase_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  messageId: text("message_id").notNull(),
+  attachmentId: text("attachment_id").notNull(),
+  documentId: varchar("document_id"),
+  autoAttached: boolean("auto_attached").default(false),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+}, (table) => [
+  index("processed_chase_attachments_nurse_id_idx").on(table.nurseId),
+  uniqueIndex("processed_chase_attachments_msg_att_nurse_unique").on(
+    table.messageId,
+    table.attachmentId,
+    table.nurseId,
+  ),
+]);
+
+export const insertProcessedChaseAttachmentSchema = createInsertSchema(processedChaseAttachments).omit({ id: true, processedAt: true });
+export type ProcessedChaseAttachment = typeof processedChaseAttachments.$inferSelect;
+export type InsertProcessedChaseAttachment = z.infer<typeof insertProcessedChaseAttachmentSchema>;
 
 export const equalOpportunities = pgTable("equal_opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

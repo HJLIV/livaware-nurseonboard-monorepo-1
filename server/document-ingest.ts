@@ -8,7 +8,7 @@ import { analyzeCertificateWithAI } from "./certificate-ai";
 import { triggerSharePointUpload, triggerEmailNotification } from "./sharepoint-helper";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 
-export type IngestSource = "admin" | "nurse" | "orphan_recovery" | "sharepoint_recovery" | "mailbox_recovery";
+export type IngestSource = "admin" | "nurse" | "orphan_recovery" | "sharepoint_recovery" | "mailbox_recovery" | "chase_reply";
 
 export interface IngestResult {
   documentId: string;
@@ -59,6 +59,20 @@ export async function ingestExistingFile(opts: {
    */
   skipSharePointUpload?: boolean;
   skipEmailNotification?: boolean;
+  /**
+   * If true, do NOT auto-create mandatoryTraining rows from matched modules.
+   * Used by the chase-reply scanner so low-confidence attachments only
+   * become a flagged document for admin review, never a silently-applied
+   * training certificate.
+   */
+  skipTrainingExtraction?: boolean;
+  /**
+   * If provided, used instead of running classifyDocumentSmart again. Lets
+   * the chase-reply scanner classify once up-front to make the gating
+   * decision and then re-use that classification through the rest of the
+   * pipeline.
+   */
+  preClassification?: Awaited<ReturnType<typeof classifyDocumentSmart>>;
 }): Promise<IngestResult> {
   const { nurseId, absolutePath, originalFilename, mimeType, source } = opts;
 
@@ -68,15 +82,17 @@ export async function ingestExistingFile(opts: {
   const moduleNames = MANDATORY_TRAINING_MODULES.map((m) => m.name);
 
   // ── 1. Classify ────────────────────────────────────────────────────────
-  let classification: Awaited<ReturnType<typeof classifyDocumentSmart>> | null = null;
+  let classification: Awaited<ReturnType<typeof classifyDocumentSmart>> | null = opts.preClassification ?? null;
   let aiAvailable = true;
-  try {
-    classification = await classifyDocumentSmart(absolutePath, mimeType, moduleNames);
-  } catch (err: any) {
-    if (err.message?.includes("API key is not configured")) {
-      aiAvailable = false;
-    } else {
-      throw err;
+  if (!classification) {
+    try {
+      classification = await classifyDocumentSmart(absolutePath, mimeType, moduleNames);
+    } catch (err: any) {
+      if (err.message?.includes("API key is not configured")) {
+        aiAvailable = false;
+      } else {
+        throw err;
+      }
     }
   }
   const detectedCategory = classification?.detectedCategory || "general";
@@ -220,7 +236,11 @@ export async function ingestExistingFile(opts: {
 
   // ── 5. Training certificate → mandatory training rows ─────────────────
   let trainingAdded: string[] = [];
-  if (classification && classification.matchedTrainingModules.length > 0) {
+  if (
+    !opts.skipTrainingExtraction &&
+    classification &&
+    classification.matchedTrainingModules.length > 0
+  ) {
     trainingAdded = await applyTrainingCertExtraction({
       nurseId,
       documentId: doc.id,
@@ -317,21 +337,22 @@ export async function applyTrainingCertExtraction(opts: {
   const existingTraining = await storage.getMandatoryTraining(nurseId);
   const trainingAdded: string[] = [];
   for (const moduleName of matched) {
-    if (existingTraining.some((t: any) => t.moduleName === moduleName)) continue;
+    if (existingTraining.some((t) => t.moduleName === moduleName)) continue;
 
     const modDef = MANDATORY_TRAINING_MODULES.find((m) => m.name === moduleName);
     const renewalFreq = modDef?.renewalFrequency || "Annual";
-    const certModule = certAnalysis?.modules.find((m: any) => m.matchedModule === moduleName);
+    const certModule = certAnalysis?.modules.find((m) => m.matchedModule === moduleName);
 
     const completedDate = safeDate(certModule?.completedDate ?? null) || new Date().toISOString().split("T")[0];
+    // Default to 1 year from completion for ALL mandatory training when the
+    // certificate doesn't explicitly state an expiry. Conservative on purpose:
+    // any auto-attach mistake self-corrects within a year, and admins are
+    // prompted to confirm or extend the expiry from the matrix.
     let expiryDate = safeDate(certModule?.expiryDate ?? null);
     if (!expiryDate) {
       const completed = new Date(completedDate);
       const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
-      expiryDate =
-        renewalFreq === "Annual"
-          ? new Date(completed.getTime() + msPerYear).toISOString().split("T")[0]
-          : new Date(completed.getTime() + 3 * msPerYear).toISOString().split("T")[0];
+      expiryDate = new Date(completed.getTime() + msPerYear).toISOString().split("T")[0];
     }
     const issuingBody = certModule?.issuingBody || "Auto-detected from document";
 
@@ -349,6 +370,85 @@ export async function applyTrainingCertExtraction(opts: {
     trainingAdded.push(moduleName);
   }
   return trainingAdded;
+}
+
+/** Chase-reply variant of {@link applyTrainingCertExtraction} that
+ *  UPDATES existing mandatory_training rows (instead of skipping when
+ *  the module already exists) so a fresh cert clears expired/in-progress
+ *  cells. Returns module names updated vs newly created. */
+export async function applyChaseReplyTrainingUpsert(opts: {
+  nurseId: string;
+  documentId: string;
+  absolutePath: string;
+  mimeType: string;
+  matchedExpectedModules: string[];
+}): Promise<{ updated: string[]; created: string[] }> {
+  const { nurseId, documentId, absolutePath, mimeType, matchedExpectedModules } = opts;
+  if (!matchedExpectedModules.length) return { updated: [], created: [] };
+
+  let certAnalysis: Awaited<ReturnType<typeof analyzeCertificateWithAI>> | null = null;
+  try {
+    certAnalysis = await analyzeCertificateWithAI(absolutePath, mimeType);
+  } catch (e: any) {
+    console.warn("[applyChaseReplyTrainingUpsert] Cert date extraction failed; using fallbacks:", e?.message || e);
+  }
+
+  const existing = await storage.getMandatoryTraining(nurseId);
+  const updated: string[] = [];
+  const created: string[] = [];
+
+  for (const moduleName of matchedExpectedModules) {
+    const modDef = MANDATORY_TRAINING_MODULES.find((m) => m.name === moduleName);
+    const renewalFreq = modDef?.renewalFrequency || "Annual";
+    const certModule = certAnalysis?.modules.find((m) => m.matchedModule === moduleName);
+
+    const completedDate = safeDate(certModule?.completedDate ?? null) || new Date().toISOString().split("T")[0];
+    // Default to 1 year from completion for ALL mandatory training when the
+    // certificate doesn't explicitly state an expiry — see note in
+    // applyTrainingCertExtraction above.
+    let expiryDate = safeDate(certModule?.expiryDate ?? null);
+    if (!expiryDate) {
+      const completed = new Date(completedDate);
+      const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+      expiryDate = new Date(completed.getTime() + msPerYear).toISOString().split("T")[0];
+    }
+    const issuingBody = certModule?.issuingBody || "Auto-detected from chase reply";
+
+    // Pick the most-recent existing record for this module (the one the matrix uses).
+    const matching = existing.filter((t) => t.moduleName === moduleName);
+    const target = matching.length === 0 ? null : [...matching].sort((a, b) => {
+      const ae = a.expiryDate ? new Date(a.expiryDate).getTime() : new Date(a.createdAt).getTime();
+      const be = b.expiryDate ? new Date(b.expiryDate).getTime() : new Date(b.createdAt).getTime();
+      return be - ae;
+    })[0];
+
+    if (target) {
+      await storage.updateMandatoryTraining(target.id, {
+        renewalFrequency: renewalFreq,
+        completedDate,
+        expiryDate,
+        issuingBody,
+        certificateUploaded: true,
+        certificateDocumentId: documentId,
+        status: "completed",
+      });
+      updated.push(moduleName);
+    } else {
+      await storage.createMandatoryTraining({
+        nurseId,
+        moduleName,
+        renewalFrequency: renewalFreq,
+        completedDate,
+        expiryDate,
+        issuingBody,
+        certificateUploaded: true,
+        certificateDocumentId: documentId,
+        status: "completed",
+      });
+      created.push(moduleName);
+    }
+  }
+  return { updated, created };
 }
 
 /**

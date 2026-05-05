@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -14,11 +14,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
   FileText,
   FolderOpen,
+  Trash2,
+  Archive,
   User,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -81,14 +93,25 @@ function formatFileSize(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function lowConfidenceMessage(issues: AiIssueEntry[] | null): string {
-  if (!issues || !Array.isArray(issues)) return "";
-  for (const entry of issues) {
-    if (entry && typeof entry === "object" && entry.code === "low_confidence_classification") {
-      return entry.message || "AI was not confident about this document's category.";
+const REVIEW_CODES = new Set([
+  "low_confidence_classification",
+  "chase_reply_low_confidence",
+  "chase_reply_upsert_failed",
+  "chase_reply_auto_attached",
+]);
+
+function reviewMessage(issues: AiIssueEntry[] | null): { code: string; message: string } {
+  if (issues && Array.isArray(issues)) {
+    for (const entry of issues) {
+      if (entry && typeof entry === "object" && entry.code && REVIEW_CODES.has(entry.code)) {
+        return {
+          code: entry.code,
+          message: entry.message || "Needs admin review.",
+        };
+      }
     }
   }
-  return "AI was not confident about this document's category.";
+  return { code: "low_confidence_classification", message: "AI was not confident about this document's category." };
 }
 
 export default function DocumentsReviewPage() {
@@ -103,16 +126,30 @@ export default function DocumentsReviewPage() {
   const docs = useMemo(() => data?.data ?? [], [data]);
   const total = data?.total ?? 0;
 
+  // Two-step confirmation state for the destructive Reject / Keep-don't-assign
+  // actions. `pendingAction` is null when no dialog is open.
+  const [pendingAction, setPendingAction] = useState<
+    | { kind: "reject"; doc: ReviewRow }
+    | { kind: "unassign"; doc: ReviewRow }
+    | null
+  >(null);
+
+  const invalidateQueues = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/documents/review-queue"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/reports/training-matrix"] });
+    queryClient.invalidateQueries({
+      queryKey: ["/api/admin/reports/training-notifications/last-chased"],
+    });
+  };
+
   const changeCategory = useMutation({
     mutationFn: async ({ docId, category }: { docId: string; category: string }) => {
       const res = await apiRequest("PATCH", `/api/documents/${docId}/category`, { category });
       return res.json();
     },
     onSuccess: (data: any) => {
-      // Refetch the queue so the just-fixed row drops out, and invalidate
-      // the candidate's documents view so a subsequent visit reflects it.
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/documents/review-queue"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/documents"] });
+      invalidateQueues();
       const added: string[] = data?.trainingModulesAdded || [];
       const removed: number = data?.removedTrainingRows || 0;
       let description: string | undefined;
@@ -126,6 +163,58 @@ export default function DocumentsReviewPage() {
     onError: (err: any) => {
       toast({
         title: "Could not change category",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectDocument = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await apiRequest("DELETE", `/api/documents/${docId}`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidateQueues();
+      const removed: number = data?.removedTrainingRows || 0;
+      toast({
+        title: "Document rejected",
+        description:
+          removed > 0
+            ? `Document and ${removed} linked training record${removed === 1 ? "" : "s"} removed.`
+            : "Document and file removed from the system.",
+      });
+      setPendingAction(null);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not reject document",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unassignDocument = useMutation({
+    mutationFn: async (docId: string) => {
+      const res = await apiRequest("POST", `/api/documents/${docId}/unassign-training`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidateQueues();
+      const removed: number = data?.removedTrainingRows || 0;
+      toast({
+        title: "Document kept on file",
+        description:
+          removed > 0
+            ? `Cleared ${removed} training credit${removed === 1 ? "" : "s"}. Document remains on the candidate's record.`
+            : "Document kept on the candidate's record but not credited against any training module.",
+      });
+      setPendingAction(null);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not unassign document",
         description: err?.message || "Please try again.",
         variant: "destructive",
       });
@@ -222,10 +311,24 @@ export default function DocumentsReviewPage() {
                                   </>
                                 )}
                               </div>
-                              <p className="text-[11px] text-amber-600 dark:text-amber-300/90 flex items-start gap-1.5 mt-1.5">
-                                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
-                                <span>{lowConfidenceMessage(doc.aiIssues)}</span>
-                              </p>
+                              {(() => {
+                                const r = reviewMessage(doc.aiIssues);
+                                const isError =
+                                  r.code === "chase_reply_low_confidence" ||
+                                  r.code === "chase_reply_upsert_failed";
+                                return (
+                                  <p
+                                    className={`text-[11px] flex items-start gap-1.5 mt-1.5 ${
+                                      isError
+                                        ? "text-rose-600 dark:text-rose-300/90"
+                                        : "text-amber-600 dark:text-amber-300/90"
+                                    }`}
+                                  >
+                                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                                    <span>{r.message}</span>
+                                  </p>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -267,7 +370,7 @@ export default function DocumentsReviewPage() {
                             </Select>
                           </div>
 
-                          <div className="flex items-center gap-3 justify-end">
+                          <div className="flex items-center gap-2 justify-end flex-wrap">
                             {doc.filePath && (
                               <a
                                 href={doc.filePath}
@@ -280,6 +383,32 @@ export default function DocumentsReviewPage() {
                                 View
                               </a>
                             )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                              onClick={() => setPendingAction({ kind: "unassign", doc })}
+                              disabled={unassignDocument.isPending || rejectDocument.isPending}
+                              data-testid={`btn-unassign-${doc.id}`}
+                              title="Keep on file but don't credit against any training module"
+                            >
+                              <Archive className="h-3 w-3 mr-1" />
+                              Keep, don't assign
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                              onClick={() => setPendingAction({ kind: "reject", doc })}
+                              disabled={unassignDocument.isPending || rejectDocument.isPending}
+                              data-testid={`btn-reject-${doc.id}`}
+                              title="Discard the document and remove the file"
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              Reject
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -304,6 +433,75 @@ export default function DocumentsReviewPage() {
           </>
         )}
       </div>
+
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-action">
+          {pendingAction?.kind === "reject" && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reject this document?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete{" "}
+                  <span className="font-medium text-foreground">
+                    {pendingAction.doc.originalFilename || pendingAction.doc.filename}
+                  </span>{" "}
+                  for {pendingAction.doc.candidateName}, remove the file from
+                  storage, and clear any training credits that were
+                  auto-attached from it. The action is logged in the audit
+                  trail but cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={rejectDocument.isPending}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-rose-600 hover:bg-rose-700 text-white"
+                  disabled={rejectDocument.isPending}
+                  onClick={() => rejectDocument.mutate(pendingAction.doc.id)}
+                  data-testid="btn-confirm-reject"
+                >
+                  {rejectDocument.isPending ? "Rejecting…" : "Yes, reject"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+          {pendingAction?.kind === "unassign" && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Keep on file but don't credit?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  <span className="font-medium text-foreground">
+                    {pendingAction.doc.originalFilename || pendingAction.doc.filename}
+                  </span>{" "}
+                  will stay on {pendingAction.doc.candidateName}'s record for
+                  audit, but any training-module credits auto-attached from it
+                  will be removed and the matrix cell will revert. Use this when
+                  the document is genuine but doesn't fulfil any mandatory
+                  module (e.g. an extra qualification).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={unassignDocument.isPending}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={unassignDocument.isPending}
+                  onClick={() => unassignDocument.mutate(pendingAction.doc.id)}
+                  data-testid="btn-confirm-unassign"
+                >
+                  {unassignDocument.isPending ? "Saving…" : "Keep on file"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

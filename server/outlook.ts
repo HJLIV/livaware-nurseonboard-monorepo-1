@@ -420,6 +420,11 @@ export interface MailboxAttachmentRef {
   filename: string;
   contentType: string;
   sizeBytes: number;
+  /** Sender email (lowercased), used to distinguish inbound vs outbound. */
+  fromAddress: string | null;
+  /** Graph conversationId — used to restrict the chase-reply scan to the
+   *  same Outlook thread as the original chase email. */
+  conversationId: string | null;
 }
 
 /**
@@ -439,7 +444,7 @@ export async function listMailboxAttachmentsForCandidate(candidateEmail: string)
   const query = `"from:${safeEmail}" OR "to:${safeEmail}"`;
 
   const results: MailboxAttachmentRef[] = [];
-  let nextLink: string | null = `/users/${SENDER_EMAIL}/messages?$search=${encodeURIComponent(query)}&$top=50&$select=id,subject,receivedDateTime,hasAttachments`;
+  let nextLink: string | null = `/users/${SENDER_EMAIL}/messages?$search=${encodeURIComponent(query)}&$top=50&$select=id,subject,receivedDateTime,hasAttachments,from,conversationId`;
   let page = 0;
   while (nextLink && page < 10) {
     page += 1;
@@ -459,6 +464,8 @@ export async function listMailboxAttachmentsForCandidate(candidateEmail: string)
           if (a.isInline) continue;
           // Only file attachments (skip item attachments / reference attachments)
           if (a["@odata.type"] && !String(a["@odata.type"]).includes("fileAttachment")) continue;
+          const fromAddress: string | null =
+            (msg.from?.emailAddress?.address && String(msg.from.emailAddress.address).toLowerCase()) || null;
           results.push({
             messageId: msg.id,
             subject: msg.subject ?? null,
@@ -467,6 +474,8 @@ export async function listMailboxAttachmentsForCandidate(candidateEmail: string)
             filename: a.name || "attachment",
             contentType: a.contentType || "application/octet-stream",
             sizeBytes: a.size || 0,
+            fromAddress,
+            conversationId: msg.conversationId ?? null,
           });
         }
       } catch (attErr: any) {

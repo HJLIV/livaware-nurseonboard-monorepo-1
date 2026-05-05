@@ -96,7 +96,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 
 ### Compliance Matrix Reports (admin only)
 - `/reports/onboarding` — Onboarding & Documents matrix (candidates × personal info / core docs)
-- `/reports/training` — Mandatory Training matrix (candidates × CSTF modules)
+- `/reports/training` — Mandatory Training matrix (candidates × CSTF modules). Per-row "Notify by email" + bulk "Notify all" buttons send chase emails for outstanding (red/amber) modules. A preview dialog shows the editable subject + body template (tokens: `{{NAME}}`, `{{MODULES_LIST}}`, `{{COUNT}}`, `{{PORTAL_URL}}`, `{{PORTAL_EXPIRY}}`); each recipient gets a fresh 30-day secure portal upload link. Each row shows a "Last chased Nd ago" indicator. A "Scan replies" button auto-ingests new attachments from the shared inbox: confident matches against expected modules are auto-attached; low-confidence ones land in the existing flagged-document review queue (`documents.aiStatus = "warning"`, code `chase_reply_low_confidence`). An admin summary email is sent after each bulk scan.
 - `/reports/competency` — Competency & Skills Arcade matrix (candidates × competency domains + arcade modules)
 
 ### System
@@ -113,7 +113,8 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - `server/routes/skills-arcade.ts` — Arcade routes (862 lines, full arcade API)
 - `server/routes/dashboard.ts` — Dashboard stats
 - `server/routes/audit.ts` — Audit trail
-- `server/routes/admin-reports.ts` — Whole-roster compliance matrices (onboarding/training/competency), one bulk-fetch endpoint each
+- `server/routes/admin-reports.ts` — Whole-roster compliance matrices (onboarding/training/competency), one bulk-fetch endpoint each. Also exposes the training chase-email endpoints: `GET /api/admin/reports/training-notifications/last-chased`, `POST .../prepare`, `POST .../send`, `POST .../scan-replies`.
+- `server/training-notifications.ts` — Training chase-email service: outstanding-module computation (mirrors training-matrix logic), default subject/body templates, per-nurse render + Microsoft Graph send (with secure portal link generation), persists `trainingNotifications` row + audit log, mailbox auto-ingest of replies (auto-attach high-confidence module matches; flag low-confidence into the document review queue), bulk admin summary email.
 
 ## Schema Compatibility Aliases
 

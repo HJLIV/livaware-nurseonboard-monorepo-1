@@ -123,6 +123,34 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Periodic auto-scan of the shared mailbox for chase-email replies.
+  if (process.env.NODE_ENV !== "test") {
+    const intervalMs = Number(process.env.TRAINING_CHASE_AUTOSCAN_INTERVAL_MS || 30 * 60 * 1000);
+    let scanRunning = false;
+    const runAutoScan = async () => {
+      if (scanRunning) return;
+      scanRunning = true;
+      try {
+        const { scanMailboxForChaseRepliesAll } = await import("./training-notifications");
+        const { isOutlookConfigured } = await import("./outlook");
+        if (!isOutlookConfigured()) return;
+        const summary = await scanMailboxForChaseRepliesAll("Automatic mailbox scanner");
+        if (summary.totalAttachmentsProcessed > 0 || summary.errors.length > 0) {
+          log(
+            `[chase-autoscan] scanned ${summary.scannedNurses} nurses · ${summary.totalAutoAttached} auto-attached · ${summary.totalNeedsReview} needs review · ${summary.errors.length} error(s)`,
+          );
+        }
+      } catch (e: any) {
+        console.warn("[chase-autoscan] failed:", e?.message || e);
+      } finally {
+        scanRunning = false;
+      }
+    };
+    // First run a few minutes after boot; then on the configured interval.
+    setTimeout(() => { void runAutoScan(); }, 5 * 60 * 1000);
+    setInterval(() => { void runAutoScan(); }, intervalMs);
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

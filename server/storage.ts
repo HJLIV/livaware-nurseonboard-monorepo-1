@@ -5,6 +5,9 @@ import {
   documents, references, mandatoryTraining, healthDeclarations,
   inductionPolicies, professionalIndemnity, onboardingStates, auditLogs, magicLinks, refereeTokens,
   employmentHistory, educationHistory, equalOpportunities,
+  trainingNotifications, processedChaseAttachments,
+  type TrainingNotification, type InsertTrainingNotification,
+  type ProcessedChaseAttachment, type InsertProcessedChaseAttachment,
   type Candidate, type InsertCandidate,
   type NmcVerification, type InsertNmcVerification,
   type DbsVerification, type InsertDbsVerification,
@@ -111,6 +114,15 @@ export interface IStorage {
     total: number;
     fields: Record<string, { counts: Record<string, number>; percentages: Record<string, number> }>;
   }>;
+
+  // Training-matrix chase-email notifications
+  createTrainingNotification(data: InsertTrainingNotification): Promise<TrainingNotification>;
+  getLatestTrainingNotificationByNurse(nurseId: string): Promise<TrainingNotification | undefined>;
+  getLatestTrainingNotifications(): Promise<Map<string, TrainingNotification>>;
+  getTrainingNotificationsForNurse(nurseId: string): Promise<TrainingNotification[]>;
+  hasProcessedChaseAttachment(nurseId: string, messageId: string, attachmentId: string): Promise<boolean>;
+  recordProcessedChaseAttachment(data: InsertProcessedChaseAttachment): Promise<ProcessedChaseAttachment>;
+  getProcessedChaseAttachmentsForNurse(nurseId: string): Promise<ProcessedChaseAttachment[]>;
 
   // Bulk getters for cross-candidate reporting (admin compliance matrices, etc.).
   getAllDocuments(): Promise<Document[]>;
@@ -524,6 +536,98 @@ export class DatabaseStorage implements IStorage {
       fields[field] = { counts, percentages };
     }
     return { total, fields };
+  }
+
+  async createTrainingNotification(data: InsertTrainingNotification): Promise<TrainingNotification> {
+    const [result] = await db.insert(trainingNotifications).values(data).returning();
+    return result;
+  }
+
+  async getLatestTrainingNotificationByNurse(nurseId: string): Promise<TrainingNotification | undefined> {
+    const [result] = await db
+      .select()
+      .from(trainingNotifications)
+      .where(eq(trainingNotifications.nurseId, nurseId))
+      .orderBy(desc(trainingNotifications.sentAt))
+      .limit(1);
+    return result;
+  }
+
+  async getLatestTrainingNotifications(): Promise<Map<string, TrainingNotification>> {
+    const all = await db
+      .select()
+      .from(trainingNotifications)
+      .orderBy(desc(trainingNotifications.sentAt));
+    const map = new Map<string, TrainingNotification>();
+    for (const r of all) {
+      if (!map.has(r.nurseId)) map.set(r.nurseId, r);
+    }
+    return map;
+  }
+
+  async getTrainingNotificationsForNurse(nurseId: string): Promise<TrainingNotification[]> {
+    return db
+      .select()
+      .from(trainingNotifications)
+      .where(eq(trainingNotifications.nurseId, nurseId))
+      .orderBy(desc(trainingNotifications.sentAt));
+  }
+
+  async hasProcessedChaseAttachment(
+    nurseId: string,
+    messageId: string,
+    attachmentId: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: processedChaseAttachments.id })
+      .from(processedChaseAttachments)
+      .where(
+        and(
+          eq(processedChaseAttachments.nurseId, nurseId),
+          eq(processedChaseAttachments.messageId, messageId),
+          eq(processedChaseAttachments.attachmentId, attachmentId),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  async recordProcessedChaseAttachment(
+    data: InsertProcessedChaseAttachment,
+  ): Promise<ProcessedChaseAttachment> {
+    const [row] = await db
+      .insert(processedChaseAttachments)
+      .values(data)
+      .onConflictDoNothing({
+        target: [
+          processedChaseAttachments.messageId,
+          processedChaseAttachments.attachmentId,
+          processedChaseAttachments.nurseId,
+        ],
+      })
+      .returning();
+    if (row) return row;
+    // Conflict — fetch the existing row.
+    const [existing] = await db
+      .select()
+      .from(processedChaseAttachments)
+      .where(
+        and(
+          eq(processedChaseAttachments.nurseId, data.nurseId),
+          eq(processedChaseAttachments.messageId, data.messageId),
+          eq(processedChaseAttachments.attachmentId, data.attachmentId),
+        ),
+      )
+      .limit(1);
+    return existing!;
+  }
+
+  async getProcessedChaseAttachmentsForNurse(nurseId: string): Promise<ProcessedChaseAttachment[]> {
+    return db
+      .select()
+      .from(processedChaseAttachments)
+      .where(eq(processedChaseAttachments.nurseId, nurseId))
+      .orderBy(desc(processedChaseAttachments.processedAt));
   }
 }
 
