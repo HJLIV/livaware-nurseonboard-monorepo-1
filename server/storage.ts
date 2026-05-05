@@ -6,8 +6,10 @@ import {
   inductionPolicies, professionalIndemnity, onboardingStates, auditLogs, magicLinks, refereeTokens,
   employmentHistory, educationHistory, equalOpportunities,
   trainingNotifications, processedChaseAttachments,
+  appSettings,
   type TrainingNotification, type InsertTrainingNotification,
   type ProcessedChaseAttachment, type InsertProcessedChaseAttachment,
+  type AppSetting,
   type Candidate, type InsertCandidate,
   type NmcVerification, type InsertNmcVerification,
   type DbsVerification, type InsertDbsVerification,
@@ -124,6 +126,10 @@ export interface IStorage {
   hasProcessedChaseAttachment(nurseId: string, messageId: string, attachmentId: string): Promise<boolean>;
   recordProcessedChaseAttachment(data: InsertProcessedChaseAttachment): Promise<ProcessedChaseAttachment>;
   getProcessedChaseAttachmentsForNurse(nurseId: string): Promise<ProcessedChaseAttachment[]>;
+
+  // Generic admin-tunable platform settings (key/value JSON).
+  getAppSetting<T = unknown>(key: string): Promise<T | undefined>;
+  setAppSetting<T = unknown>(key: string, value: T, updatedBy?: string): Promise<AppSetting>;
 
   // Bulk getters for cross-candidate reporting (admin compliance matrices, etc.).
   getAllDocuments(): Promise<Document[]>;
@@ -639,6 +645,32 @@ export class DatabaseStorage implements IStorage {
       .from(processedChaseAttachments)
       .where(eq(processedChaseAttachments.nurseId, nurseId))
       .orderBy(desc(processedChaseAttachments.processedAt));
+  }
+
+  async getAppSetting<T = unknown>(key: string): Promise<T | undefined> {
+    const [row] = await db
+      .select()
+      .from(appSettings)
+      .where(eq(appSettings.key, key))
+      .limit(1);
+    return row ? (row.value as T) : undefined;
+  }
+
+  async setAppSetting<T = unknown>(
+    key: string,
+    value: T,
+    updatedBy?: string,
+  ): Promise<AppSetting> {
+    const jsonValue = value as unknown;
+    const [row] = await db
+      .insert(appSettings)
+      .values({ key, value: jsonValue, updatedBy: updatedBy ?? null })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: jsonValue, updatedAt: new Date(), updatedBy: updatedBy ?? null },
+      })
+      .returning();
+    return row;
   }
 }
 

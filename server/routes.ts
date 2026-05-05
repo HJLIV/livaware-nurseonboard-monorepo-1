@@ -101,6 +101,10 @@ export async function registerRoutes(
   const { registerAdminReportsRoutes } = await import("./routes/admin-reports");
   registerAdminReportsRoutes(app);
 
+  // === ADMIN PLATFORM SETTINGS (toggles for scheduled jobs etc.) ===
+  const { registerAdminSettingsRoutes } = await import("./routes/admin-settings");
+  registerAdminSettingsRoutes(app);
+
   // === DASHBOARD ===
   const { registerDashboardRoutes } = await import("./routes/dashboard");
   registerDashboardRoutes(app);

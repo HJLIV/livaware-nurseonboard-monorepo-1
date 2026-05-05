@@ -562,6 +562,44 @@ export const insertProcessedChaseAttachmentSchema = createInsertSchema(processed
 export type ProcessedChaseAttachment = typeof processedChaseAttachments.$inferSelect;
 export type InsertProcessedChaseAttachment = z.infer<typeof insertProcessedChaseAttachmentSchema>;
 
+// Generic key/value table for admin-tunable platform settings (e.g. the
+// scheduled chase-email job toggles). Each row is a single JSON document so
+// we don't need a new table per setting group.
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: text("updated_by"),
+});
+export type AppSetting = typeof appSettings.$inferSelect;
+
+// Settings shape for the weekly chase + reply-scan scheduled jobs. Stored
+// under key = "training_chase_schedule".
+export const TRAINING_CHASE_SCHEDULE_SETTING_KEY = "training_chase_schedule";
+export interface TrainingChaseScheduleSettings {
+  // Weekly bulk chase of nurses with outstanding mandatory training.
+  weeklyChaseEnabled: boolean;
+  weeklyChaseDayOfWeek: number; // 0=Sun .. 6=Sat (default Monday=1)
+  weeklyChaseHour: number; // 0..23 in server local time (default 9)
+  weeklyChaseMinGapDays: number; // skip nurses chased in the last N days (default 14)
+  // Mailbox reply scan that picks up certificates returned by nurses.
+  replyScanEnabled: boolean;
+  replyScanIntervalMinutes: number; // default 30
+  // Tracked by the scheduler — never edited from the UI directly.
+  lastWeeklyChaseRunAt?: string | null;
+  lastReplyScanRunAt?: string | null;
+}
+export const DEFAULT_TRAINING_CHASE_SCHEDULE: TrainingChaseScheduleSettings = {
+  weeklyChaseEnabled: false,
+  weeklyChaseDayOfWeek: 1,
+  weeklyChaseHour: 9,
+  weeklyChaseMinGapDays: 14,
+  replyScanEnabled: true,
+  replyScanIntervalMinutes: 30,
+  lastWeeklyChaseRunAt: null,
+  lastReplyScanRunAt: null,
+};
+
 export const equalOpportunities = pgTable("equal_opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   candidateRef: varchar("candidate_ref").notNull(),
