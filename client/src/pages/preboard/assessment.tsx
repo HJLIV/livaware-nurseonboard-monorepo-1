@@ -121,6 +121,14 @@ function formatTime(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+const BLOCKED_INPUT_TYPES = new Set<string>([
+  "insertFromPaste",
+  "insertFromPasteAsQuotation",
+  "insertFromDrop",
+  "insertFromYank",
+  "insertReplacementText",
+]);
+
 const tagColors = DOMAIN_COLORS;
 
 function IconClock() {
@@ -826,7 +834,7 @@ function QuestionScreen({
   question: QuestionType;
   index: number;
   total: number;
-  onSubmit: (text: string, timeLeft: number) => void;
+  onSubmit: (text: string, timeLeft: number, pasteAttempts: number) => void;
 }) {
   const [text, setText] = useState("");
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
@@ -842,9 +850,11 @@ function QuestionScreen({
   const pasteNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const pasteAttemptsRef = useRef(0);
   const min = question.minChars;
 
   const flashPasteBlocked = useCallback(() => {
+    pasteAttemptsRef.current += 1;
     setPasteBlocked(true);
     if (pasteNoticeTimerRef.current) clearTimeout(pasteNoticeTimerRef.current);
     pasteNoticeTimerRef.current = setTimeout(() => setPasteBlocked(false), 2400);
@@ -951,7 +961,8 @@ function QuestionScreen({
     if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
     setIsListening(false);
     setSubmitted(true);
-    setTimeout(() => onSubmit(trimmed || "(No response — time expired)", timeLeft), 700);
+    const attempts = pasteAttemptsRef.current;
+    setTimeout(() => onSubmit(trimmed || "(No response — time expired)", timeLeft, attempts), 700);
   }, [submitted, text, min, onSubmit, timeLeft]);
 
   useEffect(() => {
@@ -1212,7 +1223,35 @@ function QuestionScreen({
             className="assessment-textarea"
             ref={textareaRef}
             value={text}
-            onChange={(e) => !submitted && setText(e.target.value)}
+            onChange={(e) => {
+              if (submitted) return;
+              const native = e.nativeEvent as Event;
+              const nextValue = e.target.value;
+              const inputType =
+                typeof InputEvent !== "undefined" && native instanceof InputEvent
+                  ? native.inputType
+                  : undefined;
+              if (typeof inputType === "string" && BLOCKED_INPUT_TYPES.has(inputType)) {
+                flashPasteBlocked();
+                if (textareaRef.current) textareaRef.current.value = text;
+                return;
+              }
+              // If the change didn't come from a real InputEvent (e.g. a script
+              // dispatched a synthetic `input` Event after mutating .value) and
+              // the value actually changed, treat it as an injection attempt.
+              // Benign browser/IME paths that fire non-InputEvents without
+              // changing the value are left alone.
+              if (
+                inputType === undefined &&
+                typeof InputEvent !== "undefined" &&
+                nextValue !== text
+              ) {
+                flashPasteBlocked();
+                if (textareaRef.current) textareaRef.current.value = text;
+                return;
+              }
+              setText(nextValue);
+            }}
             onPaste={(e) => {
               e.preventDefault();
               flashPasteBlocked();
@@ -1232,6 +1271,25 @@ function QuestionScreen({
             }}
             onContextMenu={(e) => {
               e.preventDefault();
+            }}
+            onBeforeInput={(e) => {
+              const inputType = (e.nativeEvent as InputEvent).inputType;
+              if (typeof inputType === "string" && BLOCKED_INPUT_TYPES.has(inputType)) {
+                e.preventDefault();
+                flashPasteBlocked();
+              }
+            }}
+            onAuxClick={(e) => {
+              if (e.button === 1) {
+                e.preventDefault();
+                flashPasteBlocked();
+              }
+            }}
+            onMouseDown={(e) => {
+              if (e.button === 1) {
+                e.preventDefault();
+                flashPasteBlocked();
+              }
             }}
             autoComplete="off"
             autoCorrect="off"
@@ -1554,6 +1612,7 @@ type AnswerRecord = {
   response: string;
   timeSpent: number;
   timeLimit: number;
+  pasteAttempts: number;
 };
 
 export default function AssessmentPage() {
@@ -1622,7 +1681,7 @@ export default function AssessmentPage() {
     }
   };
 
-  const handleAnswer = async (text: string, timeLeft: number) => {
+  const handleAnswer = async (text: string, timeLeft: number, pasteAttempts: number) => {
     const q = QUESTIONS[currentQ];
     const record: AnswerRecord = {
       questionId: q.id,
@@ -1632,6 +1691,7 @@ export default function AssessmentPage() {
       response: text,
       timeSpent: timeLeft,
       timeLimit: q.timeLimit,
+      pasteAttempts,
     };
     const updated = [...answers, record];
     setAnswers(updated);

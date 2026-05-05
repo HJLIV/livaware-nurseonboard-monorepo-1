@@ -88,6 +88,36 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
 
     y = 175 + 80 + 24;
 
+    const totalPasteAttempts = responses.reduce(
+      (sum, r) => sum + (typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0),
+      0
+    );
+    const flaggedQuestions = responses.filter(
+      (r) => typeof r.pasteAttempts === "number" && r.pasteAttempts > 0
+    ).length;
+
+    if (totalPasteAttempts > 0) {
+      const noticeHeight = 52;
+      doc.roundedRect(margin, y, contentWidth, noticeHeight, 4).fill(COLORS.card);
+      doc.roundedRect(margin, y, contentWidth, noticeHeight, 4).stroke(COLORS.danger);
+      doc.rect(margin, y, 3, noticeHeight).fill(COLORS.danger);
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.danger).text(
+        "INTEGRITY NOTICE",
+        margin + 16,
+        y + 12,
+        { characterSpacing: 1.5 }
+      );
+      const questionLabel = flaggedQuestions === 1 ? "question" : "questions";
+      const attemptLabel = totalPasteAttempts === 1 ? "attempt" : "attempts";
+      doc.font("Helvetica").fontSize(10).fillColor(COLORS.text).text(
+        `${totalPasteAttempts} blocked paste/drop ${attemptLabel} across ${flaggedQuestions} ${questionLabel}.`,
+        margin + 16,
+        y + 28,
+        { width: contentWidth - 32 }
+      );
+      y += noticeHeight + 18;
+    }
+
     if (assessment.aiAnalysis) {
       doc.rect(margin, y, 3, 0).fill(COLORS.accent);
 
@@ -149,12 +179,13 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
       const timeUsed = r.timeLimit - r.timeSpent;
+      const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
 
       doc.font("Helvetica").fontSize(9.5);
       const responseHeight = doc.heightOfString(r.response, {
         width: contentWidth - 32,
       });
-      const blockHeight = 60 + responseHeight + 30;
+      const blockHeight = 60 + responseHeight + 30 + (attempts > 0 ? 16 : 0);
 
       if (doc.y < y - 30) y = doc.y;
 
@@ -197,6 +228,16 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
         margin + 16,
         qy
       );
+
+      if (attempts > 0) {
+        qy += 12;
+        const label = attempts === 1 ? "attempt" : "attempts";
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.danger).text(
+          `${attempts} paste/drop ${label} blocked in this answer`,
+          margin + 16,
+          qy
+        );
+      }
 
       y += blockHeight + 12;
     }

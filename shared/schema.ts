@@ -101,6 +101,7 @@ export const assessmentResponseSchema = z.object({
   response: z.string(),
   timeSpent: z.number(),
   timeLimit: z.number(),
+  pasteAttempts: z.number().int().nonnegative().optional().default(0),
 });
 
 export type AssessmentResponse = z.infer<typeof assessmentResponseSchema>;
