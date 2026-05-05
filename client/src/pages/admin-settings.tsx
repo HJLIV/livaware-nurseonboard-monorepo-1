@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send } from "lucide-react";
 
 interface TrainingChaseScheduleSettings {
   weeklyChaseEnabled: boolean;
@@ -25,6 +26,7 @@ interface TrainingChaseScheduleSettings {
   weeklyChaseMinGapDays: number;
   replyScanEnabled: boolean;
   replyScanIntervalMinutes: number;
+  summaryRecipients: string[];
   lastWeeklyChaseRunAt?: string | null;
   lastReplyScanRunAt?: string | null;
 }
@@ -172,10 +174,30 @@ function formatZonedDateTime(iso: string | null | undefined, timeZone: string): 
   });
 }
 
+// Bare-minimum email check to keep client-side feedback fast and aligned
+// with the server's regex. The server is authoritative on validation.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Split the textarea blob (newlines, commas, semicolons, or whitespace)
+// into a clean, de-duped, trimmed list of email candidates.
+function parseRecipientsText(text: string): string[] {
+  const parts = text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<TrainingChaseScheduleSettings | null>(null);
+  const [recipientsText, setRecipientsText] = useState<string>("");
 
   const { data, isLoading } = useQuery<SettingsResponse>({
     queryKey: ["/api/admin/settings/training-chase-schedule"],
@@ -183,7 +205,10 @@ export default function AdminSettingsPage() {
 
   // Sync the editable form copy when the server settings load/refetch.
   useEffect(() => {
-    if (data?.settings) setDraft({ ...data.settings });
+    if (data?.settings) {
+      setDraft({ ...data.settings });
+      setRecipientsText((data.settings.summaryRecipients ?? []).join("\n"));
+    }
   }, [data?.settings]);
 
   const saveMutation = useMutation({
@@ -226,6 +251,9 @@ export default function AdminSettingsPage() {
   }
 
   const outlookConfigured = data.outlookConfigured;
+  const parsedRecipients = parseRecipientsText(recipientsText);
+  const invalidRecipients = parsedRecipients.filter((e) => !EMAIL_REGEX.test(e));
+  const recipientsValid = invalidRecipients.length === 0;
   const dirty =
     JSON.stringify({
       weeklyChaseEnabled: draft.weeklyChaseEnabled,
@@ -235,6 +263,7 @@ export default function AdminSettingsPage() {
       weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
       replyScanEnabled: draft.replyScanEnabled,
       replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
+      summaryRecipients: parsedRecipients,
     }) !==
     JSON.stringify({
       weeklyChaseEnabled: data.settings.weeklyChaseEnabled,
@@ -244,6 +273,7 @@ export default function AdminSettingsPage() {
       weeklyChaseMinGapDays: data.settings.weeklyChaseMinGapDays,
       replyScanEnabled: data.settings.replyScanEnabled,
       replyScanIntervalMinutes: data.settings.replyScanIntervalMinutes,
+      summaryRecipients: data.settings.summaryRecipients ?? [],
     });
 
   return (
@@ -499,10 +529,53 @@ export default function AdminSettingsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <Send className="h-5 w-5 text-[#C8A96E] mt-1" />
+            <div>
+              <CardTitle>Summary email recipients</CardTitle>
+              <CardDescription className="mt-1">
+                Where the weekly-chase and mailbox-scan summary emails ("47 nurses chased, 2 failures") are
+                delivered. Usually your compliance team. Leave blank to fall back to the shared sender mailbox.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Label htmlFor="summary-recipients" className="text-xs uppercase tracking-wide text-muted-foreground">
+            Email addresses (one per line, or comma-separated)
+          </Label>
+          <Textarea
+            id="summary-recipients"
+            rows={4}
+            placeholder="compliance@example.com&#10;manager@example.com"
+            value={recipientsText}
+            onChange={(e) => setRecipientsText(e.target.value)}
+            className="font-mono text-sm"
+            data-testid="textarea-summary-recipients"
+          />
+          {invalidRecipients.length > 0 ? (
+            <p className="text-xs text-destructive" data-testid="text-recipients-error">
+              Invalid {invalidRecipients.length === 1 ? "address" : "addresses"}: {invalidRecipients.join(", ")}
+            </p>
+          ) : parsedRecipients.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Summaries will be sent to {parsedRecipients.length} recipient
+              {parsedRecipients.length === 1 ? "" : "s"}.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No recipients configured — summaries will fall back to the shared sender mailbox.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-end gap-3 pt-2">
         {dirty && <p className="text-xs text-amber-400">Unsaved changes</p>}
         <Button
-          disabled={!dirty || saveMutation.isPending}
+          disabled={!dirty || !recipientsValid || saveMutation.isPending}
           onClick={() =>
             saveMutation.mutate({
               weeklyChaseEnabled: draft.weeklyChaseEnabled,
@@ -512,6 +585,7 @@ export default function AdminSettingsPage() {
               weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
               replyScanEnabled: draft.replyScanEnabled,
               replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
+              summaryRecipients: parsedRecipients,
             })
           }
           data-testid="button-save-settings"

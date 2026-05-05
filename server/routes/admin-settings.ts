@@ -12,6 +12,7 @@ import {
   getTrainingChaseScheduleSettings,
   saveTrainingChaseScheduleSettings,
   runWeeklyTrainingChase,
+  TrainingChaseSettingsValidationError,
 } from "../training-chase-scheduler";
 import { isOutlookConfigured } from "../outlook";
 import { storage } from "../storage";
@@ -55,6 +56,11 @@ export function registerAdminSettingsRoutes(app: Express): void {
       if (typeof body.weeklyChaseMinGapDays === "number") patch.weeklyChaseMinGapDays = body.weeklyChaseMinGapDays;
       if (typeof body.replyScanEnabled === "boolean") patch.replyScanEnabled = body.replyScanEnabled;
       if (typeof body.replyScanIntervalMinutes === "number") patch.replyScanIntervalMinutes = body.replyScanIntervalMinutes;
+      // summaryRecipients arrives as an array (or string for forgiveness);
+      // normalize+validate happens inside saveTrainingChaseScheduleSettings.
+      if (body.summaryRecipients !== undefined) {
+        patch.summaryRecipients = body.summaryRecipients as string[];
+      }
 
       const settings = await saveTrainingChaseScheduleSettings(patch, agentNameFor(req));
       await storage.createAuditLog({
@@ -64,6 +70,10 @@ export function registerAdminSettingsRoutes(app: Express): void {
       });
       res.json({ outlookConfigured: isOutlookConfigured(), settings });
     } catch (err: any) {
+      if (err instanceof TrainingChaseSettingsValidationError) {
+        res.status(400).json({ message: err.message });
+        return;
+      }
       console.error("[admin-settings] put training-chase-schedule failed:", err);
       res.status(500).json({ message: err?.message || "Failed to save settings" });
     }

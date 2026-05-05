@@ -586,6 +586,9 @@ export interface TrainingChaseScheduleSettings {
   // Mailbox reply scan that picks up certificates returned by nurses.
   replyScanEnabled: boolean;
   replyScanIntervalMinutes: number; // default 30
+  // Recipients for the weekly-chase + reply-scan admin summary emails.
+  // Empty array = fall back to AZURE_AD_SENDER_EMAIL (the shared mailbox).
+  summaryRecipients: string[];
   // Tracked by the scheduler — never edited from the UI directly.
   lastWeeklyChaseRunAt?: string | null;
   lastReplyScanRunAt?: string | null;
@@ -598,6 +601,7 @@ export const DEFAULT_TRAINING_CHASE_SCHEDULE: TrainingChaseScheduleSettings = {
   weeklyChaseMinGapDays: 14,
   replyScanEnabled: true,
   replyScanIntervalMinutes: 30,
+  summaryRecipients: [],
   lastWeeklyChaseRunAt: null,
   lastReplyScanRunAt: null,
 };

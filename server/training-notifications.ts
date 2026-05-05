@@ -26,8 +26,10 @@ import {
   documents,
   portalLinks,
   MANDATORY_TRAINING_MODULES,
+  TRAINING_CHASE_SCHEDULE_SETTING_KEY,
   type Candidate,
   type TrainingNotification,
+  type TrainingChaseScheduleSettings,
 } from "@shared/schema";
 import {
   getGraphClient,
@@ -42,6 +44,33 @@ import { computeOutstandingTrainingForRecords, type OutstandingModule } from "./
 export type { OutstandingModule } from "./training-status";
 
 const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
+
+// Where the weekly-chase + reply-scan admin summary emails should land.
+// Reads the configurable list from app_settings (managed in /settings) and
+// falls back to the shared sender mailbox when the operator hasn't picked
+// any recipients. Storage is read directly here (rather than importing the
+// scheduler's getter) to avoid a circular import — the scheduler already
+// depends on this module.
+export async function resolveChaseSummaryRecipients(): Promise<string[]> {
+  try {
+    const stored = await storage.getAppSetting<Partial<TrainingChaseScheduleSettings>>(
+      TRAINING_CHASE_SCHEDULE_SETTING_KEY,
+    );
+    const configured = stored?.summaryRecipients;
+    if (Array.isArray(configured) && configured.length > 0) {
+      const cleaned = configured
+        .map((x) => (typeof x === "string" ? x.trim() : ""))
+        .filter((x) => x.length > 0);
+      if (cleaned.length > 0) return cleaned;
+    }
+  } catch (err: any) {
+    console.warn(
+      "[training-notifications] failed to load summary recipients, falling back to sender mailbox:",
+      err?.message || err,
+    );
+  }
+  return [SENDER_EMAIL];
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // 1. Outstanding-training computation (delegates to shared helper)
@@ -713,11 +742,12 @@ async function sendChaseScanAdminSummary(summary: BulkChaseReplyScanSummary, tri
       ` : `<p style="color:#16a34a;">All processed attachments were auto-attached. No manual review required.</p>`}
     </div>
   `;
+  const recipients = await resolveChaseSummaryRecipients();
   await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject: `Training chase scan — ${summary.totalAutoAttached} auto-attached, ${summary.totalNeedsReview} needs review`,
       body: { contentType: "HTML", content: html },
-      toRecipients: [{ emailAddress: { address: SENDER_EMAIL, name: "Livaware Onboarding" } }],
+      toRecipients: recipients.map((address) => ({ emailAddress: { address } })),
     },
     saveToSentItems: false,
   });

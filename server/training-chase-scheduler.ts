@@ -27,6 +27,7 @@ import {
   computeOutstandingTrainingForNurse,
   sendTrainingChaseEmail,
   scanMailboxForChaseRepliesAll,
+  resolveChaseSummaryRecipients,
   TRAINING_CHASE_DEFAULT_SUBJECT,
   TRAINING_CHASE_DEFAULT_BODY,
   type OutstandingModule,
@@ -61,6 +62,10 @@ export async function saveTrainingChaseScheduleSettings(
   merged.weeklyChaseTimeZone = sanitizeTimeZone(merged.weeklyChaseTimeZone, "Europe/London");
   merged.weeklyChaseMinGapDays = clampInt(merged.weeklyChaseMinGapDays, 1, 90, 14);
   merged.replyScanIntervalMinutes = clampInt(merged.replyScanIntervalMinutes, 5, 24 * 60, 30);
+  // Validate the configurable summary-email recipient list. An invalid
+  // address throws a TrainingChaseSettingsValidationError so the route
+  // layer can surface it as a 400 instead of a 500.
+  merged.summaryRecipients = normalizeSummaryRecipients(merged.summaryRecipients);
   await storage.setAppSetting(TRAINING_CHASE_SCHEDULE_SETTING_KEY, merged, updatedBy);
   return merged;
 }
@@ -106,6 +111,54 @@ function getZonedDayHour(date: Date, timeZone: string): { day: number; hour: num
   const hourNum = Number(hourStr);
   const hour = Number.isFinite(hourNum) ? hourNum % 24 : 0;
   return { day: WEEKDAY_INDEX[weekday] ?? 0, hour };
+}
+
+// Thrown by saveTrainingChaseScheduleSettings when the recipients list is
+// malformed. Callers (the admin-settings route) catch this and translate it
+// to a 400 response instead of a generic 500.
+export class TrainingChaseSettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TrainingChaseSettingsValidationError";
+  }
+}
+
+// Reasonable, deliberately-strict-enough RFC-5321-ish check. We're not
+// trying to cover every legal email — just catch obvious typos like
+// "compliance@" or "compliance" before they get persisted.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeSummaryRecipients(input: unknown): string[] {
+  // Accept either an array of strings (preferred from the UI) or a single
+  // comma/semicolon/newline-separated string for forgiveness.
+  let raw: string[];
+  if (Array.isArray(input)) {
+    raw = input.map((x) => (typeof x === "string" ? x : String(x ?? "")));
+  } else if (typeof input === "string") {
+    raw = input.split(/[\s,;]+/);
+  } else if (input == null) {
+    return [];
+  } else {
+    throw new TrainingChaseSettingsValidationError(
+      "summaryRecipients must be an array of email addresses",
+    );
+  }
+  const cleaned: string[] = [];
+  for (const entry of raw) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    if (!EMAIL_REGEX.test(trimmed)) {
+      throw new TrainingChaseSettingsValidationError(
+        `"${trimmed}" is not a valid email address`,
+      );
+    }
+    // De-dupe case-insensitively but preserve the user's casing on first
+    // occurrence so display in the UI matches what was typed.
+    if (!cleaned.some((e) => e.toLowerCase() === trimmed.toLowerCase())) {
+      cleaned.push(trimmed);
+    }
+  }
+  return cleaned;
 }
 
 // Resolve the public base URL the scheduler should mint portal upload links
@@ -319,11 +372,12 @@ async function sendWeeklyChaseAdminSummary(r: WeeklyChaseResult): Promise<void> 
       }
     </div>
   `;
+  const recipients = await resolveChaseSummaryRecipients();
   await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject: `Weekly training chase — ${r.succeeded} sent, ${r.failed} failed`,
       body: { contentType: "HTML", content: html },
-      toRecipients: [{ emailAddress: { address: SENDER_EMAIL, name: "Livaware Onboarding" } }],
+      toRecipients: recipients.map((address) => ({ emailAddress: { address } })),
     },
     saveToSentItems: false,
   });
