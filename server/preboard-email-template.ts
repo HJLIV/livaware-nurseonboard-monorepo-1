@@ -1,4 +1,5 @@
 import type { Assessment, AssessmentResponse } from "@shared/schema";
+import { renderEmailMarkdown } from "@shared/email-markdown";
 
 export function buildEmailHtml(assessment: Assessment): string {
   const responses = assessment.responses as AssessmentResponse[];
@@ -22,12 +23,24 @@ export function buildEmailHtml(assessment: Assessment): string {
     </tr>
   `).join('');
 
+  // The LLM emits a wider variety of markdown than the previous regex
+  // chain handled (`### h3`, `*italic*`, `*` bullets, `1.` numbered
+  // lists, inline `code`). Run the full body through the shared email
+  // markdown renderer so nothing leaks as raw `#`/`*` characters.
   const analysisHtml = assessment.aiAnalysis
-    ? assessment.aiAnalysis
-        .replace(/## (.*)/g, '<h3 style="color: #C8A96E; font-size: 16px; margin: 24px 0 12px; font-weight: 500;">$1</h3>')
-        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #F0ECE4;">$1</strong>')
-        .replace(/\n- (.*)/g, '<div style="padding-left: 16px; margin: 4px 0;">· $1</div>')
-        .replace(/\n/g, '<br>')
+    ? renderEmailMarkdown(assessment.aiAnalysis, {
+        styles: {
+          // Match this section's existing dark-card typography (the
+          // surrounding <td> is colour:#F0ECE4DD font-size:14px line-height:1.8).
+          paragraph:
+            "color:#F0ECE4DD;font-size:14px;line-height:1.8;margin:0 0 14px;",
+          h1: "color:#C8A96E;font-size:18px;font-weight:500;margin:24px 0 12px;line-height:1.3;",
+          h2: "color:#C8A96E;font-size:16px;font-weight:500;margin:24px 0 12px;line-height:1.3;",
+          h3: "color:#C8A96E;font-size:15px;font-weight:500;margin:20px 0 10px;line-height:1.3;",
+          ul: "margin:0 0 14px;padding-left:22px;color:#F0ECE4DD;font-size:14px;line-height:1.75;",
+          ol: "margin:0 0 14px;padding-left:22px;color:#F0ECE4DD;font-size:14px;line-height:1.75;",
+        },
+      })
     : '<p style="color: #A8A29E;">Analysis pending...</p>';
 
   return `

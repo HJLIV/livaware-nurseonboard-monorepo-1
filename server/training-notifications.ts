@@ -40,6 +40,7 @@ import {
 import { ingestExistingFile, saveBufferIntoUploads, applyChaseReplyTrainingUpsert } from "./document-ingest";
 import { classifyDocumentSmart } from "./document-ai";
 import { computeOutstandingTrainingForRecords, type OutstandingModule } from "./training-status";
+import { renderEmailMarkdown } from "@shared/email-markdown";
 
 export type { OutstandingModule } from "./training-status";
 
@@ -89,20 +90,19 @@ export const TRAINING_CHASE_DEFAULT_SUBJECT =
   "Outstanding mandatory training — action required";
 
 export const TRAINING_CHASE_DEFAULT_BODY =
-  `Dear {{NAME}},
+  `Dear **{{NAME}}**,
 
 According to our records, the following mandatory training modules are either missing, have expired, or are about to expire:
 
 {{MODULES_LIST}}
 
-To remain compliant with our CQC obligations, please send us your latest certificates as soon as possible. You have two options:
+To remain compliant with our CQC obligations, please send us your latest certificates as soon as possible. **You have two options:**
 
-  1. Reply directly to this email with the certificate(s) attached. They will be filed against your record automatically.
+1. **Reply directly to this email** with the certificate(s) attached. They will be filed against your record automatically.
+2. **Or upload them via your secure portal link below** — no login required.
 
-  2. Or upload them via your secure portal link below — no login required.
-
-Secure upload link: {{PORTAL_URL}}
-This link is personal to you and expires on {{PORTAL_EXPIRY}}.
+**Secure upload link:** {{PORTAL_URL}}
+This link is personal to you and expires on **{{PORTAL_EXPIRY}}**.
 
 If you have any questions, just reply to this email.
 
@@ -120,8 +120,12 @@ export function renderChaseEmail(
   template: { subject: string; body: string },
   input: ChaseEmailRenderInput,
 ): { subject: string; body: string } {
+  // Each module becomes a markdown bullet item with the module name in
+  // bold so the shared markdown renderer can lift the whole {{MODULES_LIST}}
+  // into a real <ul> with <strong> module names — matching the design
+  // requirement that modules appear as a proper bullet list, not flat text.
   const moduleLines = input.modules
-    .map((m) => `  • ${m.moduleName} — ${m.label}`)
+    .map((m) => `- **${m.moduleName}** — ${m.label}`)
     .join("\n");
   const expiryFmt = input.portalExpiresAt.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -130,7 +134,7 @@ export function renderChaseEmail(
   });
   const tokenMap: Record<string, string> = {
     "{{NAME}}": input.nurseName,
-    "{{MODULES_LIST}}": moduleLines || "  • (no modules listed)",
+    "{{MODULES_LIST}}": moduleLines || "- (no modules listed)",
     "{{COUNT}}": String(input.modules.length),
     "{{PORTAL_URL}}": input.portalUrl,
     "{{PORTAL_EXPIRY}}": expiryFmt,
@@ -140,6 +144,8 @@ export function renderChaseEmail(
   return { subject: apply(template.subject), body: apply(template.body) };
 }
 
+// Used by the admin-summary email builders below for raw values that
+// should NOT be markdown-rendered (candidate names, error strings, etc.).
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -149,17 +155,19 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function buildChaseEmailHtml(bodyText: string, portalUrl: string, portalExpiryFormatted: string): string {
-  // Linkify the portal URL but otherwise faithfully render the plain-text
-  // body so what the admin previews is what the recipient sees.
-  const safeBody = escapeHtml(bodyText)
-    .split(escapeHtml(portalUrl))
-    .join(`<a href="${portalUrl}" style="color:#C8A96E;text-decoration:underline;">${portalUrl}</a>`);
-
-  const paragraphs = safeBody.split(/\n\n+/).filter(Boolean);
-  const bodyHtml = paragraphs
-    .map((p) => `<p style="font-size:14px;color:#E0DCD4;line-height:1.85;white-space:pre-wrap;">${p.replace(/\n/g, "<br />")}</p>`)
-    .join("\n");
+/**
+ * Render a chase-email body (already token-substituted markdown) into the
+ * full HTML email envelope sent to nurses. Uses the shared email-markdown
+ * renderer so admin-typed `**bold**`, bullet lists and the bold-by-default
+ * key phrases (greeting name, expiry date, "two options" lead-in, secure
+ * upload link label) all render as real HTML — not literal asterisks.
+ */
+export function buildChaseEmailHtml(
+  bodyMarkdown: string,
+  portalUrl: string,
+  portalExpiryFormatted: string,
+): string {
+  const bodyHtml = renderEmailMarkdown(bodyMarkdown);
 
   return `
     <div style="font-family:'Be Vietnam Pro','Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#020121;">

@@ -5,6 +5,7 @@ import { StatusBadge, StepStatusDot } from "@/components/shared/status-badge";
 import { StepProgress } from "@/components/shared/step-progress";
 import { SpecialismSelector } from "@/components/specialism-selector";
 import { AIMarkdown } from "@/components/ai-markdown";
+import { renderEmailMarkdown } from "@shared/email-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -2156,10 +2157,24 @@ function TrainingChaseHistorySection({ candidateId }: { candidateId: string }) {
                           <p className="text-sm" data-testid={`chase-subject-${entry.id}`}>{entry.subject}</p>
                         </div>
                         <div>
-                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Body</p>
-                          <pre className="text-xs whitespace-pre-wrap font-sans rounded-md border border-card-border bg-background p-3 max-h-64 overflow-auto" data-testid={`chase-body-${entry.id}`}>
-{entry.body}
-                          </pre>
+                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Body (rendered as recipient saw)</p>
+                          {/*
+                            Run the stored body markdown through the same
+                            shared renderer the chase email uses on send,
+                            so this history detail matches what the nurse
+                            actually received in their inbox (bold names,
+                            real bullet lists — not literal asterisks).
+                          */}
+                          <div
+                            className="text-xs rounded-md border border-card-border max-h-64 overflow-auto"
+                            style={{
+                              background: "#020121",
+                              padding: "14px 18px",
+                              fontFamily: "'Be Vietnam Pro','Segoe UI',Arial,sans-serif",
+                            }}
+                            data-testid={`chase-body-${entry.id}`}
+                            dangerouslySetInnerHTML={{ __html: renderEmailMarkdown(entry.body) }}
+                          />
                         </div>
                         {entry.outlookDeepLink && data.outlookConfigured && (
                           <div>

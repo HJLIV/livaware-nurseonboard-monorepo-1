@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { renderEmailMarkdown } from "@shared/email-markdown";
 import {
   ComplianceMatrix,
   type MatrixCandidate,
@@ -193,14 +194,18 @@ export default function TrainingMatrixPage() {
 
   const previewItem = prepare?.items[previewIdx];
   const previewRendered = useMemo(() => {
-    if (!previewItem) return { subject: editSubject, body: editBody };
-    const moduleLines = previewItem.modules.map((m) => `  • ${m.moduleName} — ${m.label}`).join("\n");
+    if (!previewItem) return { subject: editSubject, body: editBody, bodyHtml: renderEmailMarkdown(editBody) };
+    // Module list is emitted as markdown bullets with bold module names so
+    // the shared email renderer turns it into a real <ul><strong> — exactly
+    // what the recipient sees server-side. Keep this in sync with
+    // server/training-notifications.ts > renderChaseEmail.
+    const moduleLines = previewItem.modules.map((m) => `- **${m.moduleName}** — ${m.label}`).join("\n");
     const expiryDate = previewItem.portalExpiresAt
       ? new Date(previewItem.portalExpiresAt)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const tokens: Record<string, string> = {
       "{{NAME}}": previewItem.name,
-      "{{MODULES_LIST}}": moduleLines || "  • (no modules)",
+      "{{MODULES_LIST}}": moduleLines || "- (no modules)",
       "{{COUNT}}": String(previewItem.modules.length),
       "{{PORTAL_URL}}": previewItem.portalUrl ?? "(no email on file — link cannot be generated)",
       "{{PORTAL_EXPIRY}}": expiryDate.toLocaleDateString("en-GB", {
@@ -210,7 +215,9 @@ export default function TrainingMatrixPage() {
       }),
     };
     const apply = (s: string) => Object.entries(tokens).reduce((a, [k, v]) => a.split(k).join(v), s);
-    return { subject: apply(editSubject), body: apply(editBody) };
+    const subject = apply(editSubject);
+    const body = apply(editBody);
+    return { subject, body, bodyHtml: renderEmailMarkdown(body) };
   }, [previewItem, editSubject, editBody]);
 
   const handleSend = () => {
@@ -411,10 +418,23 @@ export default function TrainingMatrixPage() {
                     <p className="text-sm">{previewRendered.subject}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Body</p>
-                    <pre className="whitespace-pre-wrap text-xs leading-relaxed font-sans bg-background border rounded p-2">
-                      {previewRendered.body}
-                    </pre>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Body (rendered as recipient sees)</p>
+                    {/*
+                      Render through the SAME shared email-markdown renderer
+                      the server uses, inside a div styled like the email's
+                      dark body, so the admin's preview is byte-for-byte
+                      what the nurse will see in their inbox.
+                    */}
+                    <div
+                      className="rounded border"
+                      style={{
+                        background: "#020121",
+                        padding: "16px 20px",
+                        fontFamily: "'Be Vietnam Pro','Segoe UI',Arial,sans-serif",
+                      }}
+                      data-testid="chase-preview-body"
+                      dangerouslySetInnerHTML={{ __html: previewRendered.bodyHtml }}
+                    />
                   </div>
                 </div>
               </details>
