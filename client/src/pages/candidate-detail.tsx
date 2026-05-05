@@ -23,7 +23,8 @@ import {
   Users, FileText, ShieldCheck, Clock, CheckCircle, AlertTriangle,
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
-  ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck
+  ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck,
+  ChevronDown, ChevronRight, Send
 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -2040,6 +2041,150 @@ function TrainingTab({ candidateId, candidateName }: { candidateId: string; cand
         </div>
       )}
     </div>
+  );
+}
+
+interface TrainingChaseEntry {
+  id: string;
+  sentAt: string;
+  sentBy: string | null;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  modulesIncluded: string[];
+  moduleCount: number;
+  conversationId: string | null;
+  outlookDeepLink: string | null;
+}
+
+interface TrainingChaseHistoryResponse {
+  outlookConfigured: boolean;
+  totalChased: number;
+  history: TrainingChaseEntry[];
+}
+
+function TrainingChaseHistorySection({ candidateId }: { candidateId: string }) {
+  const { data, isLoading, isError } = useQuery<TrainingChaseHistoryResponse>({
+    queryKey: ["/api/admin/candidates", candidateId, "training-chase-history"],
+  });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+
+  return (
+    <Card className="border border-card-border" data-testid="card-training-chase-history">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Send className="h-4 w-4" />
+          Training chase history
+          {data && (
+            <Badge variant="outline" className="ml-2 text-[10px]" data-testid="badge-chase-count">
+              {data.totalChased} sent
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <Skeleton className="h-24" />}
+        {!isLoading && isError && (
+          <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-400" data-testid="chase-history-error">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>Failed to load training chase history. Please refresh and try again.</span>
+          </div>
+        )}
+        {!isLoading && !isError && data && data.history.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground" data-testid="chase-history-empty">
+            <Mail className="h-6 w-6 mb-2 opacity-50" />
+            <p className="text-sm">No training chase emails have been sent to this nurse yet.</p>
+          </div>
+        )}
+        {!isLoading && !isError && data && data.history.length > 0 && (
+          <div className="space-y-2" data-testid="chase-history-list">
+            {data.history.map((entry) => {
+              const isOpen = !!expanded[entry.id];
+              const sentDate = new Date(entry.sentAt);
+              return (
+                <div
+                  key={entry.id}
+                  className="rounded-lg border border-card-border overflow-hidden"
+                  data-testid={`chase-history-row-${entry.id}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggle(entry.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/40"
+                    data-testid={`chase-history-toggle-${entry.id}`}
+                  >
+                    {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium">
+                          {sentDate.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {entry.moduleCount} module{entry.moduleCount === 1 ? "" : "s"}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                        <span className="inline-flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {entry.sentBy || "unknown"}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          {entry.recipientEmail}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                  {isOpen && (
+                    <div className="px-3 pb-3 border-t border-card-border bg-muted/20" data-testid={`chase-history-detail-${entry.id}`}>
+                      <div className="pt-3 space-y-3">
+                        {entry.modulesIncluded.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Modules chased</p>
+                            <div className="flex flex-wrap gap-1">
+                              {entry.modulesIncluded.map((m) => (
+                                <Badge key={m} variant="outline" className="text-[10px]">{m}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Subject</p>
+                          <p className="text-sm" data-testid={`chase-subject-${entry.id}`}>{entry.subject}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Body</p>
+                          <pre className="text-xs whitespace-pre-wrap font-sans rounded-md border border-card-border bg-background p-3 max-h-64 overflow-auto" data-testid={`chase-body-${entry.id}`}>
+{entry.body}
+                          </pre>
+                        </div>
+                        {entry.outlookDeepLink && data.outlookConfigured && (
+                          <div>
+                            <a
+                              href={entry.outlookDeepLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                              data-testid={`chase-outlook-link-${entry.id}`}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open in mailbox
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -4193,6 +4338,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
       {section === "compliance" && (
         <>
           <CqcComplianceCheck candidateId={candidateId} candidateName={candidate.fullName} />
+          <TrainingChaseHistorySection candidateId={candidateId} />
           <Tabs defaultValue={initialComplianceTab}>
             <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1" data-testid="tabs-compliance">
               <TabsTrigger value="induction" className="text-xs gap-1.5"><FileText className="h-3 w-3" />Induction</TabsTrigger>

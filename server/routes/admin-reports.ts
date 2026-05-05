@@ -538,6 +538,46 @@ export function registerAdminReportsRoutes(app: Express) {
     }
   });
 
+  // Full chase history for a single nurse — every trainingNotifications row
+  // (newest first) including the original subject/body and (when available)
+  // a deep-link to the related Outlook thread. Powers the "Training chase
+  // history" panel on the candidate detail page (compliance section).
+  app.get("/api/admin/candidates/:nurseId/training-chase-history", requireAdmin, async (req, res) => {
+    try {
+      const nurseId = String(req.params.nurseId);
+      const rows = await storage.getTrainingNotificationsForNurse(nurseId);
+      const history = rows.map((n) => {
+        const modules = Array.isArray(n.modulesIncluded) ? (n.modulesIncluded as string[]) : [];
+        // Outlook Web supports searching the user's mailbox by query string;
+        // searching the subject of the chase email reliably surfaces the
+        // related thread without us having to persist a Graph webLink.
+        const outlookDeepLink = n.subject
+          ? `https://outlook.office.com/mail/sentitems?query=${encodeURIComponent(n.subject)}`
+          : null;
+        return {
+          id: n.id,
+          sentAt: n.sentAt.toISOString(),
+          sentBy: n.sentBy ?? null,
+          recipientEmail: n.recipientEmail,
+          subject: n.subject,
+          body: n.body,
+          modulesIncluded: modules,
+          moduleCount: modules.length,
+          conversationId: n.conversationId ?? null,
+          outlookDeepLink,
+        };
+      });
+      res.json({
+        outlookConfigured: isOutlookConfigured(),
+        totalChased: history.length,
+        history,
+      });
+    } catch (err: any) {
+      console.error("[admin-reports] chase-history failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load chase history" });
+    }
+  });
+
   // Build a preview payload the admin dialog uses to seed editable subject /
   // body fields. Two modes:
   //   - { nurseId: "..." }                → preview for one nurse
