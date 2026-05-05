@@ -28,6 +28,7 @@ const INTRO = {
     { text: "Each question has a time limit. The clock starts when the question appears." },
     { text: "Questions are sequential and cannot be revisited. Set aside 25–35 minutes." },
     { text: "Responses lock on submission. Write as you'd speak — not as you'd document." },
+    { text: "Copy and paste are disabled in the answer box — please type your response. Voice input is still available." },
   ],
 };
 
@@ -146,8 +147,17 @@ function IconLock() {
     </svg>
   );
 }
+function IconNoPaste() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={BRAND.accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 4h6a1 1 0 011 1v1h2a2 2 0 012 2v4" />
+      <path d="M20 20a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2h2V5a1 1 0 011-1" />
+      <line x1="4" y1="4" x2="20" y2="20" />
+    </svg>
+  );
+}
 
-const ruleIcons = [IconClock, IconArrowRight, IconLock];
+const ruleIcons = [IconClock, IconArrowRight, IconLock, IconNoPaste];
 
 function GrainOverlay() {
   return (
@@ -827,10 +837,24 @@ function QuestionScreen({
   const [timerAnnouncement, setTimerAnnouncement] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [pasteBlocked, setPasteBlocked] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pasteNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const min = question.minChars;
+
+  const flashPasteBlocked = useCallback(() => {
+    setPasteBlocked(true);
+    if (pasteNoticeTimerRef.current) clearTimeout(pasteNoticeTimerRef.current);
+    pasteNoticeTimerRef.current = setTimeout(() => setPasteBlocked(false), 2400);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pasteNoticeTimerRef.current) clearTimeout(pasteNoticeTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1189,6 +1213,29 @@ function QuestionScreen({
             ref={textareaRef}
             value={text}
             onChange={(e) => !submitted && setText(e.target.value)}
+            onPaste={(e) => {
+              e.preventDefault();
+              flashPasteBlocked();
+            }}
+            onCut={(e) => {
+              e.preventDefault();
+            }}
+            onCopy={(e) => {
+              e.preventDefault();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              flashPasteBlocked();
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+            }}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
             disabled={submitted || timeLeft === 0}
             aria-label={`Your response to question ${index + 1}`}
             placeholder={isListening ? "Listening — speak your response..." : "Type or tap the mic to speak your response..."}
@@ -1275,6 +1322,30 @@ function QuestionScreen({
             Listening — speak clearly
           </div>
         )}
+        <div
+          aria-live="polite"
+          role="status"
+          style={{
+            marginTop: 8,
+            minHeight: 18,
+            fontFamily: FONT.mono,
+            fontSize: 11,
+            color: BRAND.danger,
+            fontWeight: 400,
+            letterSpacing: "0.06em",
+            opacity: pasteBlocked ? 1 : 0,
+            transform: pasteBlocked ? "translateY(0)" : "translateY(-4px)",
+            transition: "opacity 0.4s ease, transform 0.4s ease",
+            pointerEvents: "none",
+          }}
+        >
+          {pasteBlocked && (
+            <span data-testid="text-paste-blocked" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: BRAND.danger, boxShadow: `0 0 8px ${BRAND.dangerGlow}` }} aria-hidden="true" />
+              Pasting is disabled — please type your answer.
+            </span>
+          )}
+        </div>
 
         <div
           style={{
