@@ -580,7 +580,8 @@ export interface TrainingChaseScheduleSettings {
   // Weekly bulk chase of nurses with outstanding mandatory training.
   weeklyChaseEnabled: boolean;
   weeklyChaseDayOfWeek: number; // 0=Sun .. 6=Sat (default Monday=1)
-  weeklyChaseHour: number; // 0..23 in server local time (default 9)
+  weeklyChaseHour: number; // 0..23 in the configured time zone (default 9)
+  weeklyChaseTimeZone: string; // IANA zone the day/hour are interpreted in (default Europe/London)
   weeklyChaseMinGapDays: number; // skip nurses chased in the last N days (default 14)
   // Mailbox reply scan that picks up certificates returned by nurses.
   replyScanEnabled: boolean;
@@ -593,6 +594,7 @@ export const DEFAULT_TRAINING_CHASE_SCHEDULE: TrainingChaseScheduleSettings = {
   weeklyChaseEnabled: false,
   weeklyChaseDayOfWeek: 1,
   weeklyChaseHour: 9,
+  weeklyChaseTimeZone: "Europe/London",
   weeklyChaseMinGapDays: 14,
   replyScanEnabled: true,
   replyScanIntervalMinutes: 30,

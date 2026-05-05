@@ -51,6 +51,7 @@ export function registerAdminSettingsRoutes(app: Express): void {
       if (typeof body.weeklyChaseEnabled === "boolean") patch.weeklyChaseEnabled = body.weeklyChaseEnabled;
       if (typeof body.weeklyChaseDayOfWeek === "number") patch.weeklyChaseDayOfWeek = body.weeklyChaseDayOfWeek;
       if (typeof body.weeklyChaseHour === "number") patch.weeklyChaseHour = body.weeklyChaseHour;
+      if (typeof body.weeklyChaseTimeZone === "string") patch.weeklyChaseTimeZone = body.weeklyChaseTimeZone;
       if (typeof body.weeklyChaseMinGapDays === "number") patch.weeklyChaseMinGapDays = body.weeklyChaseMinGapDays;
       if (typeof body.replyScanEnabled === "boolean") patch.replyScanEnabled = body.replyScanEnabled;
       if (typeof body.replyScanIntervalMinutes === "number") patch.replyScanIntervalMinutes = body.replyScanIntervalMinutes;

@@ -58,6 +58,7 @@ export async function saveTrainingChaseScheduleSettings(
   // last*RunAt to PUT validation — it's overwritten by the scheduler.
   merged.weeklyChaseDayOfWeek = clampInt(merged.weeklyChaseDayOfWeek, 0, 6, 1);
   merged.weeklyChaseHour = clampInt(merged.weeklyChaseHour, 0, 23, 9);
+  merged.weeklyChaseTimeZone = sanitizeTimeZone(merged.weeklyChaseTimeZone, "Europe/London");
   merged.weeklyChaseMinGapDays = clampInt(merged.weeklyChaseMinGapDays, 1, 90, 14);
   merged.replyScanIntervalMinutes = clampInt(merged.replyScanIntervalMinutes, 5, 24 * 60, 30);
   await storage.setAppSetting(TRAINING_CHASE_SCHEDULE_SETTING_KEY, merged, updatedBy);
@@ -69,6 +70,42 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   if (!Number.isFinite(n)) return fallback;
   const i = Math.round(n);
   return Math.min(max, Math.max(min, i));
+}
+
+// Validate the configured IANA zone by handing it to Intl.DateTimeFormat
+// (which throws on unknown zones). Unknown / non-string values fall back
+// to the default so a typo in the admin UI can't break the scheduler.
+function sanitizeTimeZone(v: unknown, fallback: string): string {
+  if (typeof v !== "string" || !v.trim()) return fallback;
+  const candidate = v.trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate });
+    return candidate;
+  } catch {
+    return fallback;
+  }
+}
+
+// Read the weekday (0=Sun..6=Sat) and hour-of-day (0..23) of `date` as
+// they would appear on a wall clock in `timeZone`. Used by the scheduler
+// to decide whether the current minute matches the configured slot in
+// the admin's chosen zone (rather than the server's UTC clock).
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+function getZonedDayHour(date: Date, timeZone: string): { day: number; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+  // Intl can emit "24" for midnight in some locales/configs; normalise.
+  const hourNum = Number(hourStr);
+  const hour = Number.isFinite(hourNum) ? hourNum % 24 : 0;
+  return { day: WEEKDAY_INDEX[weekday] ?? 0, hour };
 }
 
 // Resolve the public base URL the scheduler should mint portal upload links
@@ -301,8 +338,12 @@ function shouldRunWeeklyChase(
   now: Date,
 ): boolean {
   if (!settings.weeklyChaseEnabled) return false;
-  if (now.getDay() !== settings.weeklyChaseDayOfWeek) return false;
-  if (now.getHours() !== settings.weeklyChaseHour) return false;
+  // Compare day/hour in the admin's configured zone (not the server's UTC
+  // clock) so e.g. "Monday 09:00 Europe/London" stays correct across BST.
+  const tz = sanitizeTimeZone(settings.weeklyChaseTimeZone, "Europe/London");
+  const { day, hour } = getZonedDayHour(now, tz);
+  if (day !== settings.weeklyChaseDayOfWeek) return false;
+  if (hour !== settings.weeklyChaseHour) return false;
   // Already ran today within the configured hour? Skip — using a 6-day
   // floor to absorb any DST / clock drift while still firing once per week.
   if (settings.lastWeeklyChaseRunAt) {

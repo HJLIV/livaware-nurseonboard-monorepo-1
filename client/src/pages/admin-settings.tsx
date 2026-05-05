@@ -21,12 +21,34 @@ interface TrainingChaseScheduleSettings {
   weeklyChaseEnabled: boolean;
   weeklyChaseDayOfWeek: number;
   weeklyChaseHour: number;
+  weeklyChaseTimeZone: string;
   weeklyChaseMinGapDays: number;
   replyScanEnabled: boolean;
   replyScanIntervalMinutes: number;
   lastWeeklyChaseRunAt?: string | null;
   lastReplyScanRunAt?: string | null;
 }
+
+// Curated list of IANA zones for the dropdown. Anything else (a typo, an
+// older value already in storage) falls through to a free-text input so
+// admins can still type an exotic zone if they need to.
+const COMMON_TIME_ZONES = [
+  "Europe/London",
+  "Europe/Dublin",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Madrid",
+  "UTC",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
 
 interface SettingsResponse {
   outlookConfigured: boolean;
@@ -62,15 +84,92 @@ function formatDateTime(iso: string | null | undefined): string {
   });
 }
 
-function nextWeeklyRun(s: TrainingChaseScheduleSettings, now: Date = new Date()): Date {
-  const target = new Date(now);
-  target.setHours(s.weeklyChaseHour, 0, 0, 0);
-  const dayDiff = (s.weeklyChaseDayOfWeek - now.getDay() + 7) % 7;
-  target.setDate(now.getDate() + dayDiff);
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 7);
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
   }
-  return target;
+}
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+function getZonedDayHour(date: Date, timeZone: string): { day: number; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+  const hourNum = Number(hourStr);
+  const hour = Number.isFinite(hourNum) ? hourNum % 24 : 0;
+  return { day: WEEKDAY_INDEX[weekday] ?? 0, hour };
+}
+
+// Find the next instant after `now` whose wall-clock time in the chosen
+// zone is the very start (minute 0) of the configured day-of-week + hour.
+//
+// We do this in two passes so half-/quarter-hour-offset zones (Asia/Kolkata,
+// Australia/Adelaide, Pacific/Chatham) display an accurate minute:
+//   1. Walk forward by UTC hours until the zoned weekday+hour first match.
+//   2. Step back minute-by-minute (within 60 minutes) to find the earliest
+//      instant that still falls inside that target zoned hour — i.e. the
+//      moment the wall clock in the target zone strikes hh:00.
+function nextWeeklyRun(s: TrainingChaseScheduleSettings, now: Date = new Date()): Date | null {
+  const tz = s.weeklyChaseTimeZone && isValidTimeZone(s.weeklyChaseTimeZone)
+    ? s.weeklyChaseTimeZone
+    : "Europe/London";
+  const targetDay = s.weeklyChaseDayOfWeek;
+  const targetHour = s.weeklyChaseHour;
+
+  const start = new Date(now);
+  start.setUTCMinutes(0, 0, 0);
+
+  let hourMatch: Date | null = null;
+  for (let i = 1; i <= 24 * 8; i++) {
+    const candidate = new Date(start.getTime() + i * 60 * 60 * 1000);
+    if (candidate.getTime() <= now.getTime()) continue;
+    const { day, hour } = getZonedDayHour(candidate, tz);
+    if (day === targetDay && hour === targetHour) {
+      hourMatch = candidate;
+      break;
+    }
+  }
+  if (!hourMatch) return null;
+
+  let firstMatch = hourMatch;
+  for (let m = 1; m <= 60; m++) {
+    const candidate = new Date(hourMatch.getTime() - m * 60 * 1000);
+    if (candidate.getTime() <= now.getTime()) break;
+    const { day, hour } = getZonedDayHour(candidate, tz);
+    if (day === targetDay && hour === targetHour) {
+      firstMatch = candidate;
+    } else {
+      break;
+    }
+  }
+  return firstMatch;
+}
+
+function formatZonedDateTime(iso: string | null | undefined, timeZone: string): string {
+  if (!iso) return "Never";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Unknown";
+  const tz = isValidTimeZone(timeZone) ? timeZone : "Europe/London";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: tz,
+    timeZoneName: "short",
+  });
 }
 
 export default function AdminSettingsPage() {
@@ -132,6 +231,7 @@ export default function AdminSettingsPage() {
       weeklyChaseEnabled: draft.weeklyChaseEnabled,
       weeklyChaseDayOfWeek: draft.weeklyChaseDayOfWeek,
       weeklyChaseHour: draft.weeklyChaseHour,
+      weeklyChaseTimeZone: draft.weeklyChaseTimeZone,
       weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
       replyScanEnabled: draft.replyScanEnabled,
       replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
@@ -140,6 +240,7 @@ export default function AdminSettingsPage() {
       weeklyChaseEnabled: data.settings.weeklyChaseEnabled,
       weeklyChaseDayOfWeek: data.settings.weeklyChaseDayOfWeek,
       weeklyChaseHour: data.settings.weeklyChaseHour,
+      weeklyChaseTimeZone: data.settings.weeklyChaseTimeZone,
       weeklyChaseMinGapDays: data.settings.weeklyChaseMinGapDays,
       replyScanEnabled: data.settings.replyScanEnabled,
       replyScanIntervalMinutes: data.settings.replyScanIntervalMinutes,
@@ -217,7 +318,7 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hour (server time, 0–23)</Label>
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hour (0–23, in chosen zone)</Label>
               <Input
                 type="number"
                 min={0}
@@ -241,21 +342,83 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Time zone</Label>
+              {(() => {
+                // We treat "in custom mode" as: the value is missing OR isn't
+                // one of the curated zones in the dropdown. That keeps the
+                // free-text Input visible after the user picks "Custom…" and
+                // before they've typed anything (where the value is "").
+                const tzValue = draft.weeklyChaseTimeZone ?? "";
+                const inList = tzValue !== "" && COMMON_TIME_ZONES.includes(tzValue);
+                const selectValue = inList ? tzValue : "__custom__";
+                return (
+                  <>
+                    <Select
+                      value={selectValue}
+                      onValueChange={(v) => {
+                        if (v === "__custom__") {
+                          // Clear the value so the free-text Input appears
+                          // empty and ready for typing. (Save will reject an
+                          // empty value via sanitizeTimeZone on the server.)
+                          setDraft({ ...draft, weeklyChaseTimeZone: "" });
+                        } else {
+                          setDraft({ ...draft, weeklyChaseTimeZone: v });
+                        }
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-weekly-timezone"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {COMMON_TIME_ZONES.map((z) => (
+                          <SelectItem key={z} value={z}>{z}</SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">Custom IANA zone…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {!inList && (
+                      <Input
+                        placeholder="e.g. Pacific/Auckland"
+                        value={tzValue}
+                        onChange={(e) => setDraft({ ...draft, weeklyChaseTimeZone: e.target.value })}
+                        data-testid="input-weekly-timezone-custom"
+                      />
+                    )}
+                    {tzValue !== "" && !isValidTimeZone(tzValue) && (
+                      <p className="text-xs text-amber-400">
+                        "{tzValue}" isn't a recognised IANA zone — it'll fall back to Europe/London on save.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                The day and hour above are interpreted in this zone, so DST shifts don't move the send time.
+              </p>
+            </div>
+          </div>
+
           <Separator />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Last run</p>
               <p className="mt-1 font-mono text-sm" data-testid="text-weekly-last-run">
-                {formatDateTime(data.settings.lastWeeklyChaseRunAt)}
+                {formatZonedDateTime(data.settings.lastWeeklyChaseRunAt, draft.weeklyChaseTimeZone)}
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Next scheduled run</p>
-              <p className="mt-1 font-mono text-sm">
-                {draft.weeklyChaseEnabled
-                  ? formatDateTime(nextWeeklyRun(draft).toISOString())
-                  : "— (job disabled)"}
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Next scheduled run
+              </p>
+              <p className="mt-1 font-mono text-sm" data-testid="text-weekly-next-run">
+                {(() => {
+                  if (!draft.weeklyChaseEnabled) return "— (job disabled)";
+                  const next = nextWeeklyRun(draft);
+                  return next
+                    ? formatZonedDateTime(next.toISOString(), draft.weeklyChaseTimeZone)
+                    : "—";
+                })()}
               </p>
             </div>
           </div>
@@ -345,6 +508,7 @@ export default function AdminSettingsPage() {
               weeklyChaseEnabled: draft.weeklyChaseEnabled,
               weeklyChaseDayOfWeek: draft.weeklyChaseDayOfWeek,
               weeklyChaseHour: draft.weeklyChaseHour,
+              weeklyChaseTimeZone: draft.weeklyChaseTimeZone,
               weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
               replyScanEnabled: draft.replyScanEnabled,
               replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
