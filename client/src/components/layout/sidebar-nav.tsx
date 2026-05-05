@@ -24,6 +24,7 @@ import {
   GraduationCap,
   Award,
   TableProperties,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +86,7 @@ const sections: NavSectionDef[] = [
     items: [
       { label: "User Management", href: "/arcade/admin/users", icon: UserCog, adminOnly: true },
       { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },
+      { label: "Documents to Review", href: "/documents/review", icon: AlertTriangle, adminOnly: true, badgeKey: "documentsReview" },
       { label: "Audit Trail", href: "/audit", icon: ScrollText, adminOnly: true },
       { label: "Admin Guide", href: "/guide", icon: BookOpen },
     ],
@@ -164,12 +166,23 @@ function NavSection({
         <nav className="flex flex-col gap-0.5">
           {filtered.map((item) => {
             const specificRoutes = ["/arcade/trainer", "/arcade/admin/modules", "/arcade/admin/reports", "/arcade/admin/users"];
+            // Prefer the longest-matching nav href so a sub-route like
+            // /documents/review doesn't also light up /documents. We
+            // discard any sibling whose href is a strict prefix of a
+            // longer sibling that also matches the current path.
+            const longerSiblingMatches = filtered.some(
+              (other) =>
+                other.href !== item.href &&
+                other.href.length > item.href.length &&
+                other.href.startsWith(item.href) &&
+                (currentPath === other.href || currentPath.startsWith(other.href + "/")),
+            );
             const isActive =
               item.href === "/"
                 ? currentPath === "/"
                 : item.href === "/arcade"
                   ? currentPath.startsWith("/arcade") && !specificRoutes.some((r) => currentPath.startsWith(r))
-                  : currentPath.startsWith(item.href);
+                  : !longerSiblingMatches && currentPath.startsWith(item.href);
             const Icon = item.icon;
             const badgeCount = item.badgeKey ? badges[item.badgeKey] : undefined;
 
@@ -251,9 +264,20 @@ export function SidebarNav() {
     enabled: authData?.role === "admin" || authData?.role === "trainer",
   });
 
+  // Drives the badge count next to "Documents to Review" so admins know at a
+  // glance how many low-confidence AI classifications are waiting on them.
+  const { data: reviewQueueData } = useQuery<{ total: number } | null>({
+    queryKey: ["/api/admin/documents/review-queue"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 30000,
+    retry: false,
+    enabled: authData?.role === "admin",
+  });
+
   const badges: Record<string, number> = {
     applicants: statsData?.funnelCounts?.preboard ?? 0,
     trainerQueue: Array.isArray(trainerData) ? trainerData.length : 0,
+    documentsReview: reviewQueueData?.total ?? 0,
   };
 
   const handleLogout = async () => {

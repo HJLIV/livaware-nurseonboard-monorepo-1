@@ -38,6 +38,7 @@ const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
 const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
 const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
 const DocumentsPage = lazy(() => import("@/pages/documents"));
+const DocumentsReviewPage = lazy(() => import("@/pages/documents-review"));
 
 // Nurse Preboard
 const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
@@ -127,6 +128,9 @@ function AuthenticatedRouter() {
               <Route path="/arcade/admin/users">{() => <AppLayout><ArcadeAdminUsers /></AppLayout>}</Route>
 
               {/* Documents */}
+              {/* The /review path must be registered BEFORE /documents so wouter
+                  matches it first — otherwise "/documents" would catch it. */}
+              <Route path="/documents/review">{() => <AdminRoute component={DocumentsReviewPage} />}</Route>
               <Route path="/documents">{() => <AdminRoute component={DocumentsPage} />}</Route>
 
               {/* Compliance Matrix Reports (admin only) */}

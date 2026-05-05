@@ -319,6 +319,47 @@ export function registerDocumentRoutes(app: Express) {
     res.json({ ok: true, document: updated, cleared: removed.length });
   });
 
+  // ── Admin review queue: low-confidence AI classifications ─────────────
+  // Lists every document the AI flagged with `aiStatus = 'warning'` AND a
+  // `low_confidence_classification` issue, across all candidates. Used by
+  // the dedicated /documents/review screen so admins can blitz through
+  // mis-categorisations without opening each candidate page.
+  //
+  // The list naturally shrinks as admins re-categorise: PATCH
+  // /api/documents/:id/category resets `aiStatus` to null and replaces
+  // `aiIssues` with the manual override marker, so the row drops out of
+  // the queue on the next refetch.
+  app.get("/api/admin/documents/review-queue", async (_req, res) => {
+    const rows = await db
+      .select({
+        id: documents.id,
+        nurseId: documents.nurseId,
+        type: documents.type,
+        filename: documents.filename,
+        originalFilename: documents.originalFilename,
+        filePath: documents.filePath,
+        fileSize: documents.fileSize,
+        mimeType: documents.mimeType,
+        category: documents.category,
+        sharepointUrl: documents.sharepointUrl,
+        aiStatus: documents.aiStatus,
+        aiIssues: documents.aiIssues,
+        uploadedAt: documents.uploadedAt,
+        candidateName: nurses.fullName,
+      })
+      .from(documents)
+      .innerJoin(nurses, eq(documents.nurseId, nurses.id))
+      .where(
+        and(
+          eq(documents.aiStatus, "warning"),
+          sql`${documents.aiIssues} @> '[{"code":"low_confidence_classification"}]'::jsonb`,
+        ),
+      )
+      .orderBy(desc(documents.uploadedAt));
+
+    res.json({ data: rows, total: rows.length });
+  });
+
   app.get("/api/admin/documents/filters", async (_req, res) => {
     const [candidateRows, categoryRows] = await Promise.all([
       db
