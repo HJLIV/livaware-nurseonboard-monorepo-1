@@ -9,9 +9,20 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap } from "lucide-react";
+import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap, AlertTriangle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+interface AssessmentResponseItem {
+  questionId?: number;
+  tag?: string;
+  domain?: string;
+  prompt?: string;
+  response?: string;
+  timeSpent?: number;
+  timeLimit?: number;
+  pasteAttempts?: number;
+}
 
 interface PreboardAssessment {
   id: number;
@@ -20,9 +31,26 @@ interface PreboardAssessment {
   status: string;
   score?: number;
   aiAnalysis?: string;
-  responses?: Record<string, unknown>;
+  responses?: AssessmentResponseItem[] | Record<string, unknown>;
   completedAt?: string;
   createdAt: string;
+}
+
+function getPasteAttemptStats(assessment: PreboardAssessment): {
+  total: number;
+  flaggedQuestions: number;
+} {
+  const responses = Array.isArray(assessment.responses) ? assessment.responses : [];
+  let total = 0;
+  let flaggedQuestions = 0;
+  for (const r of responses) {
+    const attempts = typeof r?.pasteAttempts === "number" ? r.pasteAttempts : 0;
+    if (attempts > 0) {
+      total += attempts;
+      flaggedQuestions += 1;
+    }
+  }
+  return { total, flaggedQuestions };
 }
 
 function AssessmentDetailDialog({
@@ -101,6 +129,7 @@ interface Nurse {
 
 export default function AdminPreboard() {
   const [search, setSearch] = useState("");
+  const [integrityFilter, setIntegrityFilter] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<PreboardAssessment | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const { toast } = useToast();
@@ -159,11 +188,25 @@ export default function AdminPreboard() {
   );
   const assessedPreboardCount = assessedPreboardNurseIds.size;
 
-  const filtered = assessments?.filter((a) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return a.nurseName.toLowerCase().includes(q) || a.status.toLowerCase().includes(q);
-  });
+  const integrityFlaggedCount = (assessments || []).filter(
+    (a) => getPasteAttemptStats(a).total > 0,
+  ).length;
+
+  const filtered = (() => {
+    const base = assessments?.filter((a) => {
+      if (integrityFilter && getPasteAttemptStats(a).total === 0) return false;
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return a.nurseName.toLowerCase().includes(q) || a.status.toLowerCase().includes(q);
+    });
+    if (!base) return base;
+    if (!integrityFilter) return base;
+    return base.slice().sort((a, b) => {
+      const aTotal = getPasteAttemptStats(a).total;
+      const bTotal = getPasteAttemptStats(b).total;
+      return bTotal - aTotal;
+    });
+  })();
 
   return (
     <AppLayout>
@@ -206,6 +249,20 @@ export default function AdminPreboard() {
               className="pl-9 h-10 bg-card border-border/60"
             />
           </div>
+          {integrityFlaggedCount > 0 && (
+            <Button
+              variant={integrityFilter ? "default" : "outline"}
+              size="sm"
+              className="shrink-0 gap-2 font-semibold"
+              onClick={() => setIntegrityFilter((v) => !v)}
+              data-testid="button-toggle-integrity-filter"
+              aria-pressed={integrityFilter}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {integrityFilter ? "Showing flagged" : "Integrity flagged"}
+              <span className="tabular-nums">({integrityFlaggedCount})</span>
+            </Button>
+          )}
           {filtered && (
             <Badge variant="secondary" className="shrink-0 font-semibold tabular-nums">
               {filtered.length} {filtered.length === 1 ? "assessment" : "assessments"}
@@ -221,13 +278,28 @@ export default function AdminPreboard() {
           </div>
         ) : filtered && filtered.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((assessment, i) => (
+            {filtered.map((assessment, i) => {
+              const { total: pasteTotal, flaggedQuestions } = getPasteAttemptStats(assessment);
+              return (
               <div key={assessment.id} className="animate-fade-in-up" style={{ animationDelay: `${Math.min(i * 50, 400)}ms` }}>
                 <Card className="group border transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-sm font-semibold group-hover:text-primary transition-colors">{assessment.nurseName}</CardTitle>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <CardTitle className="text-sm font-semibold group-hover:text-primary transition-colors">{assessment.nurseName}</CardTitle>
+                          {pasteTotal > 0 && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px] gap-1 px-1.5 py-0"
+                              data-testid={`badge-paste-attempts-list-${assessment.id}`}
+                              title={`${pasteTotal} blocked paste/drop ${pasteTotal === 1 ? "attempt" : "attempts"} across ${flaggedQuestions} ${flaggedQuestions === 1 ? "question" : "questions"}`}
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              {pasteTotal} paste {pasteTotal === 1 ? "attempt" : "attempts"}
+                            </Badge>
+                          )}
+                        </div>
                         <CardDescription className="text-[10px] mt-0.5">Assessment #{assessment.id}</CardDescription>
                       </div>
                       <StatusBadge status={assessment.status} />
@@ -278,7 +350,8 @@ export default function AdminPreboard() {
                   </CardContent>
                 </Card>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <Card className="animate-fade-in-up animate-delay-200">
