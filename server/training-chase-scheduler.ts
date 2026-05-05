@@ -19,6 +19,7 @@
 import {
   TRAINING_CHASE_SCHEDULE_SETTING_KEY,
   DEFAULT_TRAINING_CHASE_SCHEDULE,
+  migrateLegacyTrainingChaseRecipients,
   type TrainingChaseScheduleSettings,
   type ScheduledJobRun,
   type TrainingNotification,
@@ -29,7 +30,7 @@ import {
   computeOutstandingTrainingForNurse,
   sendTrainingChaseEmail,
   scanMailboxForChaseRepliesAll,
-  resolveChaseSummaryRecipients,
+  resolveWeeklyChaseSummaryRecipients,
   TRAINING_CHASE_DEFAULT_SUBJECT,
   TRAINING_CHASE_DEFAULT_BODY,
   type OutstandingModule,
@@ -60,10 +61,14 @@ let replyScanRunning = false;
 let schedulerStarted = false;
 
 export async function getTrainingChaseScheduleSettings(): Promise<TrainingChaseScheduleSettings> {
-  const stored = await storage.getAppSetting<Partial<TrainingChaseScheduleSettings>>(
-    TRAINING_CHASE_SCHEDULE_SETTING_KEY,
-  );
-  return { ...DEFAULT_TRAINING_CHASE_SCHEDULE, ...(stored ?? {}) };
+  const stored = await storage.getAppSetting<
+    Partial<TrainingChaseScheduleSettings> & { summaryRecipients?: unknown }
+  >(TRAINING_CHASE_SCHEDULE_SETTING_KEY);
+  // Apply legacy → split-recipients migration before merging defaults so a
+  // stored row that still carries `summaryRecipients` seeds both new fields
+  // (and the legacy field is dropped from the in-memory shape).
+  const migrated = migrateLegacyTrainingChaseRecipients(stored);
+  return { ...DEFAULT_TRAINING_CHASE_SCHEDULE, ...migrated };
 }
 
 export async function saveTrainingChaseScheduleSettings(
@@ -79,10 +84,15 @@ export async function saveTrainingChaseScheduleSettings(
   merged.weeklyChaseTimeZone = sanitizeTimeZone(merged.weeklyChaseTimeZone, "Europe/London");
   merged.weeklyChaseMinGapDays = clampInt(merged.weeklyChaseMinGapDays, 1, 90, 14);
   merged.replyScanIntervalMinutes = clampInt(merged.replyScanIntervalMinutes, 5, 24 * 60, 30);
-  // Validate the configurable summary-email recipient list. An invalid
-  // address throws a TrainingChaseSettingsValidationError so the route
-  // layer can surface it as a 400 instead of a 500.
-  merged.summaryRecipients = normalizeSummaryRecipients(merged.summaryRecipients);
+  // Validate both configurable summary-email recipient lists. An invalid
+  // address throws a TrainingChaseSettingsValidationError so the route layer
+  // can surface it as a 400 instead of a generic 500.
+  merged.weeklyChaseSummaryRecipients = normalizeSummaryRecipients(
+    merged.weeklyChaseSummaryRecipients,
+  );
+  merged.replyScanSummaryRecipients = normalizeSummaryRecipients(
+    merged.replyScanSummaryRecipients,
+  );
   await storage.setAppSetting(TRAINING_CHASE_SCHEDULE_SETTING_KEY, merged, updatedBy);
   return merged;
 }
@@ -157,7 +167,7 @@ export function normalizeSummaryRecipients(input: unknown): string[] {
     return [];
   } else {
     throw new TrainingChaseSettingsValidationError(
-      "summaryRecipients must be an array of email addresses",
+      "Summary recipients must be an array of email addresses",
     );
   }
   const cleaned: string[] = [];
@@ -422,7 +432,7 @@ async function sendWeeklyChaseAdminSummary(r: WeeklyChaseResult): Promise<void> 
       }
     </div>
   `;
-  const recipients = await resolveChaseSummaryRecipients();
+  const recipients = await resolveWeeklyChaseSummaryRecipients();
   await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
     message: {
       subject: `Weekly training chase — ${r.succeeded} sent, ${r.failed} failed`,

@@ -42,7 +42,10 @@ interface TrainingChaseScheduleSettings {
   weeklyChaseMinGapDays: number;
   replyScanEnabled: boolean;
   replyScanIntervalMinutes: number;
-  summaryRecipients: string[];
+  // Independent recipient lists for the two scheduled-job admin summary
+  // emails. Each falls back to the shared sender mailbox when empty.
+  weeklyChaseSummaryRecipients: string[];
+  replyScanSummaryRecipients: string[];
   lastWeeklyChaseRunAt?: string | null;
   lastReplyScanRunAt?: string | null;
 }
@@ -570,7 +573,8 @@ export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<TrainingChaseScheduleSettings | null>(null);
-  const [recipientsText, setRecipientsText] = useState<string>("");
+  const [weeklyRecipientsText, setWeeklyRecipientsText] = useState<string>("");
+  const [scanRecipientsText, setScanRecipientsText] = useState<string>("");
   const [openRunId, setOpenRunId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<SettingsResponse>({
@@ -581,7 +585,8 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     if (data?.settings) {
       setDraft({ ...data.settings });
-      setRecipientsText((data.settings.summaryRecipients ?? []).join("\n"));
+      setWeeklyRecipientsText((data.settings.weeklyChaseSummaryRecipients ?? []).join("\n"));
+      setScanRecipientsText((data.settings.replyScanSummaryRecipients ?? []).join("\n"));
     }
   }, [data?.settings]);
 
@@ -626,9 +631,12 @@ export default function AdminSettingsPage() {
   }
 
   const outlookConfigured = data.outlookConfigured;
-  const parsedRecipients = parseRecipientsText(recipientsText);
-  const invalidRecipients = parsedRecipients.filter((e) => !EMAIL_REGEX.test(e));
-  const recipientsValid = invalidRecipients.length === 0;
+  const parsedWeeklyRecipients = parseRecipientsText(weeklyRecipientsText);
+  const parsedScanRecipients = parseRecipientsText(scanRecipientsText);
+  const invalidWeeklyRecipients = parsedWeeklyRecipients.filter((e) => !EMAIL_REGEX.test(e));
+  const invalidScanRecipients = parsedScanRecipients.filter((e) => !EMAIL_REGEX.test(e));
+  const recipientsValid =
+    invalidWeeklyRecipients.length === 0 && invalidScanRecipients.length === 0;
   const dirty =
     JSON.stringify({
       weeklyChaseEnabled: draft.weeklyChaseEnabled,
@@ -638,7 +646,8 @@ export default function AdminSettingsPage() {
       weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
       replyScanEnabled: draft.replyScanEnabled,
       replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
-      summaryRecipients: parsedRecipients,
+      weeklyChaseSummaryRecipients: parsedWeeklyRecipients,
+      replyScanSummaryRecipients: parsedScanRecipients,
     }) !==
     JSON.stringify({
       weeklyChaseEnabled: data.settings.weeklyChaseEnabled,
@@ -648,7 +657,8 @@ export default function AdminSettingsPage() {
       weeklyChaseMinGapDays: data.settings.weeklyChaseMinGapDays,
       replyScanEnabled: data.settings.replyScanEnabled,
       replyScanIntervalMinutes: data.settings.replyScanIntervalMinutes,
-      summaryRecipients: data.settings.summaryRecipients ?? [],
+      weeklyChaseSummaryRecipients: data.settings.weeklyChaseSummaryRecipients ?? [],
+      replyScanSummaryRecipients: data.settings.replyScanSummaryRecipients ?? [],
     });
 
   return (
@@ -927,39 +937,81 @@ export default function AdminSettingsPage() {
             <div>
               <CardTitle>Summary email recipients</CardTitle>
               <CardDescription className="mt-1">
-                Where the weekly-chase and mailbox-scan summary emails ("47 nurses chased, 2 failures") are
-                delivered. Usually your compliance team. Leave blank to fall back to the shared sender mailbox.
+                Each scheduled job has its own recipient list, so the weekly digest and the mailbox-scan
+                alerts can go to different people (e.g. compliance vs. on-call admin). Leave a list blank to
+                fall back to the shared sender mailbox for that job.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Label htmlFor="summary-recipients" className="text-xs uppercase tracking-wide text-muted-foreground">
-            Email addresses (one per line, or comma-separated)
-          </Label>
-          <Textarea
-            id="summary-recipients"
-            rows={4}
-            placeholder="compliance@example.com&#10;manager@example.com"
-            value={recipientsText}
-            onChange={(e) => setRecipientsText(e.target.value)}
-            className="font-mono text-sm"
-            data-testid="textarea-summary-recipients"
-          />
-          {invalidRecipients.length > 0 ? (
-            <p className="text-xs text-destructive" data-testid="text-recipients-error">
-              Invalid {invalidRecipients.length === 1 ? "address" : "addresses"}: {invalidRecipients.join(", ")}
-            </p>
-          ) : parsedRecipients.length > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Summaries will be sent to {parsedRecipients.length} recipient
-              {parsedRecipients.length === 1 ? "" : "s"}.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              No recipients configured — summaries will fall back to the shared sender mailbox.
-            </p>
-          )}
+        <CardContent className="space-y-6">
+          <div className="space-y-3">
+            <Label
+              htmlFor="weekly-summary-recipients"
+              className="text-xs uppercase tracking-wide text-muted-foreground"
+            >
+              Weekly chase summary — recipients (one per line, or comma-separated)
+            </Label>
+            <Textarea
+              id="weekly-summary-recipients"
+              rows={4}
+              placeholder="compliance@example.com&#10;manager@example.com"
+              value={weeklyRecipientsText}
+              onChange={(e) => setWeeklyRecipientsText(e.target.value)}
+              className="font-mono text-sm"
+              data-testid="textarea-weekly-summary-recipients"
+            />
+            {invalidWeeklyRecipients.length > 0 ? (
+              <p className="text-xs text-destructive" data-testid="text-weekly-recipients-error">
+                Invalid {invalidWeeklyRecipients.length === 1 ? "address" : "addresses"}:{" "}
+                {invalidWeeklyRecipients.join(", ")}
+              </p>
+            ) : parsedWeeklyRecipients.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Weekly chase summaries will be sent to {parsedWeeklyRecipients.length} recipient
+                {parsedWeeklyRecipients.length === 1 ? "" : "s"}.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No recipients configured — weekly chase summaries will fall back to the shared sender mailbox.
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <Label
+              htmlFor="scan-summary-recipients"
+              className="text-xs uppercase tracking-wide text-muted-foreground"
+            >
+              Mailbox reply-scan summary — recipients (one per line, or comma-separated)
+            </Label>
+            <Textarea
+              id="scan-summary-recipients"
+              rows={4}
+              placeholder="oncall@example.com&#10;admin@example.com"
+              value={scanRecipientsText}
+              onChange={(e) => setScanRecipientsText(e.target.value)}
+              className="font-mono text-sm"
+              data-testid="textarea-scan-summary-recipients"
+            />
+            {invalidScanRecipients.length > 0 ? (
+              <p className="text-xs text-destructive" data-testid="text-scan-recipients-error">
+                Invalid {invalidScanRecipients.length === 1 ? "address" : "addresses"}:{" "}
+                {invalidScanRecipients.join(", ")}
+              </p>
+            ) : parsedScanRecipients.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Reply-scan summaries will be sent to {parsedScanRecipients.length} recipient
+                {parsedScanRecipients.length === 1 ? "" : "s"}.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No recipients configured — reply-scan summaries will fall back to the shared sender mailbox.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -978,7 +1030,8 @@ export default function AdminSettingsPage() {
               weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
               replyScanEnabled: draft.replyScanEnabled,
               replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
-              summaryRecipients: parsedRecipients,
+              weeklyChaseSummaryRecipients: parsedWeeklyRecipients,
+              replyScanSummaryRecipients: parsedScanRecipients,
             })
           }
           data-testid="button-save-settings"

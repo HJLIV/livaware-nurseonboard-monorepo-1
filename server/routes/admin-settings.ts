@@ -61,10 +61,15 @@ export function registerAdminSettingsRoutes(app: Express): void {
       if (typeof body.weeklyChaseMinGapDays === "number") patch.weeklyChaseMinGapDays = body.weeklyChaseMinGapDays;
       if (typeof body.replyScanEnabled === "boolean") patch.replyScanEnabled = body.replyScanEnabled;
       if (typeof body.replyScanIntervalMinutes === "number") patch.replyScanIntervalMinutes = body.replyScanIntervalMinutes;
-      // summaryRecipients arrives as an array (or string for forgiveness);
-      // normalize+validate happens inside saveTrainingChaseScheduleSettings.
-      if (body.summaryRecipients !== undefined) {
-        patch.summaryRecipients = body.summaryRecipients as string[];
+      // The two summary-recipient lists arrive as arrays (or strings, for
+      // forgiveness); normalize+validate happens inside
+      // saveTrainingChaseScheduleSettings. They're independent so an admin
+      // can configure one without touching the other.
+      if (body.weeklyChaseSummaryRecipients !== undefined) {
+        patch.weeklyChaseSummaryRecipients = body.weeklyChaseSummaryRecipients as string[];
+      }
+      if (body.replyScanSummaryRecipients !== undefined) {
+        patch.replyScanSummaryRecipients = body.replyScanSummaryRecipients as string[];
       }
 
       const settings = await saveTrainingChaseScheduleSettings(patch, agentNameFor(req));

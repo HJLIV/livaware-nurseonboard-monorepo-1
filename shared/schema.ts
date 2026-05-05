@@ -635,9 +635,14 @@ export interface TrainingChaseScheduleSettings {
   // Mailbox reply scan that picks up certificates returned by nurses.
   replyScanEnabled: boolean;
   replyScanIntervalMinutes: number; // default 30
-  // Recipients for the weekly-chase + reply-scan admin summary emails.
-  // Empty array = fall back to AZURE_AD_SENDER_EMAIL (the shared mailbox).
-  summaryRecipients: string[];
+  // Recipients for the weekly-chase admin summary email. Empty array = fall
+  // back to AZURE_AD_SENDER_EMAIL (the shared mailbox).
+  weeklyChaseSummaryRecipients: string[];
+  // Recipients for the mailbox reply-scan admin summary email. Empty array =
+  // fall back to AZURE_AD_SENDER_EMAIL. Kept independent from the weekly
+  // list so on-call admins can get reply alerts while compliance gets the
+  // weekly digest (or vice-versa).
+  replyScanSummaryRecipients: string[];
   // Tracked by the scheduler — never edited from the UI directly.
   lastWeeklyChaseRunAt?: string | null;
   lastReplyScanRunAt?: string | null;
@@ -650,10 +655,38 @@ export const DEFAULT_TRAINING_CHASE_SCHEDULE: TrainingChaseScheduleSettings = {
   weeklyChaseMinGapDays: 14,
   replyScanEnabled: true,
   replyScanIntervalMinutes: 30,
-  summaryRecipients: [],
+  weeklyChaseSummaryRecipients: [],
+  replyScanSummaryRecipients: [],
   lastWeeklyChaseRunAt: null,
   lastReplyScanRunAt: null,
 };
+
+// Migrate the legacy single `summaryRecipients` field (which used to apply to
+// BOTH the weekly chase and reply-scan summaries) into the two new
+// independent fields. Applied on every read of the persisted settings so
+// older app_settings rows seamlessly upgrade without a DB migration: the
+// legacy value seeds either new field only if that field is currently
+// empty/missing, so an admin who has already set one of the new lists won't
+// have it clobbered by stale legacy data.
+export function migrateLegacyTrainingChaseRecipients(
+  stored: (Partial<TrainingChaseScheduleSettings> & { summaryRecipients?: unknown }) | null | undefined,
+): Partial<TrainingChaseScheduleSettings> {
+  if (!stored) return {};
+  const { summaryRecipients: legacy, ...rest } = stored as Partial<TrainingChaseScheduleSettings> & {
+    summaryRecipients?: unknown;
+  };
+  const out: Partial<TrainingChaseScheduleSettings> = { ...rest };
+  if (Array.isArray(legacy) && legacy.length > 0) {
+    const legacyList = legacy.filter((x): x is string => typeof x === "string");
+    if (!Array.isArray(out.weeklyChaseSummaryRecipients) || out.weeklyChaseSummaryRecipients.length === 0) {
+      out.weeklyChaseSummaryRecipients = [...legacyList];
+    }
+    if (!Array.isArray(out.replyScanSummaryRecipients) || out.replyScanSummaryRecipients.length === 0) {
+      out.replyScanSummaryRecipients = [...legacyList];
+    }
+  }
+  return out;
+}
 
 export const equalOpportunities = pgTable("equal_opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
