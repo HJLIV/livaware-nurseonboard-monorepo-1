@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import ChaseUpload, { type ChaseStatusResponse } from "@/pages/portal/chase-upload";
 
 interface PortalData {
   nurse: {
@@ -221,13 +222,23 @@ export default function PortalHub() {
     retry: false,
   });
 
+  // Chase emails put a portal token in the link. If this token corresponds
+  // to a trainingNotifications row, we skip the regular hub and drop the
+  // nurse straight into the focused "upload outstanding certificates" view
+  // pre-populated with exactly the modules from that reminder.
+  const { data: chaseStatus, isLoading: chaseLoading } = useQuery<ChaseStatusResponse>({
+    queryKey: [`/api/portal/${token}/chase-status`],
+    enabled: !!token,
+    retry: false,
+  });
+
   useEffect(() => {
     if (portal && showIntro === null) {
       setShowIntro(portal.firstVisit === true);
     }
   }, [portal, showIntro]);
 
-  if (isLoading || (portal && showIntro === null)) {
+  if (isLoading || chaseLoading || (portal && showIntro === null)) {
     return (
       <div className="min-h-screen bg-background">
         <div className="mx-auto max-w-2xl px-4 py-12">
@@ -260,6 +271,13 @@ export default function PortalHub() {
         </Card>
       </div>
     );
+  }
+
+  // Chase-link short-circuit: skip the welcome intro AND the journey hub.
+  // Nurses arriving from a chase email see only the modules they need to
+  // upload, and "you're up to date" once everything is satisfied.
+  if (chaseStatus?.isChase) {
+    return <ChaseUpload token={token!} initialData={chaseStatus} />;
   }
 
   if (showIntro) {

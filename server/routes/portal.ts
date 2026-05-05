@@ -9,6 +9,8 @@ import { parsePassportImage } from "../passport-parser";
 import { analyzeCertificateWithAI, generateCompetencyGuidance } from "../certificate-ai";
 import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai";
 import { triggerDocumentAnalysis } from "../document-analysis";
+import { applyChaseReplyTrainingUpsert } from "../document-ingest";
+import { evaluateMandatoryTrainingCell } from "../training-status";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
 import type { HealthDeclaration } from "@shared/schema";
 import crypto from "crypto";
@@ -492,6 +494,162 @@ export function registerPortalRoutes(app: Express) {
       res.status(500).json({ message: "Failed to analyze certificate with AI. Please try again or enter details manually." });
     }
   });
+
+  // ── Chase-link flow ───────────────────────────────────────────────────
+  // When a nurse clicks the portal link inside a chase email, we want them
+  // to land on a focused "Upload outstanding training certificates" view
+  // pre-populated with exactly the modules listed in the originating
+  // trainingNotifications row. These two endpoints power that experience.
+
+  app.get("/api/portal/:token/chase-status", validatePortalToken, async (req, res) => {
+    try {
+      const nurseId = (req as any).nurseId;
+      const token = String(req.params.token);
+      const notification = await storage.getTrainingNotificationByPortalToken(token);
+      if (!notification || notification.nurseId !== nurseId) {
+        return res.json({ isChase: false });
+      }
+
+      const nurse = await storage.getCandidate(nurseId);
+      const records = await storage.getMandatoryTraining(nurseId);
+      const moduleNames = Array.isArray(notification.modulesIncluded)
+        ? (notification.modulesIncluded as string[])
+        : [];
+
+      const modules = moduleNames.map((moduleName) => {
+        const cell = evaluateMandatoryTrainingCell(records, moduleName);
+        const renewalFrequency =
+          MANDATORY_TRAINING_MODULES.find((m) => m.name === moduleName)?.renewalFrequency || "Annual";
+        return {
+          moduleName,
+          renewalFrequency,
+          satisfied: cell.status === "green",
+          status: cell.status,
+          label: cell.label,
+        };
+      });
+
+      const allSatisfied = modules.length > 0 && modules.every((m) => m.satisfied);
+
+      res.json({
+        isChase: true,
+        sentAt: notification.sentAt,
+        portalExpiresAt: notification.portalLinkExpiresAt,
+        nurseName: nurse?.fullName ?? null,
+        modules,
+        allSatisfied,
+      });
+    } catch (err: any) {
+      console.error("[Portal Chase Status] Error:", err.message);
+      res.status(500).json({ message: "Failed to load chase status" });
+    }
+  });
+
+  app.post(
+    "/api/portal/:token/chase-upload",
+    validatePortalToken,
+    uploadLimiter,
+    upload.single("file"),
+    async (req, res) => {
+      try {
+        const nurseId = (req as any).nurseId;
+        const token = String(req.params.token);
+        const moduleName = String(req.body?.moduleName || "").trim();
+        if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+        if (!allowedTypes.includes(req.file.mimetype)) {
+          return res.status(400).json({ message: "Please upload a PDF or image of your training certificate" });
+        }
+
+        const notification = await storage.getTrainingNotificationByPortalToken(token);
+        if (!notification || notification.nurseId !== nurseId) {
+          return res.status(403).json({ message: "This portal link is not a chase link" });
+        }
+        const chasedModules = Array.isArray(notification.modulesIncluded)
+          ? (notification.modulesIncluded as string[])
+          : [];
+        if (!moduleName || !chasedModules.includes(moduleName)) {
+          return res.status(400).json({
+            message: "moduleName must be one of the modules in your chase email",
+          });
+        }
+
+        const filePath = `/api/uploads/${req.file.filename}`;
+        const doc = await storage.createDocument({
+          nurseId,
+          type: `Training Certificate - ${moduleName}`,
+          filename: req.file.filename,
+          originalFilename: req.file.originalname,
+          filePath,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
+          category: "training_certificate",
+          uploadedBy: "nurse",
+        });
+
+        triggerSharePointUpload(doc.id, nurseId, filePath, req.file.originalname, "training_certificate");
+        triggerEmailNotification(nurseId, filePath, req.file.originalname, "training_certificate", "nurse", req.file.mimetype);
+        try {
+          triggerDocumentAnalysis(doc.id, filePath, req.file.mimetype, "training_certificate", `Training Certificate - ${moduleName}`, nurseId);
+        } catch (e) {
+          console.warn("[Portal Chase Upload] Document analysis trigger failed (non-fatal)", e);
+        }
+
+        // Auto-tag against the chased module so admins don't have to triage.
+        // applyChaseReplyTrainingUpsert handles both new and existing rows
+        // (clearing expired/in-progress cells with the fresh certificate).
+        const upsertResult = await applyChaseReplyTrainingUpsert({
+          nurseId,
+          documentId: doc.id,
+          absolutePath: req.file.path,
+          mimeType: req.file.mimetype,
+          matchedExpectedModules: [moduleName],
+        });
+
+        await storage.createAuditLog({
+          nurseId,
+          action: "portal_chase_upload",
+          agentName: "nurse_portal",
+          detail: {
+            module: moduleName,
+            documentId: doc.id,
+            updated: upsertResult.updated,
+            created: upsertResult.created,
+            notificationId: notification.id,
+          },
+        });
+
+        // Return refreshed chase status so the client can re-render without
+        // a separate round-trip.
+        const records = await storage.getMandatoryTraining(nurseId);
+        const modules = chasedModules.map((name) => {
+          const cell = evaluateMandatoryTrainingCell(records, name);
+          return {
+            moduleName: name,
+            renewalFrequency:
+              MANDATORY_TRAINING_MODULES.find((m) => m.name === name)?.renewalFrequency || "Annual",
+            satisfied: cell.status === "green",
+            status: cell.status,
+            label: cell.label,
+          };
+        });
+        const allSatisfied = modules.length > 0 && modules.every((m) => m.satisfied);
+
+        res.json({
+          document: doc,
+          moduleName,
+          updated: upsertResult.updated,
+          created: upsertResult.created,
+          modules,
+          allSatisfied,
+        });
+      } catch (err: any) {
+        console.error("[Portal Chase Upload] Error:", err.message);
+        res.status(500).json({ message: "Failed to upload chase certificate" });
+      }
+    },
+  );
 
   app.post("/api/portal/:token/nmc-parse-pdf", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {

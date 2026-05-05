@@ -120,6 +120,7 @@ export interface IStorage {
   getLatestTrainingNotificationByNurse(nurseId: string): Promise<TrainingNotification | undefined>;
   getLatestTrainingNotifications(): Promise<Map<string, TrainingNotification>>;
   getTrainingNotificationsForNurse(nurseId: string): Promise<TrainingNotification[]>;
+  getTrainingNotificationByPortalToken(token: string): Promise<TrainingNotification | undefined>;
   hasProcessedChaseAttachment(nurseId: string, messageId: string, attachmentId: string): Promise<boolean>;
   recordProcessedChaseAttachment(data: InsertProcessedChaseAttachment): Promise<ProcessedChaseAttachment>;
   getProcessedChaseAttachmentsForNurse(nurseId: string): Promise<ProcessedChaseAttachment[]>;
@@ -571,6 +572,16 @@ export class DatabaseStorage implements IStorage {
       .from(trainingNotifications)
       .where(eq(trainingNotifications.nurseId, nurseId))
       .orderBy(desc(trainingNotifications.sentAt));
+  }
+
+  async getTrainingNotificationByPortalToken(token: string): Promise<TrainingNotification | undefined> {
+    const [result] = await db
+      .select()
+      .from(trainingNotifications)
+      .where(eq(trainingNotifications.portalLinkToken, token))
+      .orderBy(desc(trainingNotifications.sentAt))
+      .limit(1);
+    return result;
   }
 
   async hasProcessedChaseAttachment(
