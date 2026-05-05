@@ -6,7 +6,7 @@
 // training-chase-scheduler.ts.
 
 import type { Express, Request } from "express";
-import type { TrainingChaseScheduleSettings } from "@shared/schema";
+import type { TrainingChaseScheduleSettings, ScheduledJobRun } from "@shared/schema";
 import { requireAdmin } from "../middleware";
 import {
   getTrainingChaseScheduleSettings,
@@ -16,6 +16,11 @@ import {
 } from "../training-chase-scheduler";
 import { isOutlookConfigured } from "../outlook";
 import { storage } from "../storage";
+
+// Whitelist of jobType values accepted by the run-history endpoints. Keeps
+// the route from blowing up on a typo'd query param and produces a clear
+// 400 instead.
+const VALID_JOB_TYPES: ReadonlyArray<ScheduledJobRun["jobType"]> = ["weekly_chase", "reply_scan"];
 
 function portalBaseUrlFromReq(req: Request): string {
   const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -76,6 +81,44 @@ export function registerAdminSettingsRoutes(app: Express): void {
       }
       console.error("[admin-settings] put training-chase-schedule failed:", err);
       res.status(500).json({ message: err?.message || "Failed to save settings" });
+    }
+  });
+
+  // GET — recent run history for a single scheduled job. Returns a small
+  // summary row per run (status + counters) so the /settings UI can show a
+  // "Recent runs" table without having to load every run's full detail.
+  app.get("/api/admin/settings/scheduled-job-runs", requireAdmin, async (req, res) => {
+    try {
+      const jobTypeRaw = String(req.query.jobType || "");
+      if (!VALID_JOB_TYPES.includes(jobTypeRaw as ScheduledJobRun["jobType"])) {
+        return res.status(400).json({
+          message: `Invalid jobType. Expected one of: ${VALID_JOB_TYPES.join(", ")}.`,
+        });
+      }
+      const jobType = jobTypeRaw as ScheduledJobRun["jobType"];
+      const limitRaw = Number(req.query.limit);
+      const limit = Number.isFinite(limitRaw) ? Math.min(50, Math.max(1, Math.round(limitRaw))) : 10;
+      const runs = await storage.listScheduledJobRuns(jobType, limit);
+      // Strip `detail` from list responses — it can be large, and the table
+      // view doesn't need it. Detail is fetched lazily via the per-run GET.
+      const summaries = runs.map(({ detail: _detail, ...rest }) => rest);
+      res.json({ jobType, runs: summaries });
+    } catch (err: any) {
+      console.error("[admin-settings] list scheduled-job-runs failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load run history" });
+    }
+  });
+
+  // GET — full per-run payload (including the detail blob the run produced).
+  // Used by the per-run modal on /settings to show the per-nurse breakdown.
+  app.get("/api/admin/settings/scheduled-job-runs/:id", requireAdmin, async (req, res) => {
+    try {
+      const run = await storage.getScheduledJobRun(String(req.params.id));
+      if (!run) return res.status(404).json({ message: "Run not found" });
+      res.json(run);
+    } catch (err: any) {
+      console.error("[admin-settings] get scheduled-job-run failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load run" });
     }
   });
 

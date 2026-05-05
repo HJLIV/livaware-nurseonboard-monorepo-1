@@ -562,6 +562,54 @@ export const insertProcessedChaseAttachmentSchema = createInsertSchema(processed
 export type ProcessedChaseAttachment = typeof processedChaseAttachments.$inferSelect;
 export type InsertProcessedChaseAttachment = z.infer<typeof insertProcessedChaseAttachmentSchema>;
 
+// History of completed scheduled-job runs (weekly chase + mailbox reply
+// scan). One row per run, written once the run finishes. Powers the
+// "Recent runs" panels on /settings so admins can see how the automation
+// has been trending without digging through email or audit logs.
+export const scheduledJobTypeEnum = pgEnum("scheduled_job_type", [
+  "weekly_chase",
+  "reply_scan",
+]);
+export const scheduledJobStatusEnum = pgEnum("scheduled_job_status", [
+  "success",
+  "partial_failure",
+  "failure",
+  "skipped",
+]);
+
+export const scheduledJobRuns = pgTable("scheduled_job_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobType: scheduledJobTypeEnum("job_type").notNull(),
+  triggeredBy: text("triggered_by").notNull(),
+  status: scheduledJobStatusEnum("status").notNull(),
+  startedAt: timestamp("started_at").notNull(),
+  finishedAt: timestamp("finished_at").notNull(),
+  // Cross-job counters. Their precise meaning depends on jobType:
+  //   weekly_chase: sent=emails sent ok, failed=emails that errored,
+  //                 skipped=candidates skipped (recently chased / no email /
+  //                 nothing outstanding), needsReview=0.
+  //   reply_scan:   sent=attachments auto-attached, failed=per-nurse scan
+  //                 errors recorded by the scanner, skipped=0,
+  //                 needsReview=attachments routed to the flagged-document
+  //                 review queue.
+  sentCount: integer("sent_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  skippedCount: integer("skipped_count").default(0).notNull(),
+  needsReviewCount: integer("needs_review_count").default(0).notNull(),
+  // First-line error message when status != success. Full per-nurse breakdown
+  // lives in `detail` so the row stays small for the table view.
+  errorMessage: text("error_message"),
+  detail: jsonb("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("scheduled_job_runs_job_type_idx").on(table.jobType),
+  index("scheduled_job_runs_started_at_idx").on(table.startedAt),
+]);
+
+export type ScheduledJobRun = typeof scheduledJobRuns.$inferSelect;
+export const insertScheduledJobRunSchema = createInsertSchema(scheduledJobRuns).omit({ id: true, createdAt: true });
+export type InsertScheduledJobRun = z.infer<typeof insertScheduledJobRunSchema>;
+
 // Generic key/value table for admin-tunable platform settings (e.g. the
 // scheduled chase-email job toggles). Each row is a single JSON document so
 // we don't need a new table per setting group.

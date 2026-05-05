@@ -14,9 +14,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send } from "lucide-react";
 
 interface TrainingChaseScheduleSettings {
   weeklyChaseEnabled: boolean;
@@ -69,6 +85,48 @@ interface WeeklyChaseRunResult {
   succeeded: number;
   failed: number;
   errors: string[];
+  results?: Array<{
+    nurseId: string;
+    name: string;
+    email: string | null;
+    ok: boolean;
+    moduleCount: number;
+    error?: string;
+  }>;
+}
+
+type ScheduledJobType = "weekly_chase" | "reply_scan";
+type ScheduledJobStatus = "success" | "partial_failure" | "failure" | "skipped";
+
+interface ScheduledJobRunSummary {
+  id: string;
+  jobType: ScheduledJobType;
+  triggeredBy: string;
+  status: ScheduledJobStatus;
+  startedAt: string;
+  finishedAt: string;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  needsReviewCount: number;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+interface ScheduledJobRunDetail extends ScheduledJobRunSummary {
+  detail: unknown;
+}
+
+interface RunsResponse {
+  jobType: ScheduledJobType;
+  runs: ScheduledJobRunSummary[];
+}
+
+interface ReplyScanPerNurse {
+  candidateName: string;
+  attachmentsProcessed: number;
+  autoAttachedCount: number;
+  needsReviewCount: number;
 }
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -92,6 +150,32 @@ function isValidTimeZone(tz: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+function formatDuration(startIso: string, endIso: string): string {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
+  const ms = end - start;
+  if (ms < 1000) return `${ms}ms`;
+  const sec = Math.round(ms / 100) / 10;
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remSec = Math.round(sec - min * 60);
+  return `${min}m ${remSec}s`;
+}
+
+function statusBadge(status: ScheduledJobStatus): { label: string; className: string } {
+  switch (status) {
+    case "success":
+      return { label: "Success", className: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" };
+    case "partial_failure":
+      return { label: "Partial", className: "bg-amber-500/15 text-amber-300 border border-amber-500/30" };
+    case "failure":
+      return { label: "Failure", className: "bg-rose-500/15 text-rose-300 border border-rose-500/30" };
+    case "skipped":
+      return { label: "Skipped", className: "bg-slate-500/15 text-slate-300 border border-slate-500/30" };
   }
 }
 
@@ -193,11 +277,301 @@ function parseRecipientsText(text: string): string[] {
   return out;
 }
 
+function RecentRunsPanel({
+  jobType,
+  emptyMessage,
+  onRowClick,
+}: {
+  jobType: ScheduledJobType;
+  emptyMessage: string;
+  onRowClick: (runId: string) => void;
+}) {
+  const { data, isLoading } = useQuery<RunsResponse>({
+    queryKey: ["/api/admin/settings/scheduled-job-runs", { jobType, limit: 10 }],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/admin/settings/scheduled-job-runs?jobType=${encodeURIComponent(jobType)}&limit=10`,
+      );
+      return (await res.json()) as RunsResponse;
+    },
+  });
+
+  const isReplyScan = jobType === "reply_scan";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <History className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-medium">Recent runs</h3>
+        <span className="text-xs text-muted-foreground">(last {data?.runs?.length || 0})</span>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading run history…
+        </div>
+      ) : !data || data.runs.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-3">{emptyMessage}</p>
+      ) : (
+        <div className="rounded-md border border-border/60 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="text-xs">
+                <TableHead className="h-9">When</TableHead>
+                <TableHead className="h-9">Status</TableHead>
+                <TableHead className="h-9 text-right">{isReplyScan ? "Auto-attached" : "Sent"}</TableHead>
+                <TableHead className="h-9 text-right">{isReplyScan ? "Errors" : "Failed"}</TableHead>
+                <TableHead className="h-9 text-right">{isReplyScan ? "Needs review" : "Skipped"}</TableHead>
+                <TableHead className="h-9">Triggered by</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.runs.map((run) => {
+                const badge = statusBadge(run.status);
+                return (
+                  <TableRow
+                    key={run.id}
+                    className="cursor-pointer hover:bg-muted/40 text-sm"
+                    onClick={() => onRowClick(run.id)}
+                    data-testid={`row-run-${jobType}-${run.id}`}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      <div>{formatDateTime(run.startedAt)}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {formatDuration(run.startedAt, run.finishedAt)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={badge.className} variant="outline">
+                        {badge.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-300">{run.sentCount}</TableCell>
+                    <TableCell className={`text-right tabular-nums ${run.failedCount > 0 ? "text-rose-300" : "text-muted-foreground"}`}>
+                      {run.failedCount}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${
+                      isReplyScan
+                        ? (run.needsReviewCount > 0 ? "text-amber-300" : "text-muted-foreground")
+                        : "text-muted-foreground"
+                    }`}>
+                      {isReplyScan ? run.needsReviewCount : run.skippedCount}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground truncate max-w-[180px]">
+                      {run.triggeredBy}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunDetailDialog({
+  runId,
+  onClose,
+}: {
+  runId: string | null;
+  onClose: () => void;
+}) {
+  const open = !!runId;
+  const { data, isLoading } = useQuery<ScheduledJobRunDetail>({
+    queryKey: ["/api/admin/settings/scheduled-job-runs", runId],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/admin/settings/scheduled-job-runs/${runId}`);
+      return (await res.json()) as ScheduledJobRunDetail;
+    },
+    enabled: open,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Scheduled run detail</DialogTitle>
+          <DialogDescription>
+            Per-nurse breakdown of what this run produced.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading || !data ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <RunDetailBody run={data} />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RunDetailBody({ run }: { run: ScheduledJobRunDetail }) {
+  const badge = statusBadge(run.status);
+  const isWeekly = run.jobType === "weekly_chase";
+  const detail = (run.detail || {}) as Record<string, unknown>;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
+          <Badge className={`mt-1 ${badge.className}`} variant="outline">{badge.label}</Badge>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Started</p>
+          <p className="mt-1 font-mono text-xs">{formatDateTime(run.startedAt)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Duration</p>
+          <p className="mt-1 font-mono text-xs">{formatDuration(run.startedAt, run.finishedAt)}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Triggered by</p>
+          <p className="mt-1 text-xs">{run.triggeredBy}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div className="rounded-md border border-border/60 px-3 py-2">
+          <p className="text-xs text-muted-foreground">{isWeekly ? "Sent" : "Auto-attached"}</p>
+          <p className="text-lg font-semibold text-emerald-300 tabular-nums">{run.sentCount}</p>
+        </div>
+        <div className="rounded-md border border-border/60 px-3 py-2">
+          <p className="text-xs text-muted-foreground">{isWeekly ? "Failed" : "Errors"}</p>
+          <p className="text-lg font-semibold text-rose-300 tabular-nums">{run.failedCount}</p>
+        </div>
+        <div className="rounded-md border border-border/60 px-3 py-2">
+          <p className="text-xs text-muted-foreground">{isWeekly ? "Skipped" : "Needs review"}</p>
+          <p className="text-lg font-semibold text-amber-300 tabular-nums">
+            {isWeekly ? run.skippedCount : run.needsReviewCount}
+          </p>
+        </div>
+        <div className="rounded-md border border-border/60 px-3 py-2">
+          <p className="text-xs text-muted-foreground">Run ID</p>
+          <p className="text-[10px] font-mono break-all text-muted-foreground">{run.id}</p>
+        </div>
+      </div>
+
+      {run.errorMessage && (
+        <div className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-200">
+          <span className="font-semibold">Error:</span> {run.errorMessage}
+        </div>
+      )}
+
+      {isWeekly ? (
+        <WeeklyRunRows detail={detail} />
+      ) : (
+        <ReplyScanRows detail={detail} />
+      )}
+    </div>
+  );
+}
+
+function WeeklyRunRows({ detail }: { detail: Record<string, unknown> }) {
+  const results = (detail.results as WeeklyChaseRunResult["results"]) || [];
+  if (results.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">No per-nurse outcomes were recorded for this run.</p>
+    );
+  }
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-2">Per-nurse outcome</h4>
+      <div className="rounded-md border border-border/60 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="text-xs">
+              <TableHead className="h-9">Nurse</TableHead>
+              <TableHead className="h-9">Email</TableHead>
+              <TableHead className="h-9 text-right">Modules</TableHead>
+              <TableHead className="h-9">Result</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {results.map((r) => (
+              <TableRow key={r.nurseId} className="text-sm">
+                <TableCell className="font-medium">{r.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.email || "(no email)"}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.moduleCount}</TableCell>
+                <TableCell className="text-xs">
+                  {r.ok ? (
+                    <span className="text-emerald-300">Sent</span>
+                  ) : (
+                    <span className="text-rose-300" title={r.error}>
+                      Failed{r.error ? ` — ${r.error}` : ""}
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function ReplyScanRows({ detail }: { detail: Record<string, unknown> }) {
+  const perNurse = (detail.perNurse as ReplyScanPerNurse[]) || [];
+  const errors = (detail.errors as string[]) || [];
+  if (perNurse.length === 0 && errors.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Nothing to ingest — no chase replies were waiting in the mailbox at the time of this scan.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {perNurse.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium mb-2">Per-nurse outcome</h4>
+          <div className="rounded-md border border-border/60 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="text-xs">
+                  <TableHead className="h-9">Nurse</TableHead>
+                  <TableHead className="h-9 text-right">Processed</TableHead>
+                  <TableHead className="h-9 text-right">Auto-attached</TableHead>
+                  <TableHead className="h-9 text-right">Needs review</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {perNurse.map((r, i) => (
+                  <TableRow key={`${r.candidateName}-${i}`} className="text-sm">
+                    <TableCell className="font-medium">{r.candidateName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.attachmentsProcessed}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-300">{r.autoAttachedCount}</TableCell>
+                    <TableCell className="text-right tabular-nums text-amber-300">{r.needsReviewCount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+      {errors.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium mb-2 text-rose-300">Errors</h4>
+          <ul className="space-y-1 text-xs text-rose-200 list-disc pl-5">
+            {errors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<TrainingChaseScheduleSettings | null>(null);
   const [recipientsText, setRecipientsText] = useState<string>("");
+  const [openRunId, setOpenRunId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<SettingsResponse>({
     queryKey: ["/api/admin/settings/training-chase-schedule"],
@@ -232,6 +606,7 @@ export default function AdminSettingsPage() {
     },
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/training-chase-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings/scheduled-job-runs"] });
       toast({
         title: "Weekly chase complete",
         description: `${r.succeeded} sent · ${r.failed} failed · ${r.candidatesSkippedRecentlyChased} skipped (recently chased) · ${r.candidatesSkippedNoOutstanding} with nothing outstanding.`,
@@ -471,6 +846,14 @@ export default function AdminSettingsPage() {
               "Run now" uses the same logic as the scheduled job and respects the recently-chased gap.
             </p>
           </div>
+
+          <Separator />
+
+          <RecentRunsPanel
+            jobType="weekly_chase"
+            emptyMessage="No weekly chase runs yet — runs will appear here after the next scheduled tick or a manual 'Run now'."
+            onRowClick={setOpenRunId}
+          />
         </CardContent>
       </Card>
 
@@ -526,6 +909,14 @@ export default function AdminSettingsPage() {
               </p>
             </div>
           </div>
+
+          <Separator />
+
+          <RecentRunsPanel
+            jobType="reply_scan"
+            emptyMessage="No reply scans recorded yet — only scans that ingest attachments or hit errors are kept (no-op ticks are skipped to avoid noise)."
+            onRowClick={setOpenRunId}
+          />
         </CardContent>
       </Card>
 
@@ -571,6 +962,8 @@ export default function AdminSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <RunDetailDialog runId={openRunId} onClose={() => setOpenRunId(null)} />
 
       <div className="flex items-center justify-end gap-3 pt-2">
         {dirty && <p className="text-xs text-amber-400">Unsaved changes</p>}

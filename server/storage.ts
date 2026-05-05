@@ -6,10 +6,11 @@ import {
   inductionPolicies, professionalIndemnity, onboardingStates, auditLogs, magicLinks, refereeTokens,
   employmentHistory, educationHistory, equalOpportunities,
   trainingNotifications, processedChaseAttachments,
-  appSettings,
+  appSettings, scheduledJobRuns,
   type TrainingNotification, type InsertTrainingNotification,
   type ProcessedChaseAttachment, type InsertProcessedChaseAttachment,
   type AppSetting,
+  type ScheduledJobRun, type InsertScheduledJobRun,
   type Candidate, type InsertCandidate,
   type NmcVerification, type InsertNmcVerification,
   type DbsVerification, type InsertDbsVerification,
@@ -130,6 +131,11 @@ export interface IStorage {
   // Generic admin-tunable platform settings (key/value JSON).
   getAppSetting<T = unknown>(key: string): Promise<T | undefined>;
   setAppSetting<T = unknown>(key: string, value: T, updatedBy?: string): Promise<AppSetting>;
+
+  // History of scheduled-job runs (weekly chase + reply scan).
+  recordScheduledJobRun(data: InsertScheduledJobRun): Promise<ScheduledJobRun>;
+  listScheduledJobRuns(jobType: ScheduledJobRun["jobType"], limit?: number): Promise<ScheduledJobRun[]>;
+  getScheduledJobRun(id: string): Promise<ScheduledJobRun | undefined>;
 
   // Bulk getters for cross-candidate reporting (admin compliance matrices, etc.).
   getAllDocuments(): Promise<Document[]>;
@@ -670,6 +676,32 @@ export class DatabaseStorage implements IStorage {
         set: { value: jsonValue, updatedAt: new Date(), updatedBy: updatedBy ?? null },
       })
       .returning();
+    return row;
+  }
+
+  async recordScheduledJobRun(data: InsertScheduledJobRun): Promise<ScheduledJobRun> {
+    const [row] = await db.insert(scheduledJobRuns).values(data).returning();
+    return row;
+  }
+
+  async listScheduledJobRuns(
+    jobType: ScheduledJobRun["jobType"],
+    limit: number = 10,
+  ): Promise<ScheduledJobRun[]> {
+    return db
+      .select()
+      .from(scheduledJobRuns)
+      .where(eq(scheduledJobRuns.jobType, jobType))
+      .orderBy(desc(scheduledJobRuns.startedAt))
+      .limit(Math.min(Math.max(1, limit), 100));
+  }
+
+  async getScheduledJobRun(id: string): Promise<ScheduledJobRun | undefined> {
+    const [row] = await db
+      .select()
+      .from(scheduledJobRuns)
+      .where(eq(scheduledJobRuns.id, id))
+      .limit(1);
     return row;
   }
 }

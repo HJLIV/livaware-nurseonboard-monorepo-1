@@ -20,6 +20,8 @@ import {
   TRAINING_CHASE_SCHEDULE_SETTING_KEY,
   DEFAULT_TRAINING_CHASE_SCHEDULE,
   type TrainingChaseScheduleSettings,
+  type ScheduledJobRun,
+  type TrainingNotification,
 } from "@shared/schema";
 import { storage } from "./storage";
 import { isOutlookConfigured, getGraphClient } from "./outlook";
@@ -33,6 +35,21 @@ import {
   type OutstandingModule,
   type BulkChaseReplyScanSummary,
 } from "./training-notifications";
+
+// Derive a single coarse status for the run history table from the
+// per-job result counters. Keeps the UI palette consistent across both
+// jobs (success / partial_failure / failure / skipped).
+function deriveRunStatus(opts: {
+  succeeded: number;
+  failed: number;
+  errors: number;
+  skipped?: boolean;
+}): ScheduledJobRun["status"] {
+  if (opts.skipped) return "skipped";
+  const hasErrors = opts.failed > 0 || opts.errors > 0;
+  if (!hasErrors) return "success";
+  return opts.succeeded > 0 ? "partial_failure" : "failure";
+}
 
 const SENDER_EMAIL = process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
 const TICK_INTERVAL_MS = 60 * 1000; // 1 minute master tick
@@ -237,11 +254,13 @@ export async function runWeeklyTrainingChase(opts: {
     errors: [],
   };
 
+  // We deliberately don't early-return here when Outlook is unconfigured —
+  // we still want to persist a `skipped` history row at the end of the
+  // function so admins can see in /settings that the run fired but was a
+  // no-op. Setting the flag suppresses the actual send loop below.
   if (!isOutlookConfigured()) {
     result.errors.push("Outlook integration not configured.");
     result.skippedOutlookNotConfigured = true;
-    result.finishedAt = new Date().toISOString();
-    return result;
   }
 
   const template = {
@@ -249,8 +268,10 @@ export async function runWeeklyTrainingChase(opts: {
     body: TRAINING_CHASE_DEFAULT_BODY,
   };
 
-  const candidates = await storage.getCandidates();
-  const lastByNurse = await storage.getLatestTrainingNotifications();
+  const candidates = result.skippedOutlookNotConfigured ? [] : await storage.getCandidates();
+  const lastByNurse: Map<string, TrainingNotification> = result.skippedOutlookNotConfigured
+    ? new Map()
+    : await storage.getLatestTrainingNotifications();
   const minGapMs = Math.max(1, opts.minGapDays) * 24 * 60 * 60 * 1000;
   const now = Date.now();
 
@@ -317,6 +338,35 @@ export async function runWeeklyTrainingChase(opts: {
     } catch (e: any) {
       console.warn("[training-chase-scheduler] weekly summary email failed:", e?.message || e);
     }
+  }
+
+  // Persist a history row so admins can review recent runs from /settings.
+  // Skipped (Outlook not configured) runs are still recorded so the history
+  // surfaces "we tried but couldn't" rather than going silent.
+  try {
+    await storage.recordScheduledJobRun({
+      jobType: "weekly_chase",
+      triggeredBy: result.triggeredBy,
+      status: deriveRunStatus({
+        succeeded: result.succeeded,
+        failed: result.failed,
+        errors: result.errors.length,
+        skipped: result.skippedOutlookNotConfigured,
+      }),
+      startedAt: new Date(result.startedAt),
+      finishedAt: new Date(result.finishedAt),
+      sentCount: result.succeeded,
+      failedCount: result.failed,
+      skippedCount:
+        result.candidatesSkippedRecentlyChased +
+        result.candidatesSkippedNoEmail +
+        result.candidatesSkippedNoOutstanding,
+      needsReviewCount: 0,
+      errorMessage: result.errors[0] ?? null,
+      detail: result,
+    });
+  } catch (e: any) {
+    console.warn("[training-chase-scheduler] failed to persist weekly run:", e?.message || e);
   }
 
   return result;
@@ -461,16 +511,7 @@ export async function tickTrainingChaseScheduler(now: Date = new Date()): Promis
   if (!replyScanRunning && shouldRunReplyScan(settings, now)) {
     replyScanRunning = true;
     try {
-      if (isOutlookConfigured()) {
-        const r: BulkChaseReplyScanSummary = await scanMailboxForChaseRepliesAll(
-          "Scheduled mailbox scanner",
-        );
-        if (r.totalAttachmentsProcessed > 0 || r.errors.length > 0) {
-          console.log(
-            `[training-chase-scheduler] reply scan: nurses=${r.scannedNurses} processed=${r.totalAttachmentsProcessed} autoAttached=${r.totalAutoAttached} needsReview=${r.totalNeedsReview} errors=${r.errors.length}`,
-          );
-        }
-      }
+      await runReplyScanWithHistory("Scheduled mailbox scanner");
       await saveLastRun({ lastReplyScanRunAt: new Date().toISOString() });
     } catch (e: any) {
       console.warn("[training-chase-scheduler] reply scan failed:", e?.message || e);
@@ -478,6 +519,76 @@ export async function tickTrainingChaseScheduler(now: Date = new Date()): Promis
       replyScanRunning = false;
     }
   }
+}
+
+/**
+ * Run the mailbox reply scan and persist a `scheduled_job_runs` row so the
+ * /settings history table can show it. Every invocation produces a row —
+ * including no-op scans where nothing was waiting in the inbox and the
+ * Outlook-not-configured case — so admins always see in the history that
+ * the scheduler fired and what it did (or couldn't do).
+ */
+export async function runReplyScanWithHistory(
+  triggeredBy: string,
+): Promise<BulkChaseReplyScanSummary | null> {
+  const startedAt = new Date();
+
+  if (!isOutlookConfigured()) {
+    try {
+      await storage.recordScheduledJobRun({
+        jobType: "reply_scan",
+        triggeredBy,
+        status: "skipped",
+        startedAt,
+        finishedAt: new Date(),
+        sentCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        needsReviewCount: 0,
+        errorMessage: "Outlook integration not configured.",
+        detail: null,
+      });
+    } catch (e: any) {
+      console.warn("[training-chase-scheduler] failed to persist skipped reply-scan run:", e?.message || e);
+    }
+    return null;
+  }
+
+  const summary = await scanMailboxForChaseRepliesAll(triggeredBy);
+  const finishedAt = new Date();
+  const hasOutcomes = summary.totalAttachmentsProcessed > 0 || summary.errors.length > 0;
+  if (hasOutcomes) {
+    console.log(
+      `[training-chase-scheduler] reply scan: nurses=${summary.scannedNurses} processed=${summary.totalAttachmentsProcessed} autoAttached=${summary.totalAutoAttached} needsReview=${summary.totalNeedsReview} errors=${summary.errors.length}`,
+    );
+  }
+
+  try {
+    await storage.recordScheduledJobRun({
+      jobType: "reply_scan",
+      triggeredBy,
+      status: deriveRunStatus({
+        succeeded: summary.totalAutoAttached,
+        failed: summary.errors.length,
+        errors: 0,
+      }),
+      startedAt,
+      finishedAt,
+      sentCount: summary.totalAutoAttached,
+      // For the reply scan, "failed" = per-nurse errors the scanner
+      // recorded. The UI surfaces this directly so true failure counts
+      // are visible without having to open the detail dialog.
+      failedCount: summary.errors.length,
+      skippedCount: 0,
+      needsReviewCount: summary.totalNeedsReview,
+      errorMessage: summary.errors[0] ?? null,
+      detail: summary,
+    });
+  } catch (e: any) {
+    console.warn("[training-chase-scheduler] failed to persist reply-scan run:", e?.message || e);
+  }
+
+  return summary;
 }
 
 async function saveLastRun(patch: Partial<TrainingChaseScheduleSettings>): Promise<void> {
