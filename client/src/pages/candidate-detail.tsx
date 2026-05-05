@@ -4051,6 +4051,7 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
       response: string;
       timeSpent: number;
       timeLimit: number;
+      pasteAttempts?: number;
     }>;
     aiAnalysis: string | null;
     emailSent: boolean | null;
@@ -4172,6 +4173,13 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
   }
 
   const responses = Array.isArray(assessment.responses) ? assessment.responses : [];
+  const totalPasteAttempts = responses.reduce(
+    (sum, r) => sum + (typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0),
+    0,
+  );
+  const flaggedQuestionCount = responses.filter(
+    (r) => typeof r.pasteAttempts === "number" && r.pasteAttempts > 0,
+  ).length;
 
   return (
     <div className="space-y-4">
@@ -4192,6 +4200,19 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
                 {new Date(assessment.completedAt).toLocaleDateString("en-US", {
                   month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
                 })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {totalPasteAttempts > 0 && (
+          <Card className="border border-destructive/30 bg-destructive/5 flex-1 min-w-[200px]" data-testid="card-paste-attempts-summary">
+            <CardContent className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-destructive/70 mb-1">Integrity Notice</p>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span data-testid="text-paste-attempts-summary">
+                  {totalPasteAttempts} blocked paste/drop {totalPasteAttempts === 1 ? "attempt" : "attempts"} across {flaggedQuestionCount} {flaggedQuestionCount === 1 ? "question" : "questions"}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -4218,6 +4239,7 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
           <CardContent className="space-y-3">
             {responses.map((r, i) => {
               const overTime = r.timeSpent > r.timeLimit;
+              const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
               return (
                 <div key={r.questionId || i} className="rounded-lg border p-3 bg-muted/20">
                   <div className="flex items-start justify-between gap-2 mb-1">
@@ -4226,9 +4248,19 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
                       {r.timeSpent}s / {r.timeLimit}s
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <Badge variant="outline" className="text-[10px]">{r.domain}</Badge>
                     <Badge variant="outline" className="text-[10px]">{r.tag}</Badge>
+                    {attempts > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="text-[10px] gap-1"
+                        data-testid={`badge-paste-attempts-${i}`}
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        {attempts} paste {attempts === 1 ? "attempt" : "attempts"} blocked
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground whitespace-pre-wrap">{r.response}</p>
                 </div>
