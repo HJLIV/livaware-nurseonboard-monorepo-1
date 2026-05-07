@@ -2,6 +2,183 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 
+export interface CvPreCheckResult {
+  ok: boolean;
+  reason?: string;
+  details?: {
+    pageCount?: number;
+    filenameHint?: string;
+    textHint?: string;
+  };
+}
+
+const NON_CV_FILENAME_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bpassport\b/i, label: "passport" },
+  { pattern: /\b(dbs|disclosure)\b/i, label: "DBS / disclosure document" },
+  { pattern: /\bpay[\s_-]?slip\b/i, label: "payslip" },
+  { pattern: /\bp(60|45|11d)\b/i, label: "P60/P45 tax document" },
+  { pattern: /\bbank[\s_-]?statement\b/i, label: "bank statement" },
+  { pattern: /\butility[\s_-]?bill\b/i, label: "utility bill" },
+  { pattern: /\b(brp|biometric)\b/i, label: "BRP / biometric residence permit" },
+  { pattern: /\bvisa\b/i, label: "visa document" },
+  { pattern: /\b(driver'?s?[\s_-]?licen[cs]e|driving[\s_-]?licen[cs]e)\b/i, label: "driving licence" },
+  { pattern: /\b(selfie|photo|headshot|portrait)\b/i, label: "photo" },
+  { pattern: /\b(signature)\b/i, label: "signature image" },
+  { pattern: /\b(council[\s_-]?tax)\b/i, label: "council tax bill" },
+  { pattern: /\b(tenancy|rental[\s_-]?agreement)\b/i, label: "tenancy agreement" },
+  { pattern: /\b(invoice|receipt)\b/i, label: "invoice / receipt" },
+];
+
+const CV_FILENAME_PATTERNS: RegExp[] = [
+  /\bcv\b/i,
+  /\bc\.v\.?\b/i,
+  /\bresum[eé]\b/i,
+  /\bcurriculum[\s_-]?vitae\b/i,
+];
+
+const CV_TEXT_KEYWORDS = [
+  "curriculum vitae",
+  "résumé",
+  "resume",
+  "personal statement",
+  "professional summary",
+  "work experience",
+  "employment history",
+  "career history",
+  "professional experience",
+  "key skills",
+  "education",
+  "qualifications",
+  "references",
+  "referees",
+  "nmc pin",
+  "registered nurse",
+  "staff nurse",
+];
+
+const NON_CV_TEXT_KEYWORDS: Array<{ kw: string; label: string }> = [
+  { kw: "passport no", label: "passport" },
+  { kw: "passport number", label: "passport" },
+  { kw: "machine readable zone", label: "passport" },
+  { kw: "type/type p<", label: "passport" },
+  { kw: "gross pay", label: "payslip" },
+  { kw: "net pay", label: "payslip" },
+  { kw: "tax period", label: "payslip" },
+  { kw: "ni number", label: "payslip / tax document" },
+  { kw: "national insurance number", label: "tax document" },
+  { kw: "p60", label: "P60 tax document" },
+  { kw: "p45", label: "P45 tax document" },
+  { kw: "disclosure and barring", label: "DBS certificate" },
+  { kw: "dbs certificate", label: "DBS certificate" },
+  { kw: "criminal record check", label: "DBS certificate" },
+  { kw: "biometric residence permit", label: "BRP" },
+  { kw: "certificate of completion", label: "training certificate" },
+  { kw: "this is to certify that", label: "certificate" },
+  { kw: "has successfully completed", label: "training certificate" },
+  { kw: "account number", label: "bank statement" },
+  { kw: "sort code", label: "bank statement" },
+  { kw: "statement of account", label: "bank / utility statement" },
+  { kw: "council tax", label: "council tax bill" },
+  { kw: "vat invoice", label: "invoice" },
+  { kw: "tenancy agreement", label: "tenancy agreement" },
+];
+
+async function extractPdfFirstPage(buffer: Buffer): Promise<{ pageCount: number; firstPageText: string }> {
+  const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const data = new Uint8Array(buffer);
+  const doc = await pdfjsLib.getDocument({ data, useSystemFonts: true }).promise;
+  const pageCount = doc.numPages;
+  let firstPageText = "";
+  if (pageCount > 0) {
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const items = content.items as Array<{ str: string; hasEOL?: boolean }>;
+    for (const item of items) {
+      firstPageText += item.str;
+      if (item.hasEOL) firstPageText += "\n";
+      else firstPageText += " ";
+    }
+  }
+  return { pageCount, firstPageText };
+}
+
+/**
+ * Cheap pre-classifier that rejects files which obviously aren't CVs before
+ * we spend an Anthropic call on them. Uses (in order):
+ *   1. Filename heuristics (passport, payslip, DBS, certificate, etc.)
+ *   2. PDF page count (CVs are virtually never > 20 pages)
+ *   3. First-page text scan for positive CV signals vs negative non-CV signals
+ *
+ * Returns `{ ok: true }` on either a positive CV signal or insufficient signal
+ * to reject — never blocks a possibly-valid CV. Only rejects on confident
+ * negative matches so the AI step can still handle ambiguous cases.
+ */
+export async function preCheckCv(
+  filePath: string,
+  mimeType: string,
+  originalFilename: string,
+): Promise<CvPreCheckResult> {
+  const isImage = mimeType.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+  if (!isImage && !isPdf) {
+    return { ok: false, reason: "Only PDF or image files can be parsed as a CV." };
+  }
+
+  const baseName = path.basename(originalFilename || filePath);
+  const cvHintInName = CV_FILENAME_PATTERNS.some((re) => re.test(baseName));
+  const negativeName = NON_CV_FILENAME_PATTERNS.find((p) => p.pattern.test(baseName));
+
+  if (negativeName && !cvHintInName) {
+    return {
+      ok: false,
+      reason: `This file looks like a ${negativeName.label}, not a CV. Please upload a PDF or Word export of your résumé.`,
+      details: { filenameHint: negativeName.label },
+    };
+  }
+
+  if (!isPdf) {
+    return { ok: true };
+  }
+
+  let pageCount = 0;
+  let firstPageText = "";
+  try {
+    const absolute = path.resolve(filePath);
+    const buf = fs.readFileSync(absolute);
+    const result = await extractPdfFirstPage(buf);
+    pageCount = result.pageCount;
+    firstPageText = result.firstPageText.toLowerCase();
+  } catch (err: any) {
+    console.warn("[preCheckCv] PDF inspection failed; skipping pre-check:", err?.message || err);
+    return { ok: true };
+  }
+
+  if (pageCount > 25) {
+    return {
+      ok: false,
+      reason: `This PDF is ${pageCount} pages long — that's far longer than a CV. Please upload your résumé (typically 1–4 pages).`,
+      details: { pageCount },
+    };
+  }
+
+  if (firstPageText.trim().length === 0) {
+    return { ok: true };
+  }
+
+  const positiveHits = CV_TEXT_KEYWORDS.filter((kw) => firstPageText.includes(kw));
+  const negativeHit = NON_CV_TEXT_KEYWORDS.find((n) => firstPageText.includes(n.kw));
+
+  if (negativeHit && positiveHits.length === 0) {
+    return {
+      ok: false,
+      reason: `This document looks like a ${negativeHit.label}, not a CV. Please upload a PDF or Word export of your résumé.`,
+      details: { pageCount, textHint: negativeHit.label },
+    };
+  }
+
+  return { ok: true, details: { pageCount } };
+}
+
 function getAnthropicClient(): Anthropic {
   const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

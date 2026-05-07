@@ -3,7 +3,7 @@ import fs from "fs";
 import { storage } from "./storage";
 import { uploadsDir } from "./middleware";
 import { classifyDocumentSmart } from "./document-ai";
-import { parseCvWorkHistory } from "./cv-ai";
+import { parseCvWorkHistory, preCheckCv } from "./cv-ai";
 import { analyzeCertificateWithAI } from "./certificate-ai";
 import { triggerSharePointUpload, triggerEmailNotification } from "./sharepoint-helper";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
@@ -174,6 +174,15 @@ export async function ingestExistingFile(opts: {
 
   if (looksLikeCv) {
     try {
+      // Cheap pre-check: skip the Anthropic call if filename/page-count/first
+      // -page text make it clear this isn't actually a CV (e.g. a passport
+      // scan that the smart classifier mis-bucketed as "profile").
+      const preCheck = await preCheckCv(absolutePath, mimeType, originalFilename);
+      if (!preCheck.ok) {
+        console.log(
+          `[ingestExistingFile] CV pre-check rejected ${originalFilename}: ${preCheck.reason}`,
+        );
+      } else {
       const cvResult = await parseCvWorkHistory(absolutePath, mimeType);
       cvDetected = !!cvResult?.isCv;
       if (cvResult?.isCv) {
@@ -228,6 +237,7 @@ export async function ingestExistingFile(opts: {
             cvEducationAdded += 1;
           }
         }
+      }
       }
     } catch (cvErr: any) {
       console.error("[ingestExistingFile] CV parse failed:", cvErr.message);

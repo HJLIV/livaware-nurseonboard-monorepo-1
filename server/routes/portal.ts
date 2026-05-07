@@ -252,10 +252,36 @@ export function registerPortalRoutes(app: Express) {
 
       const supportedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
       if (!supportedTypes.includes(req.file.mimetype)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
         return res.status(400).json({ message: "Only PDF and image files are accepted" });
       }
 
       const absolutePath = path.join(uploadsDir, req.file.filename);
+
+      // Cheap pre-check: reject obvious non-CVs (passport, payslip, certificate
+      // scans, etc.) before paying for an Anthropic call. The CV uploader is
+      // CV-only, so any reject here is a hard reject.
+      const { preCheckCv } = await import("../cv-ai");
+      const preCheck = await preCheckCv(absolutePath, req.file.mimetype, req.file.originalname);
+      if (!preCheck.ok) {
+        try { fs.unlinkSync(absolutePath); } catch {}
+        await storage.createAuditLog({
+          nurseId,
+          action: "portal_cv_upload_rejected",
+          agentName: "nurse_portal",
+          detail: {
+            originalFilename: req.file.originalname,
+            mimeType: req.file.mimetype,
+            reason: preCheck.reason,
+            details: preCheck.details,
+          },
+        });
+        return res.status(400).json({
+          message: preCheck.reason || "This doesn't look like a CV — try a PDF or Word export of your résumé.",
+          rejected: true,
+        });
+      }
+
       const { ingestExistingFile } = await import("../document-ingest");
 
       const ingest = await ingestExistingFile({
