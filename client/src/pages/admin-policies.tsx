@@ -2,7 +2,7 @@
 // read & sign in the portal. Supports create / edit / delete / toggle
 // active and viewing the per-policy acknowledgement audit list.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +30,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Users, FileText, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, FileText, Loader2, Upload } from "lucide-react";
 
 interface Policy {
   id: string;
@@ -82,6 +82,7 @@ export default function AdminPoliciesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [viewingAcks, setViewingAcks] = useState<Policy | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: policies, isLoading } = useQuery<Policy[]>({
     queryKey: ["/api/admin/policies"],
@@ -121,6 +122,54 @@ export default function AdminPoliciesPage() {
       toast({ title: "Save failed", description: err?.message, variant: "destructive" });
     },
   });
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/policies/extract", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let message = "Could not import this document.";
+        try {
+          const data = await res.json();
+          if (data?.message) message = data.message;
+        } catch {}
+        throw new Error(message);
+      }
+      return (await res.json()) as { title: string; body: string };
+    },
+    onSuccess: (data) => {
+      setForm((prev) => ({
+        ...prev,
+        title: data.title?.trim() || prev.title,
+        body: data.body?.trim() || prev.body,
+      }));
+      toast({ title: "Document imported", description: "Title and policy text have been filled in. Review and edit before saving." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Import failed", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".pdf") && !name.endsWith(".docx")) {
+      toast({ title: "Unsupported file type", description: "Please upload a .pdf or .docx file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum size is 10 MB.", variant: "destructive" });
+      return;
+    }
+    importMutation.mutate(file);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -274,6 +323,41 @@ export default function AdminPoliciesPage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="rounded-md border border-dashed bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <Label className="text-sm">Import from document</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Upload a <strong>.pdf</strong> or <strong>.docx</strong> file (max 10 MB) to fill in the
+                    title and policy text. You can edit the populated fields before saving.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={importMutation.isPending}
+                  data-testid="button-import-policy"
+                >
+                  {importMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-1.5" />
+                  )}
+                  {importMutation.isPending ? "Reading…" : "Choose file"}
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={handleImportFile}
+                  data-testid="input-import-policy"
+                />
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="policy-title">Title</Label>
               <Input

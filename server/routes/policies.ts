@@ -6,6 +6,8 @@
 // acknowledgement status, and record a fresh acknowledgement.
 
 import type { Express, Request } from "express";
+import multer from "multer";
+import path from "path";
 import { db } from "../db";
 import {
   policies,
@@ -17,6 +19,12 @@ import {
 import { eq, and, desc, asc } from "drizzle-orm";
 import { requireAdmin, validatePortalToken } from "../middleware";
 import { logAction } from "../services/audit";
+import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
+
+const policyImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 function agentFor(req: Request): string {
   return req.session?.username || "system";
@@ -90,6 +98,43 @@ async function buildPolicyListForNurse(nurseId: string): Promise<{
 }
 
 export function registerPolicyRoutes(app: Express) {
+  // ─── Admin: extract title/body from an uploaded .pdf or .docx ────
+  // One-shot helper that populates the New/Edit Policy form fields.
+  // The uploaded file is NOT stored — we just parse it in memory.
+  app.post(
+    "/api/admin/policies/extract",
+    requireAdmin,
+    (req, res, next) => {
+      policyImportUpload.single("file")(req, res, (err: any) => {
+        if (!err) return next();
+        if (err?.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ message: "File too large. Maximum size is 10 MB." });
+        }
+        return res.status(400).json({ message: err?.message || "Upload failed" });
+      });
+    },
+    async (req, res) => {
+      try {
+        const file = (req as any).file as Express.Multer.File | undefined;
+        if (!file) return res.status(400).json({ message: "No file uploaded" });
+
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (ext !== ".pdf" && ext !== ".docx") {
+          return res.status(415).json({ message: "Unsupported file type. Please upload a .pdf or .docx file." });
+        }
+
+        const result = await extractPolicyFromFile(file.buffer, file.originalname, file.mimetype);
+        res.json(result);
+      } catch (err: any) {
+        if (err instanceof PolicyExtractionError) {
+          return res.status(err.status).json({ message: err.message });
+        }
+        console.error("[policies] extract failed:", err);
+        res.status(500).json({ message: err?.message || "Failed to extract policy" });
+      }
+    },
+  );
+
   // ─── Admin: list all policies (active + inactive) ────────────────
   app.get("/api/admin/policies", requireAdmin, async (_req, res) => {
     try {

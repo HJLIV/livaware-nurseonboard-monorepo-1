@@ -324,6 +324,39 @@ const SOP_SECTIONS: SOPSection[] = [
     ],
   },
   {
+    id: "policies",
+    title: "Policies (Read & Sign)",
+    icon: FileText,
+    color: "text-indigo-400",
+    overview:
+      "The Policies area is the master list of policies that nurses must read and acknowledge in their portal. You can author each policy by hand, or — to save time — import the title and body straight from a Word or PDF document.",
+    steps: [
+      {
+        action: "Open the Policies page",
+        detail: "Navigate to /admin/policies. Click \"New Policy\" to open the dialog (or click the edit pencil on an existing policy).",
+      },
+      {
+        action: "Click \"Import from document\" → Choose file",
+        detail: "Pick a single .pdf or .docx file (max 10 MB). The system reads the document, picks a sensible title from the first heading (or the filename), and fills in the policy text with paragraph breaks preserved.",
+        tip: "Scanned image-only PDFs won't work — they need OCR first. Encrypted/password-protected PDFs are also rejected.",
+      },
+      {
+        action: "Review and tweak the populated fields",
+        detail: "The Title and Policy text fields are now filled in. Edit anything you'd like — fix the title, trim boilerplate, adjust paragraph breaks. Set the version, sort order, active flag, and acknowledgement requirement as normal.",
+      },
+      {
+        action: "Click Save",
+        detail: "Nothing is persisted until you save. The uploaded document is not stored — it's only used to populate the form. If you also want nurses to download the original PDF, paste a hosted link into the optional \"PDF URL\" field.",
+      },
+    ],
+    quickLink: "/admin/policies",
+    quickLinkLabel: "Go to Policies",
+    tips: [
+      "Bumping the version number forces every nurse to re-acknowledge the new version.",
+      "Use the import flow for both new policies and edits — it overwrites the title/body in the form, but only persists when you click Save.",
+    ],
+  },
+  {
     id: "audit",
     title: "Audit Trail & Compliance",
     icon: ScrollText,
