@@ -31,7 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Eye } from "lucide-react";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 import { useAuth } from "@/lib/auth";
@@ -571,130 +571,6 @@ function ReplyScanRows({ detail }: { detail: Record<string, unknown> }) {
   );
 }
 
-interface PolicyReadBehaviourResponse {
-  allowedIdentifiers: string[];
-  topLevelAdminUsername: string;
-}
-
-// Card-shaped section for managing the stricter policy reading-behaviour
-// admin tier. Visible to all admins (so they understand who has access),
-// but only editable by the top-level admin.
-function PolicyReadBehaviourPermissionsCard() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const isTopLevel = !!user?.isTopLevelAdmin;
-  const [draftText, setDraftText] = useState<string>("");
-
-  const { data, isLoading } = useQuery<PolicyReadBehaviourResponse>({
-    queryKey: ["/api/admin/settings/policy-read-behaviour"],
-  });
-
-  useEffect(() => {
-    if (data) setDraftText((data.allowedIdentifiers ?? []).join("\n"));
-  }, [data]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (allowedIdentifiers: string[]) => {
-      const res = await apiRequest("PUT", "/api/admin/settings/policy-read-behaviour", { allowedIdentifiers });
-      return (await res.json()) as PolicyReadBehaviourResponse;
-    },
-    onSuccess: (resp) => {
-      queryClient.setQueryData(["/api/admin/settings/policy-read-behaviour"], resp);
-      // The current admin's own permission may have changed — refresh
-      // /api/auth/me so the columns appear/disappear without a reload.
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Permissions saved", description: "Reading-behaviour access updated." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Save failed", description: err?.message || "Unknown error", variant: "destructive" });
-    },
-  });
-
-  const parsed = parseRecipientsText(draftText).map((s) => s.toLowerCase());
-  const dirty =
-    JSON.stringify(parsed) !== JSON.stringify((data?.allowedIdentifiers ?? []).map((s) => s.toLowerCase()));
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <Eye className="h-5 w-5 text-[#C8A96E] mt-1" />
-          <div>
-            <CardTitle>Policy reading-behaviour access</CardTitle>
-            <CardDescription className="mt-1">
-              Controls who can see how long a nurse spent on each policy, whether they scrolled to the end, and
-              whether they opened the PDF — both on the admin Policies page and on a nurse's profile. Other admins
-              keep seeing the basic acknowledgement audit (who/when/version/IP) but not these reading signals,
-              since they can become an HR/disciplinary indicator.
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading || !data ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading permissions…
-          </div>
-        ) : (
-          <>
-            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              The top-level admin (<code className="px-1 py-0.5 rounded bg-muted/40">{data.topLevelAdminUsername}</code>) always has
-              access and is the only one who can edit this list.
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="policy-read-behaviour-allowlist" className="text-sm font-medium">
-                Additional admins with reading-behaviour access
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                One per line. Use the admin's username (local accounts) or email (Microsoft 365 SSO accounts).
-                Matching is case-insensitive.
-              </p>
-              <Textarea
-                id="policy-read-behaviour-allowlist"
-                rows={5}
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-                disabled={!isTopLevel}
-                placeholder={isTopLevel ? "compliance.lead@example.com\njane.doe@example.com" : "Only the top-level admin can edit this."}
-                data-testid="textarea-policy-read-behaviour-allowlist"
-              />
-              <p className="text-xs text-muted-foreground">
-                {parsed.length === 0
-                  ? "No additional admins configured — only the top-level admin can see reading-behaviour data."
-                  : `${parsed.length} additional admin${parsed.length === 1 ? "" : "s"} will see reading-behaviour data.`}
-              </p>
-            </div>
-
-            {!isTopLevel && (
-              <p className="text-xs text-amber-400">
-                You're viewing this list read-only because you're not the top-level admin.
-              </p>
-            )}
-
-            <div className="flex items-center justify-end gap-3">
-              {dirty && isTopLevel && <p className="text-xs text-amber-400">Unsaved changes</p>}
-              <Button
-                size="sm"
-                disabled={!isTopLevel || !dirty || saveMutation.isPending}
-                onClick={() => saveMutation.mutate(parsed)}
-                data-testid="button-save-policy-read-behaviour"
-              >
-                {saveMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
-                ) : (
-                  <><Save className="h-4 w-4 mr-2" /> Save permissions</>
-                )}
-              </Button>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1144,8 +1020,6 @@ export default function AdminSettingsPage() {
           </div>
         </CardContent>
       </Card>
-
-      <PolicyReadBehaviourPermissionsCard />
 
       <RunDetailDialog runId={openRunId} onClose={() => setOpenRunId(null)} />
 

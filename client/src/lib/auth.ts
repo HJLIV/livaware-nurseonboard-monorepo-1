@@ -8,9 +8,8 @@ interface AuthUser {
   role?: string;
   email?: string;
   authMethod?: "local" | "microsoft";
-  // Stricter admin tier flags — gate the policy reading-behaviour columns
-  // and the /settings management UI.
-  isTopLevelAdmin?: boolean;
+  // True iff role === "super_admin". Gates the policy reading-behaviour
+  // columns/summary on the admin Policies page and the nurse Policies tab.
   canViewPolicyReadBehaviour?: boolean;
 }
 

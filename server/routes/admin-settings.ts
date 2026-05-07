@@ -7,17 +7,12 @@
 
 import type { Express, Request } from "express";
 import {
-  POLICY_READ_BEHAVIOUR_PERMISSIONS_KEY,
-  DEFAULT_POLICY_READ_BEHAVIOUR_PERMISSIONS,
-  type PolicyReadBehaviourPermissions,
   type TrainingChaseScheduleSettings,
   type ScheduledJobRun,
 } from "@shared/schema";
 import {
   requireAdmin,
   requireSuperAdmin,
-  requireTopLevelAdmin,
-  getTopLevelAdminUsername,
 } from "../middleware";
 import {
   getTrainingChaseScheduleSettings,
@@ -135,63 +130,6 @@ export function registerAdminSettingsRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[admin-settings] get scheduled-job-run failed:", err);
       res.status(500).json({ message: err?.message || "Failed to load run" });
-    }
-  });
-
-  // ─── Policy reading-behaviour permission allowlist ───────────────
-  // GET — readable by any admin so the /settings page can render the
-  // current state (and hide the editor for non-top-level admins).
-  app.get("/api/admin/settings/policy-read-behaviour", requireAdmin, async (_req, res) => {
-    try {
-      const stored = await storage.getAppSetting<PolicyReadBehaviourPermissions>(
-        POLICY_READ_BEHAVIOUR_PERMISSIONS_KEY,
-      );
-      const allowedIdentifiers = Array.isArray(stored?.allowedIdentifiers)
-        ? stored!.allowedIdentifiers.filter((s): s is string => typeof s === "string")
-        : DEFAULT_POLICY_READ_BEHAVIOUR_PERMISSIONS.allowedIdentifiers;
-      res.json({
-        allowedIdentifiers,
-        topLevelAdminUsername: getTopLevelAdminUsername(),
-      });
-    } catch (err: any) {
-      console.error("[admin-settings] get policy-read-behaviour failed:", err);
-      res.status(500).json({ message: err?.message || "Failed to load permissions" });
-    }
-  });
-
-  // PUT — only the top-level admin can grant/revoke. Body is
-  // `{ allowedIdentifiers: string[] }` of usernames or emails.
-  app.put("/api/admin/settings/policy-read-behaviour", requireTopLevelAdmin, async (req, res) => {
-    try {
-      const raw = (req.body || {}) as { allowedIdentifiers?: unknown };
-      if (raw.allowedIdentifiers !== undefined && !Array.isArray(raw.allowedIdentifiers)) {
-        return res.status(400).json({ message: "allowedIdentifiers must be an array of strings." });
-      }
-      const list = Array.isArray(raw.allowedIdentifiers) ? raw.allowedIdentifiers : [];
-      // Normalize: trim, lowercase, dedupe, drop empties + obviously-bad
-      // entries. Cap at a reasonable size to avoid runaway settings.
-      const seen = new Set<string>();
-      const cleaned: string[] = [];
-      for (const entry of list) {
-        if (typeof entry !== "string") continue;
-        const v = entry.trim().toLowerCase();
-        if (!v || v.length > 200) continue;
-        if (seen.has(v)) continue;
-        seen.add(v);
-        cleaned.push(v);
-        if (cleaned.length >= 100) break;
-      }
-      const next: PolicyReadBehaviourPermissions = { allowedIdentifiers: cleaned };
-      await storage.setAppSetting(POLICY_READ_BEHAVIOUR_PERMISSIONS_KEY, next, agentNameFor(req));
-      await storage.createAuditLog({
-        action: "policy_read_behaviour_permissions_updated",
-        agentName: agentNameFor(req),
-        detail: { allowedIdentifiers: cleaned },
-      });
-      res.json({ allowedIdentifiers: cleaned, topLevelAdminUsername: getTopLevelAdminUsername() });
-    } catch (err: any) {
-      console.error("[admin-settings] put policy-read-behaviour failed:", err);
-      res.status(500).json({ message: err?.message || "Failed to save permissions" });
     }
   });
 

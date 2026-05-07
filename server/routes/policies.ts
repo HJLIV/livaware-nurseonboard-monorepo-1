@@ -22,8 +22,7 @@ import {
   requireAdmin,
   requireSuperAdmin,
   validatePortalToken,
-  requirePolicyReadBehaviour,
-  userCanViewPolicyReadBehaviour,
+  isSuperAdmin,
 } from "../middleware";
 import { logAction } from "../services/audit";
 import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
@@ -264,7 +263,7 @@ export function registerPolicyRoutes(app: Express) {
         .from(policyAcknowledgements)
         .where(eq(policyAcknowledgements.policyId, String(req.params.id)))
         .orderBy(desc(policyAcknowledgements.acknowledgedAt));
-      const canViewBehaviour = await userCanViewPolicyReadBehaviour(req);
+      const canViewBehaviour = isSuperAdmin(req);
       const sanitized = canViewBehaviour
         ? rows
         : rows.map(({ totalActiveSeconds: _t, sessionCount: _s, scrolledToEnd: _sc, openedPdf: _o, ...rest }) => rest);
@@ -292,10 +291,10 @@ export function registerPolicyRoutes(app: Express) {
         const prev = latestAck.get(a.policyId);
         if (!prev || a.acknowledgedAt > prev.acknowledgedAt) latestAck.set(a.policyId, a);
       }
-      // Only the stricter "policy read-behaviour" tier sees the
-      // time-spent / scrolled / pdf-opened columns; other admins still
-      // get the acknowledgement list, just without those fields.
-      const canViewBehaviour = await userCanViewPolicyReadBehaviour(req);
+      // Only super admins see the time-spent / scrolled / pdf-opened
+      // columns; other admins still get the acknowledgement list, just
+      // without those fields.
+      const canViewBehaviour = isSuperAdmin(req);
       const enriched = summary.policies.map((p) => {
         const a = latestAck.get(p.id);
         return canViewBehaviour
@@ -372,10 +371,9 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: per-policy reading-behaviour aggregate ───────────────
-  // Gated on the stricter `requirePolicyReadBehaviour` tier — regular
-  // admins get a 403 here even though they can still see the basic
-  // acknowledgement audit list above.
-  app.get("/api/admin/policies/:id/read-summary", requirePolicyReadBehaviour, async (req, res) => {
+  // Super-admin only — regular admins get a 403 here even though they
+  // can still see the basic acknowledgement audit list above.
+  app.get("/api/admin/policies/:id/read-summary", requireSuperAdmin, async (req, res) => {
     try {
       const policyId = String(req.params.id);
       const acks = await db
