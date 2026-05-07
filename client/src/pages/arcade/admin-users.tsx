@@ -7,6 +7,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SuperAdminGate, SuperAdminViewOnlyBanner } from "@/components/super-admin-only";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -595,11 +596,13 @@ export default function AdminUsers() {
           <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-admin-users-title">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">View user details and training progress</p>
         </div>
-        <Button onClick={() => setShowInviteDialog(true)} data-testid="button-invite-nurse">
+        <SuperAdminGate><Button onClick={() => setShowInviteDialog(true)} data-testid="button-invite-nurse">
           <UserPlus className="w-4 h-4 mr-2" />
           Invite Nurse
-        </Button>
+        </Button></SuperAdminGate>
       </div>
+
+      <SuperAdminViewOnlyBanner />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -674,18 +677,20 @@ export default function AdminUsers() {
                       <>
                         <div className="flex items-center justify-between pt-3 border-t mt-3 mb-2">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Training Progress</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2 font-semibold"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAssignTarget({ id: user.id, name: user.name });
-                            }}
-                          >
-                            <PlusCircle className="w-3.5 h-3.5" />
-                            Assign Modules
-                          </Button>
+                          <SuperAdminGate>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 font-semibold"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssignTarget({ id: user.id, name: user.name });
+                              }}
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              Assign Modules
+                            </Button>
+                          </SuperAdminGate>
                         </div>
                         <UserProgressPanel userId={user.id} />
                       </>

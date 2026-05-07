@@ -109,18 +109,24 @@ export function registerMicrosoftAuthRoutes(app: Express) {
         req.session.regenerate((err) => (err ? reject(err) : resolve()));
       });
 
+      // Auto-promote to super_admin when the SSO email matches the configured
+      // SUPER_ADMIN_EMAIL. Comparison is case-insensitive and trimmed.
+      const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
+      const role: "admin" | "super_admin" =
+        superAdminEmail && email === superAdminEmail ? "super_admin" : "admin";
+
       req.session.isAuthenticated = true;
       req.session.username = displayName;
       req.session.email = email;
       req.session.displayName = displayName;
-      req.session.role = "admin";
+      req.session.role = role;
       req.session.authMethod = "microsoft";
 
       try {
         await logAction(
           null,
-          "admin",
-          "microsoft_sso_login",
+          role === "super_admin" ? "system" : "admin",
+          role === "super_admin" ? "super_admin_login" : "microsoft_sso_login",
           displayName,
           { email, displayName, method: "microsoft", tenantId: TENANT_ID }
         );

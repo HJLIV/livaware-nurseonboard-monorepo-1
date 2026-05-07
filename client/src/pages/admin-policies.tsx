@@ -7,6 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
+import { useAuthRole } from "@/lib/use-auth-role";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -247,11 +249,13 @@ export default function AdminPoliciesPage() {
             re-acknowledge the new version.
           </p>
         </div>
-        <Button onClick={openCreate} data-testid="button-new-policy">
+        <SuperAdminGate><Button onClick={openCreate} data-testid="button-new-policy">
           <Plus className="h-4 w-4 mr-1.5" />
           New Policy
-        </Button>
+        </Button></SuperAdminGate>
       </div>
+
+      <SuperAdminViewOnlyBanner />
 
       <Card>
         <CardContent className="p-0">
@@ -309,26 +313,28 @@ export default function AdminPoliciesPage() {
                         >
                           <Users className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openEdit(p)}
-                          data-testid={`button-edit-${p.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            if (confirm(`Delete "${p.title}"? This will also delete all acknowledgements for this policy.`)) {
-                              deleteMutation.mutate(p.id);
-                            }
-                          }}
-                          data-testid={`button-delete-${p.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <SuperAdminGate>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEdit(p)}
+                            data-testid={`button-edit-${p.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              if (confirm(`Delete "${p.title}"? This will also delete all acknowledgements for this policy.`)) {
+                                deleteMutation.mutate(p.id);
+                              }
+                            }}
+                            data-testid={`button-delete-${p.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </SuperAdminGate>
                       </div>
                     </TableCell>
                   </TableRow>

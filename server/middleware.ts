@@ -98,11 +98,29 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.session?.isAuthenticated && req.session?.role === "admin") {
+  if (
+    req.session?.isAuthenticated &&
+    (req.session?.role === "admin" || req.session?.role === "super_admin")
+  ) {
     return next();
   }
   if (req.session?.isAuthenticated) {
     return res.status(403).json({ message: "Admin access required" });
+  }
+  return res.status(401).json({ message: "Not authenticated" });
+}
+
+// Super-admin gate. The super admin is a single fixed account
+// (configured via SUPER_ADMIN_USERNAME/SUPER_ADMIN_PASSWORD or matched by
+// SUPER_ADMIN_EMAIL on Microsoft SSO) that is the only role allowed to
+// mutate platform-config: policies, settings, arcade modules/content,
+// chase email templates, admin/team users.
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.isAuthenticated && req.session?.role === "super_admin") {
+    return next();
+  }
+  if (req.session?.isAuthenticated) {
+    return res.status(403).json({ message: "Super admin access required" });
   }
   return res.status(401).json({ message: "Not authenticated" });
 }

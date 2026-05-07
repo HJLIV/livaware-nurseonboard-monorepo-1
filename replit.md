@@ -104,6 +104,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 ### System
 - `/audit` — Audit trail (admin only)
 - `/guide` — Admin Guide with walkthroughs & SOPs (step-by-step procedures for all platform features)
+- `/super-admin/activity` — **Super admin only** Activity Dashboard. Live audit feed (refreshes every 30s) with filters (module/action/agent/text/since/until), per-actor leaderboard, and click-through actor drill-down with per-action and per-module breakdowns. Backed by `server/routes/super-admin.ts` (`/api/super-admin/activity`, `/actors`, `/actor/:name`) reading from existing `audit_logs`.
 
 ## Server Routes
 
@@ -129,7 +130,7 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 
 ## Authentication
 
-- **Local auth**: Username/password via `ADMIN_USERNAME`/`ADMIN_PASSWORD` (default: admin/admin), `TEAM_USERNAME`/`TEAM_PASSWORD`
+- **Local auth**: Username/password via `ADMIN_USERNAME`/`ADMIN_PASSWORD` (default: admin/admin), `TEAM_USERNAME`/`TEAM_PASSWORD`. Optional `SUPER_ADMIN_USERNAME`/`SUPER_ADMIN_PASSWORD` defines a single fixed super-admin login (checked before regular admin so it always wins). Local super-admin sign-in audits a `super_admin_login` action under module `system`.
 - **Microsoft 365 SSO**: Azure AD / Entra ID OAuth2 via MSAL. Users click "Sign in with Microsoft 365" on the login page. Requires:
   - `AZURE_AD_TENANT_ID` — Azure directory/tenant ID
   - `AZURE_AD_CLIENT_ID` — App registration client ID
@@ -137,14 +138,31 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
   - Redirect URI: `https://<domain>/api/auth/microsoft/callback`
 - SSO sessions store `displayName`, `email`, `authMethod: "microsoft"` in the session
 - The sidebar shows Microsoft badge + user display name for SSO sessions
-- SSO login events are logged to the audit trail (`microsoft_sso_login` action)
+- SSO login events are logged to the audit trail (`microsoft_sso_login` action). If `SUPER_ADMIN_EMAIL` matches the SSO email (case-insensitive), the session is auto-promoted to `super_admin` and audited as `super_admin_login` (module `system`).
 - Server module: `server/msal-auth.ts`
+
+### Roles
+
+- `admin` — read access to all admin pages; can manage candidates/nurses/portal/preboard/onboard.
+- `team` — limited team role.
+- `super_admin` — exclusive write access to platform configuration:
+  policies (POST/PATCH/DELETE), platform settings (PUT + Run-now),
+  arcade scenario imports + nurse invites, training chase email
+  prepare/send/scan-replies. All other admins keep read access. Backed by
+  `requireSuperAdmin` middleware (`server/middleware.ts`). The frontend
+  hides the relevant action buttons via `<SuperAdminGate>` and shows a
+  `<SuperAdminViewOnlyBanner>` on gated pages — backend remains the
+  authoritative gate (returns 403 with "Super admin access required").
+- The sidebar shows an `SA` badge next to the role label and surfaces a
+  "Super Admin" section with the **Activity Dashboard**.
 
 ## Environment Variables
 
 - `DATABASE_URL` — PostgreSQL connection string (Replit)
 - `SESSION_SECRET` — Session signing secret
 - `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET` — Microsoft SSO + email
+- `SUPER_ADMIN_USERNAME`, `SUPER_ADMIN_PASSWORD` — single fixed super-admin local login (optional; if unset, no local super-admin)
+- `SUPER_ADMIN_EMAIL` — email that, when matched on Microsoft SSO sign-in, auto-promotes the session to `super_admin`
 - `AZURE_AD_SENDER_EMAIL` — Sender mailbox for outgoing emails (default: onboarding@livaware.co.uk)
 - `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` — For AI services
 - `ANTHROPIC_API_KEY` — For Anthropic AI services (compliance checks)

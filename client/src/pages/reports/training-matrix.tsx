@@ -8,6 +8,7 @@ import {
 } from "@/components/reports/compliance-matrix";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { SuperAdminGate, SuperAdminViewOnlyBanner } from "@/components/super-admin-only";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -236,6 +237,7 @@ export default function TrainingMatrixPage() {
 
   return (
     <>
+      <SuperAdminViewOnlyBanner className="mb-4" />
       <ComplianceMatrix
         endpoint="/api/admin/reports/training-matrix"
         title="Mandatory Training Matrix"
@@ -293,21 +295,23 @@ export default function TrainingMatrixPage() {
           const hasGap = candidateHasGap(c);
           if (!hasGap) return null;
           return (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-              title="Email this nurse about outstanding training"
-              disabled={prepareMutation.isPending || !outlookConfigured}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                prepareMutation.mutate({ nurseIds: [c.id], mode: "single" });
-              }}
-              data-testid={`button-notify-${c.id}`}
-            >
-              {prepareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-            </Button>
+            <SuperAdminGate>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                title="Email this nurse about outstanding training"
+                disabled={prepareMutation.isPending || !outlookConfigured}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  prepareMutation.mutate({ nurseIds: [c.id], mode: "single" });
+                }}
+                data-testid={`button-notify-${c.id}`}
+              >
+                {prepareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              </Button>
+            </SuperAdminGate>
           );
         }}
       />
@@ -489,7 +493,7 @@ function buildToolbarActions(
   // so the toolbar count never drifts from the actual recipient list.
   const bulkIds = filteredCandidates.filter(candidateHasGap).map((c) => c.id);
   return (
-    <>
+    <SuperAdminGate>
       <Button
         variant="default"
         size="sm"
@@ -520,6 +524,6 @@ function buildToolbarActions(
         )}
         Scan replies
       </Button>
-    </>
+    </SuperAdminGate>
   );
 }

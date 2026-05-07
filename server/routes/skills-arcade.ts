@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../arcade-storage";
+import { storage as platformStorage } from "../storage";
 import { scoreAttempt, type TaskResponse } from "../arcade-scoring";
 import { seedDatabase } from "../arcade-seed";
 import { loginSchema, registerSchema } from "@shared/schema";
@@ -13,7 +14,34 @@ declare module "express-session" {
 }
 
 function isPlatformAdmin(req: Request): boolean {
-  return !!(req.session as any).isAuthenticated && (req.session as any).role === "admin";
+  const role = (req.session as any).role;
+  return !!(req.session as any).isAuthenticated && (role === "admin" || role === "super_admin");
+}
+
+function isPlatformSuperAdmin(req: Request): boolean {
+  return !!(req.session as any).isAuthenticated && (req.session as any).role === "super_admin";
+}
+
+// Gate for arcade routes that mutate platform-config (module imports,
+// scenario content, admin/team user invites). Bridges platform-super-admin
+// sessions into the arcade route's user-shaped req.user object so the
+// downstream handler can keep using `(req as any).user.name` for audit
+// logging.
+function requireArcadeSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!isPlatformSuperAdmin(req)) {
+    if (!(req.session as any).isAuthenticated) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    return res.status(403).json({ message: "Super admin access required" });
+  }
+  (req as any).user = {
+    id: "platform-admin",
+    name: (req.session as any).displayName || (req.session as any).username || "Super Admin",
+    email: (req.session as any).email || "",
+    role: "admin",
+    active: true,
+  } as User;
+  next();
 }
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -688,7 +716,7 @@ export async function registerRoutes(
     email: z.string().email("Valid email required"),
   });
 
-  app.post("/api/admin/invite-nurse", requireRole("admin"), async (req, res) => {
+  app.post("/api/admin/invite-nurse", requireArcadeSuperAdmin, async (req, res) => {
     try {
       const parsed = inviteNurseSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -727,6 +755,14 @@ export async function registerRoutes(
       }
 
       const { password: _, ...safeUser } = user;
+
+      await platformStorage.createAuditLog({
+        module: "skills_arcade",
+        action: "invite_nurse",
+        agentName: adminUser?.name ?? "super_admin",
+        detail: { invitedUserId: user.id, invitedEmail: email.toLowerCase(), invitedName: name, emailSent },
+      });
+
       res.status(201).json({ user: safeUser, emailSent, emailError, tempPassword: emailSent ? undefined : tempPassword });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -735,7 +771,7 @@ export async function registerRoutes(
 
   const assignSchema = z.object({ moduleId: z.string().min(1), userIds: z.array(z.string().min(1)).min(1) });
 
-  app.post("/api/admin/assign", requireRole("admin", "trainer"), async (req, res) => {
+  app.post("/api/admin/assign", requireArcadeSuperAdmin, async (req, res) => {
     try {
       const parsed = assignSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -751,6 +787,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No module version found" });
       }
 
+      const assigned: string[] = [];
       for (const userId of userIds) {
         const existing = await storage.getAssignmentsByUser(userId);
         const alreadyAssigned = existing.find((a) => a.moduleId === moduleId);
@@ -762,8 +799,17 @@ export async function registerRoutes(
             status: "not_started",
             assignedBy: req.session.userId,
           });
+          assigned.push(userId);
         }
       }
+
+      const adminUser = (req as any).user as User | undefined;
+      await platformStorage.createAuditLog({
+        module: "skills_arcade",
+        action: "assign_module",
+        agentName: adminUser?.name ?? "super_admin",
+        detail: { moduleId, moduleName: mod.name, userIds, newlyAssigned: assigned },
+      });
 
       res.json({ ok: true });
     } catch (e: any) {
@@ -771,7 +817,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/scenarios/import", requireRole("admin"), async (req, res) => {
+  app.post("/api/admin/scenarios/import", requireArcadeSuperAdmin, async (req, res) => {
     try {
       const { module: modData, scenarios: scenarioData } = req.body;
       if (!modData || !scenarioData) {
@@ -799,6 +845,7 @@ export async function registerRoutes(
         });
       }
 
+      let scenarioCount = 0;
       for (const s of scenarioData) {
         await storage.createScenario({
           moduleVersionId: mv.id,
@@ -806,7 +853,16 @@ export async function registerRoutes(
           contentJson: s.contentJson || s.content,
           isActive: true,
         });
+        scenarioCount++;
       }
+
+      const adminUser = (req as any).user as User | undefined;
+      await platformStorage.createAuditLog({
+        module: "skills_arcade",
+        action: "import_scenarios",
+        agentName: adminUser?.name ?? "super_admin",
+        detail: { moduleId: mod.id, moduleName: mod.name, scenarioCount },
+      });
 
       res.json({ ok: true, moduleId: mod.id });
     } catch (e: any) {

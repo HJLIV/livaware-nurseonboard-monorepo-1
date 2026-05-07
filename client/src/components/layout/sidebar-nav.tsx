@@ -26,6 +26,8 @@ import {
   Award,
   TableProperties,
   AlertTriangle,
+  ShieldAlert,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +36,7 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
   adminOnly?: boolean;
+  superAdminOnly?: boolean;
   requiredRoles?: string[];
   badgeKey?: string;
 }
@@ -94,6 +97,19 @@ const sections: NavSectionDef[] = [
       { label: "Admin Guide", href: "/guide", icon: BookOpen },
     ],
   },
+  {
+    key: "super-admin",
+    title: "Super Admin",
+    items: [
+      { label: "Activity Dashboard", href: "/super-admin/activity", icon: Activity, superAdminOnly: true },
+      { label: "Policies", href: "/admin/policies", icon: FileText, superAdminOnly: true },
+      { label: "Platform Settings", href: "/settings", icon: Settings, superAdminOnly: true },
+      { label: "Arcade Modules & Content", href: "/arcade/admin/modules", icon: Shield, superAdminOnly: true },
+      { label: "Chase Email Templates", href: "/reports/training", icon: GraduationCap, superAdminOnly: true },
+      { label: "Admin & Team Users", href: "/arcade/admin/users", icon: UserCog, superAdminOnly: true },
+      { label: "Guide Content", href: "/guide", icon: BookOpen, superAdminOnly: true },
+    ],
+  },
 ];
 
 const STORAGE_KEY = "sidebar-collapsed-sections";
@@ -129,7 +145,10 @@ function NavSection({
   badges: Record<string, number>;
 }) {
   const filtered = section.items.filter((item) => {
-    if (item.adminOnly && role !== "admin") return false;
+    // Admin-only items are visible to both regular admins and the super
+    // admin (super admin retains read access to everything an admin sees).
+    if (item.adminOnly && role !== "admin" && role !== "super_admin") return false;
+    if (item.superAdminOnly && role !== "super_admin") return false;
     if (item.requiredRoles && (!role || !item.requiredRoles.includes(role))) return false;
     return true;
   });
@@ -340,14 +359,25 @@ export function SidebarNav() {
               <p className="truncate text-sm font-semibold text-sidebar-foreground leading-tight">
                 {authData.displayName || authData.username}
               </p>
-              <p className="text-[10px] text-muted-foreground tracking-wide">
+              <p className="text-[10px] text-muted-foreground tracking-wide flex items-center gap-1.5 flex-wrap">
                 {authData.authMethod === "microsoft" ? (
                   <span className="inline-flex items-center gap-1">
                     <svg viewBox="0 0 21 21" className="h-2.5 w-2.5 inline-block shrink-0"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
-                    Microsoft · {(authData.role ?? "user")}
+                    Microsoft · {(authData.role === "super_admin" ? "super admin" : authData.role ?? "user")}
                   </span>
                 ) : (
-                  <span className="capitalize">{authData.role ?? "user"}</span>
+                  <span className="capitalize">
+                    {authData.role === "super_admin" ? "super admin" : authData.role ?? "user"}
+                  </span>
+                )}
+                {authData.role === "super_admin" && (
+                  <span
+                    className="inline-flex items-center gap-0.5 rounded-sm bg-amber-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-amber-300"
+                    data-testid="badge-sidebar-super-admin"
+                  >
+                    <ShieldAlert className="h-2 w-2" />
+                    SA
+                  </span>
                 )}
               </p>
             </div>

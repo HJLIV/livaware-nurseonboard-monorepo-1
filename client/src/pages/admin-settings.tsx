@@ -33,6 +33,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 
 interface TrainingChaseScheduleSettings {
   weeklyChaseEnabled: boolean;
@@ -670,6 +671,8 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
+      <SuperAdminViewOnlyBanner />
+
       {!outlookConfigured && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-start gap-3 py-4">
@@ -839,19 +842,21 @@ export default function AdminSettingsPage() {
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={runNowMutation.isPending || !outlookConfigured}
-              onClick={() => runNowMutation.mutate()}
-              data-testid="button-run-weekly-now"
-            >
-              {runNowMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
-              ) : (
-                <><PlayCircle className="h-4 w-4 mr-2" /> Run weekly chase now</>
-              )}
-            </Button>
+            <SuperAdminGate>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={runNowMutation.isPending || !outlookConfigured}
+                onClick={() => runNowMutation.mutate()}
+                data-testid="button-run-weekly-now"
+              >
+                {runNowMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
+                ) : (
+                  <><PlayCircle className="h-4 w-4 mr-2" /> Run weekly chase now</>
+                )}
+              </Button>
+            </SuperAdminGate>
             <p className="text-xs text-muted-foreground">
               "Run now" uses the same logic as the scheduled job and respects the recently-chased gap.
             </p>
@@ -1019,29 +1024,31 @@ export default function AdminSettingsPage() {
 
       <div className="flex items-center justify-end gap-3 pt-2">
         {dirty && <p className="text-xs text-amber-400">Unsaved changes</p>}
-        <Button
-          disabled={!dirty || !recipientsValid || saveMutation.isPending}
-          onClick={() =>
-            saveMutation.mutate({
-              weeklyChaseEnabled: draft.weeklyChaseEnabled,
-              weeklyChaseDayOfWeek: draft.weeklyChaseDayOfWeek,
-              weeklyChaseHour: draft.weeklyChaseHour,
-              weeklyChaseTimeZone: draft.weeklyChaseTimeZone,
-              weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
-              replyScanEnabled: draft.replyScanEnabled,
-              replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
-              weeklyChaseSummaryRecipients: parsedWeeklyRecipients,
-              replyScanSummaryRecipients: parsedScanRecipients,
-            })
-          }
-          data-testid="button-save-settings"
-        >
-          {saveMutation.isPending ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
-          ) : (
-            <><Save className="h-4 w-4 mr-2" /> Save settings</>
-          )}
-        </Button>
+        <SuperAdminGate>
+          <Button
+            disabled={!dirty || !recipientsValid || saveMutation.isPending}
+            onClick={() =>
+              saveMutation.mutate({
+                weeklyChaseEnabled: draft.weeklyChaseEnabled,
+                weeklyChaseDayOfWeek: draft.weeklyChaseDayOfWeek,
+                weeklyChaseHour: draft.weeklyChaseHour,
+                weeklyChaseTimeZone: draft.weeklyChaseTimeZone,
+                weeklyChaseMinGapDays: draft.weeklyChaseMinGapDays,
+                replyScanEnabled: draft.replyScanEnabled,
+                replyScanIntervalMinutes: draft.replyScanIntervalMinutes,
+                weeklyChaseSummaryRecipients: parsedWeeklyRecipients,
+                replyScanSummaryRecipients: parsedScanRecipients,
+              })
+            }
+            data-testid="button-save-settings"
+          >
+            {saveMutation.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+            ) : (
+              <><Save className="h-4 w-4 mr-2" /> Save settings</>
+            )}
+          </Button>
+        </SuperAdminGate>
       </div>
     </div>
   );

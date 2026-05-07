@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SuperAdminGate, SuperAdminViewOnlyBanner } from "@/components/super-admin-only";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -333,10 +334,14 @@ export default function AdminModules() {
           <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-admin-modules-title">Skill Modules</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage clinical competency modules and scenarios</p>
         </div>
-        <Button onClick={() => setShowImport(true)} data-testid="button-import-json">
-          <Upload className="w-4 h-4 mr-1" /> Import JSON
-        </Button>
+        <SuperAdminGate>
+          <Button onClick={() => setShowImport(true)} data-testid="button-import-json">
+            <Upload className="w-4 h-4 mr-1" /> Import JSON
+          </Button>
+        </SuperAdminGate>
       </div>
+
+      <SuperAdminViewOnlyBanner />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -397,17 +402,19 @@ export default function AdminModules() {
                     {isExpanded ? <ChevronUp className="w-3.5 h-3.5 mr-1" /> : <ChevronDown className="w-3.5 h-3.5 mr-1" />}
                     {isExpanded ? "Hide Content" : "View Content"}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setAssignModuleId(mod.id);
-                      setShowAssign(true);
-                    }}
-                    data-testid={`button-assign-${mod.id}`}
-                  >
-                    <Users className="w-3.5 h-3.5 mr-1" /> Assign to Nurses
-                  </Button>
+                  <SuperAdminGate>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAssignModuleId(mod.id);
+                        setShowAssign(true);
+                      }}
+                      data-testid={`button-assign-${mod.id}`}
+                    >
+                      <Users className="w-3.5 h-3.5 mr-1" /> Assign to Nurses
+                    </Button>
+                  </SuperAdminGate>
                 </div>
 
                 {isExpanded && <ModuleContentPanel moduleId={mod.id} />}
@@ -477,20 +484,22 @@ export default function AdminModules() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAssign(false)}>Cancel</Button>
-            <Button
-              onClick={() => {
-                const checked = document.querySelectorAll<HTMLInputElement>('[data-nurse-id]:checked');
-                const ids = Array.from(checked).map((el) => el.dataset.nurseId!);
-                if (assignModuleId && ids.length > 0) {
-                  assignMutation.mutate({ moduleId: assignModuleId, userIds: ids });
-                }
-              }}
-              disabled={assignMutation.isPending}
-              data-testid="button-confirm-assign"
-            >
-              {assignMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              Assign
-            </Button>
+            <SuperAdminGate>
+              <Button
+                onClick={() => {
+                  const checked = document.querySelectorAll<HTMLInputElement>('[data-nurse-id]:checked');
+                  const ids = Array.from(checked).map((el) => el.dataset.nurseId!);
+                  if (assignModuleId && ids.length > 0) {
+                    assignMutation.mutate({ moduleId: assignModuleId, userIds: ids });
+                  }
+                }}
+                disabled={assignMutation.isPending}
+                data-testid="button-confirm-assign"
+              >
+                {assignMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                Assign
+              </Button>
+            </SuperAdminGate>
           </DialogFooter>
         </DialogContent>
       </Dialog>

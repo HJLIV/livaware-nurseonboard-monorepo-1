@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/layout/app-layout";
+import { SuperAdminViewOnlyBanner } from "@/components/super-admin-only";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -595,6 +596,8 @@ export default function AdminGuidePage() {
             Follow these standard operating procedures to ensure consistent, compliant onboarding.
           </p>
         </div>
+
+        <SuperAdminViewOnlyBanner className="mb-6" />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {QUICK_REFERENCE.map((ref) => {

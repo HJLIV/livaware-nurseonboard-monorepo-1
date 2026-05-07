@@ -18,7 +18,7 @@ import {
   type PolicyAcknowledgement,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
-import { requireAdmin, validatePortalToken } from "../middleware";
+import { requireAdmin, requireSuperAdmin, validatePortalToken } from "../middleware";
 import { logAction } from "../services/audit";
 import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
 
@@ -151,7 +151,7 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: create policy ────────────────────────────────────────
-  app.post("/api/admin/policies", requireAdmin, async (req, res) => {
+  app.post("/api/admin/policies", requireSuperAdmin, async (req, res) => {
     try {
       const parsed = insertPolicySchema.safeParse({
         ...req.body,
@@ -179,7 +179,7 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: update policy ────────────────────────────────────────
-  app.patch("/api/admin/policies/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/policies/:id", requireSuperAdmin, async (req, res) => {
     try {
       const id = String(req.params.id);
       const [existing] = await db.select().from(policies).where(eq(policies.id, id));
@@ -221,7 +221,7 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: delete policy ────────────────────────────────────────
-  app.delete("/api/admin/policies/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/admin/policies/:id", requireSuperAdmin, async (req, res) => {
     try {
       const id = String(req.params.id);
       const [existing] = await db.select().from(policies).where(eq(policies.id, id));

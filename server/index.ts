@@ -20,7 +20,7 @@ declare module "express-session" {
   interface SessionData {
     isAuthenticated?: boolean;
     username?: string;
-    role?: "admin" | "team";
+    role?: "admin" | "team" | "super_admin";
     email?: string;
     displayName?: string;
     authMethod?: "local" | "microsoft";

@@ -55,6 +55,9 @@ const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
 const AdminPoliciesPage = lazy(() => import("@/pages/admin-policies"));
 const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
 
+// Super admin
+const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity"));
+
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -71,12 +74,25 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   if (isLoading || !authData) {
     return <LoadingSpinner />;
   }
-  if (authData.role !== "admin") {
+  if (authData.role !== "admin" && authData.role !== "super_admin") {
     // Non-admins are redirected to the dashboard rather than shown a NotFound,
     // matching the task brief's "non-admins are redirected" requirement and
     // giving signed-in users a clear next destination.
     return <Redirect to="/" />;
   }
+  return <Component />;
+}
+
+// Super-admin-only route guard. Mirrors AdminRoute but rejects regular
+// admins as well — used for routes like /super-admin/activity that the
+// brief reserves for the single fixed super-admin account.
+function SuperAdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: authData, isLoading } = useQuery<{ authenticated: boolean; username: string; role?: string } | null>({
+    queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+  if (isLoading || !authData) return <LoadingSpinner />;
+  if (authData.role !== "super_admin") return <Redirect to="/" />;
   return <Component />;
 }
 
@@ -157,6 +173,9 @@ function AuthenticatedRouter() {
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
               <Route path="/admin/policies">{() => <AppLayout><AdminRoute component={AdminPoliciesPage} /></AppLayout>}</Route>
+
+              {/* Super Admin */}
+              <Route path="/super-admin/activity">{() => <SuperAdminRoute component={SuperAdminActivityPage} />}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />

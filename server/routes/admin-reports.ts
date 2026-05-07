@@ -12,7 +12,7 @@ import {
   COMPETENCY_MATRIX,
 } from "@shared/schema";
 import { storage } from "../storage";
-import { requireAdmin } from "../middleware";
+import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { isOutlookConfigured } from "../outlook";
 import { evaluateMandatoryTrainingCell } from "../training-status";
 import {
@@ -583,7 +583,7 @@ export function registerAdminReportsRoutes(app: Express) {
   //   - { nurseId: "..." }                → preview for one nurse
   //   - { mode: "bulk" }                  → preview for ALL nurses currently
   //                                         in red/amber on at least one module
-  app.post("/api/admin/reports/training-notifications/prepare", requireAdmin, async (req, res) => {
+  app.post("/api/admin/reports/training-notifications/prepare", requireSuperAdmin, async (req, res) => {
     try {
       const { nurseId, nurseIds } = req.body || {};
       const allNurses = await storage.getCandidates();
@@ -684,7 +684,7 @@ export function registerAdminReportsRoutes(app: Express) {
   //   { nurseIds: string[], subject?: string, body?: string }
   // The same (admin-edited) template applies to every nurse; per-nurse
   // tokens (name, modules, portal URL/expiry) are filled server-side.
-  app.post("/api/admin/reports/training-notifications/send", requireAdmin, async (req, res) => {
+  app.post("/api/admin/reports/training-notifications/send", requireSuperAdmin, async (req, res) => {
     try {
       const { nurseIds, subject, body } = req.body || {};
       if (!Array.isArray(nurseIds) || nurseIds.length === 0) {
@@ -757,7 +757,7 @@ export function registerAdminReportsRoutes(app: Express) {
   // Fire the mailbox auto-ingest scoped to nurses with active chase
   // notifications. Auto-attaches confident matches; flags low-confidence
   // attachments into the existing review queue; emails an admin summary.
-  app.post("/api/admin/reports/training-notifications/scan-replies", requireAdmin, async (req, res) => {
+  app.post("/api/admin/reports/training-notifications/scan-replies", requireSuperAdmin, async (req, res) => {
     try {
       const triggeredBy = agentNameFor(req);
       const summary = await scanMailboxForChaseRepliesAll(triggeredBy);

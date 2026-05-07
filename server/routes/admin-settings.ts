@@ -7,7 +7,7 @@
 
 import type { Express, Request } from "express";
 import type { TrainingChaseScheduleSettings, ScheduledJobRun } from "@shared/schema";
-import { requireAdmin } from "../middleware";
+import { requireAdmin, requireSuperAdmin } from "../middleware";
 import {
   getTrainingChaseScheduleSettings,
   saveTrainingChaseScheduleSettings,
@@ -50,7 +50,7 @@ export function registerAdminSettingsRoutes(app: Express): void {
 
   // PUT — update the editable subset of the schedule settings. last*RunAt
   // are server-managed and not accepted from the request body.
-  app.put("/api/admin/settings/training-chase-schedule", requireAdmin, async (req, res) => {
+  app.put("/api/admin/settings/training-chase-schedule", requireSuperAdmin, async (req, res) => {
     try {
       const body = (req.body || {}) as Partial<Record<keyof TrainingChaseScheduleSettings, unknown>>;
       const patch: Partial<TrainingChaseScheduleSettings> = {};
@@ -130,7 +130,7 @@ export function registerAdminSettingsRoutes(app: Express): void {
   // POST — fire the weekly chase manually (regardless of schedule). Same
   // exact code path the scheduled tick uses, so admins can verify the job
   // works without waiting for Monday.
-  app.post("/api/admin/settings/training-chase-schedule/run-weekly-now", requireAdmin, async (req, res) => {
+  app.post("/api/admin/settings/training-chase-schedule/run-weekly-now", requireSuperAdmin, async (req, res) => {
     try {
       const settings = await getTrainingChaseScheduleSettings();
       const result = await runWeeklyTrainingChase({

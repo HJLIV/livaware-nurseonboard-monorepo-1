@@ -8,25 +8,51 @@ function getCredentials() {
   const adminPassword = process.env["ADMIN_PASSWORD"] || "admin";
   const teamUsername = process.env["TEAM_USERNAME"] || "team";
   const teamPassword = process.env["TEAM_PASSWORD"] || "";
-  return { adminUsername, adminPassword, teamUsername, teamPassword };
+  const superAdminUsername = process.env["SUPER_ADMIN_USERNAME"] || "";
+  const superAdminPassword = process.env["SUPER_ADMIN_PASSWORD"] || "";
+  return {
+    adminUsername,
+    adminPassword,
+    teamUsername,
+    teamPassword,
+    superAdminUsername,
+    superAdminPassword,
+  };
 }
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const { adminUsername, adminPassword, teamUsername, teamPassword } = getCredentials();
-
   app.use("/api", apiLimiter);
 
   // === AUTH ROUTES ===
   app.post("/api/auth/login", loginLimiter, async (req, res) => {
+    // Read credentials fresh on every request so that secrets added after
+    // startup are picked up without requiring an app restart.
+    const {
+      adminUsername,
+      adminPassword,
+      teamUsername,
+      teamPassword,
+      superAdminUsername,
+      superAdminPassword,
+    } = getCredentials();
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
     }
-    let role: "admin" | "team" | null = null;
-    if (username === adminUsername && password === adminPassword) {
+    let role: "admin" | "team" | "super_admin" | null = null;
+    // Super-admin check runs first so it wins even if its username/password
+    // happens to collide with the regular admin credentials in dev.
+    if (
+      superAdminUsername &&
+      superAdminPassword &&
+      username === superAdminUsername &&
+      password === superAdminPassword
+    ) {
+      role = "super_admin";
+    } else if (username === adminUsername && password === adminPassword) {
       role = "admin";
     } else if (teamPassword && username === teamUsername && password === teamPassword) {
       role = "team";
@@ -49,6 +75,17 @@ export async function registerRoutes(
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
+      // Audit super-admin sign-in so the activity dashboard can surface
+      // every privileged session. Best-effort — failures are logged only.
+      if (role === "super_admin") {
+        try {
+          await logAction(null, "system", "super_admin_login", username, {
+            method: "local",
+          });
+        } catch (auditErr: any) {
+          console.error("[auth] super_admin_login audit error:", auditErr?.message || auditErr);
+        }
+      }
       return res.json({ ok: true, username, role });
     } catch (err: any) {
       console.error("[auth] session save error:", err?.message || err);
@@ -140,6 +177,10 @@ export async function registerRoutes(
   // === POLICIES (admin-managed library + nurse acknowledgements) ===
   const { registerPolicyRoutes } = await import("./routes/policies");
   registerPolicyRoutes(app);
+
+  // === SUPER ADMIN (activity dashboard) ===
+  const { registerSuperAdminRoutes } = await import("./routes/super-admin");
+  registerSuperAdminRoutes(app);
 
   return httpServer;
 }
