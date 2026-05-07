@@ -25,8 +25,9 @@ import {
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
   ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck,
-  ChevronDown, ChevronRight, Send
+  ChevronDown, ChevronRight, Send, Activity
 } from "lucide-react";
+import { SUSPECT_BURST_CHAR_THRESHOLD } from "@shared/schema";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -4052,6 +4053,8 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
       timeSpent: number;
       timeLimit: number;
       pasteAttempts?: number;
+      keystrokeCount?: number;
+      maxBurstChars?: number;
     }>;
     aiAnalysis: string | null;
     emailSent: boolean | null;
@@ -4180,6 +4183,13 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
   const flaggedQuestionCount = responses.filter(
     (r) => typeof r.pasteAttempts === "number" && r.pasteAttempts > 0,
   ).length;
+  const burstFlaggedCount = responses.filter(
+    (r) => typeof r.maxBurstChars === "number" && r.maxBurstChars >= SUSPECT_BURST_CHAR_THRESHOLD,
+  ).length;
+  const maxBurstAcrossResponses = responses.reduce(
+    (m, r) => Math.max(m, typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0),
+    0,
+  );
 
   return (
     <div className="space-y-4">
@@ -4217,6 +4227,19 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
             </CardContent>
           </Card>
         )}
+        {burstFlaggedCount > 0 && (
+          <Card className="border border-destructive/30 bg-destructive/5 flex-1 min-w-[200px]" data-testid="card-suspect-typing-summary">
+            <CardContent className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-destructive/70 mb-1">Suspect Typing Pattern</p>
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Activity className="h-4 w-4 text-destructive" />
+                <span data-testid="text-suspect-typing-summary">
+                  {burstFlaggedCount} {burstFlaggedCount === 1 ? "answer" : "answers"} contain a single chunk of {maxBurstAcrossResponses}+ chars (threshold {SUSPECT_BURST_CHAR_THRESHOLD}). Possible bypassed paste, voice input, or scripted entry.
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {assessment.aiAnalysis && (
@@ -4240,6 +4263,9 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
             {responses.map((r, i) => {
               const overTime = r.timeSpent > r.timeLimit;
               const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
+              const maxBurst = typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0;
+              const keystrokes = typeof r.keystrokeCount === "number" ? r.keystrokeCount : 0;
+              const suspectBurst = maxBurst >= SUSPECT_BURST_CHAR_THRESHOLD;
               return (
                 <div key={r.questionId || i} className="rounded-lg border p-3 bg-muted/20">
                   <div className="flex items-start justify-between gap-2 mb-1">
@@ -4259,6 +4285,17 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
                       >
                         <AlertTriangle className="h-3 w-3" />
                         {attempts} paste {attempts === 1 ? "attempt" : "attempts"} blocked
+                      </Badge>
+                    )}
+                    {suspectBurst && (
+                      <Badge
+                        variant="destructive"
+                        className="text-[10px] gap-1"
+                        data-testid={`badge-suspect-typing-${i}`}
+                        title={`A single chunk of ${maxBurst} characters appeared at once${keystrokes > 0 ? ` (only ${keystrokes} keystroke${keystrokes === 1 ? "" : "s"} recorded)` : ""}. Possible bypassed paste, voice input, or scripted entry.`}
+                      >
+                        <Activity className="h-3 w-3" />
+                        Suspect typing pattern ({maxBurst} char burst)
                       </Badge>
                     )}
                   </div>

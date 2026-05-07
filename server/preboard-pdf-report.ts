@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import type { Assessment, AssessmentResponse } from "@shared/schema";
+import { SUSPECT_BURST_CHAR_THRESHOLD } from "@shared/schema";
 
 const COLORS = {
   bg: "#020121",
@@ -95,26 +96,47 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
     const flaggedQuestions = responses.filter(
       (r) => typeof r.pasteAttempts === "number" && r.pasteAttempts > 0
     ).length;
+    const burstFlaggedQuestions = responses.filter(
+      (r) => typeof r.maxBurstChars === "number" && r.maxBurstChars >= SUSPECT_BURST_CHAR_THRESHOLD
+    ).length;
+    const maxBurstAcross = responses.reduce(
+      (m, r) => Math.max(m, typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0),
+      0
+    );
 
-    if (totalPasteAttempts > 0) {
-      const noticeHeight = 52;
+    if (totalPasteAttempts > 0 || burstFlaggedQuestions > 0) {
+      const lines: string[] = [];
+      if (totalPasteAttempts > 0) {
+        const questionLabel = flaggedQuestions === 1 ? "question" : "questions";
+        const attemptLabel = totalPasteAttempts === 1 ? "attempt" : "attempts";
+        lines.push(`${totalPasteAttempts} blocked paste/drop ${attemptLabel} across ${flaggedQuestions} ${questionLabel}.`);
+      }
+      if (burstFlaggedQuestions > 0) {
+        const qLabel = burstFlaggedQuestions === 1 ? "answer" : "answers";
+        lines.push(
+          `Suspect typing pattern in ${burstFlaggedQuestions} ${qLabel}: a single chunk of up to ${maxBurstAcross} characters appeared at once (threshold ${SUSPECT_BURST_CHAR_THRESHOLD}). Possible bypassed paste, voice input, or scripted entry.`
+        );
+      }
+      const noticeHeight = 28 + lines.length * 18;
       doc.roundedRect(margin, y, contentWidth, noticeHeight, 4).fill(COLORS.card);
       doc.roundedRect(margin, y, contentWidth, noticeHeight, 4).stroke(COLORS.danger);
       doc.rect(margin, y, 3, noticeHeight).fill(COLORS.danger);
       doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.danger).text(
         "INTEGRITY NOTICE",
         margin + 16,
-        y + 12,
+        y + 10,
         { characterSpacing: 1.5 }
       );
-      const questionLabel = flaggedQuestions === 1 ? "question" : "questions";
-      const attemptLabel = totalPasteAttempts === 1 ? "attempt" : "attempts";
-      doc.font("Helvetica").fontSize(10).fillColor(COLORS.text).text(
-        `${totalPasteAttempts} blocked paste/drop ${attemptLabel} across ${flaggedQuestions} ${questionLabel}.`,
-        margin + 16,
-        y + 28,
-        { width: contentWidth - 32 }
-      );
+      let lineY = y + 24;
+      for (const line of lines) {
+        doc.font("Helvetica").fontSize(9.5).fillColor(COLORS.text).text(
+          line,
+          margin + 16,
+          lineY,
+          { width: contentWidth - 32 }
+        );
+        lineY += Math.max(18, doc.heightOfString(line, { width: contentWidth - 32 }) + 2);
+      }
       y += noticeHeight + 18;
     }
 
@@ -180,12 +202,15 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       const r = responses[i];
       const timeUsed = r.timeLimit - r.timeSpent;
       const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
+      const maxBurst = typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0;
+      const keystrokes = typeof r.keystrokeCount === "number" ? r.keystrokeCount : 0;
+      const suspectBurst = maxBurst >= SUSPECT_BURST_CHAR_THRESHOLD;
 
       doc.font("Helvetica").fontSize(9.5);
       const responseHeight = doc.heightOfString(r.response, {
         width: contentWidth - 32,
       });
-      const blockHeight = 60 + responseHeight + 30 + (attempts > 0 ? 16 : 0);
+      const blockHeight = 60 + responseHeight + 30 + (attempts > 0 ? 16 : 0) + (suspectBurst ? 16 : 0);
 
       if (doc.y < y - 30) y = doc.y;
 
@@ -234,6 +259,15 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
         const label = attempts === 1 ? "attempt" : "attempts";
         doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.danger).text(
           `${attempts} paste/drop ${label} blocked in this answer`,
+          margin + 16,
+          qy
+        );
+      }
+
+      if (suspectBurst) {
+        qy += 12;
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.danger).text(
+          `Suspect typing pattern: ${maxBurst}-char burst, ${keystrokes} keystroke${keystrokes === 1 ? "" : "s"} recorded`,
           margin + 16,
           qy
         );

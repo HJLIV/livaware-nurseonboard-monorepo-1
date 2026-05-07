@@ -102,7 +102,15 @@ export const assessmentResponseSchema = z.object({
   timeSpent: z.number(),
   timeLimit: z.number(),
   pasteAttempts: z.number().int().nonnegative().optional().default(0),
+  keystrokeCount: z.number().int().nonnegative().optional().default(0),
+  maxBurstChars: z.number().int().nonnegative().optional().default(0),
 });
+
+// Threshold for flagging a response as having a "suspect typing pattern":
+// any single chunk of >= this many characters appearing at once between
+// keystrokes is treated as likely pasted/dictated content that bypassed
+// the textarea paste block.
+export const SUSPECT_BURST_CHAR_THRESHOLD = 40;
 
 export type AssessmentResponse = z.infer<typeof assessmentResponseSchema>;
 

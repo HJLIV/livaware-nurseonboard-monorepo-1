@@ -834,7 +834,13 @@ function QuestionScreen({
   question: QuestionType;
   index: number;
   total: number;
-  onSubmit: (text: string, timeLeft: number, pasteAttempts: number) => void;
+  onSubmit: (
+    text: string,
+    timeLeft: number,
+    pasteAttempts: number,
+    keystrokeCount: number,
+    maxBurstChars: number,
+  ) => void;
 }) {
   const [text, setText] = useState("");
   const [timeLeft, setTimeLeft] = useState(question.timeLimit);
@@ -851,7 +857,15 @@ function QuestionScreen({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const pasteAttemptsRef = useRef(0);
+  const keystrokeCountRef = useRef(0);
+  const maxBurstCharsRef = useRef(0);
   const min = question.minChars;
+
+  const recordTextChunk = useCallback((added: number) => {
+    if (added > maxBurstCharsRef.current) {
+      maxBurstCharsRef.current = added;
+    }
+  }, []);
 
   const flashPasteBlocked = useCallback(() => {
     pasteAttemptsRef.current += 1;
@@ -883,10 +897,12 @@ function QuestionScreen({
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript + " ";
+            const trimmedTranscript = transcript.trim();
             setText((prev) => {
               const spacer = prev.length > 0 && !prev.endsWith(" ") && !prev.endsWith("\n") ? " " : "";
-              return prev + spacer + transcript.trim();
+              return prev + spacer + trimmedTranscript;
             });
+            recordTextChunk(trimmedTranscript.length);
           } else {
             interim = transcript;
           }
@@ -962,7 +978,19 @@ function QuestionScreen({
     setIsListening(false);
     setSubmitted(true);
     const attempts = pasteAttemptsRef.current;
-    setTimeout(() => onSubmit(trimmed || "(No response — time expired)", timeLeft, attempts), 700);
+    const keystrokes = keystrokeCountRef.current;
+    const maxBurst = maxBurstCharsRef.current;
+    setTimeout(
+      () =>
+        onSubmit(
+          trimmed || "(No response — time expired)",
+          timeLeft,
+          attempts,
+          keystrokes,
+          maxBurst,
+        ),
+      700,
+    );
   }, [submitted, text, min, onSubmit, timeLeft]);
 
   useEffect(() => {
@@ -1250,7 +1278,15 @@ function QuestionScreen({
                 if (textareaRef.current) textareaRef.current.value = text;
                 return;
               }
+              const delta = nextValue.length - text.length;
+              if (delta > 0) recordTextChunk(delta);
               setText(nextValue);
+            }}
+            onKeyDown={(e) => {
+              if (submitted) return;
+              if (e.key.length === 1 || e.key === "Backspace" || e.key === "Delete" || e.key === "Enter" || e.key === "Tab") {
+                keystrokeCountRef.current += 1;
+              }
             }}
             onPaste={(e) => {
               e.preventDefault();
@@ -1613,6 +1649,8 @@ type AnswerRecord = {
   timeSpent: number;
   timeLimit: number;
   pasteAttempts: number;
+  keystrokeCount: number;
+  maxBurstChars: number;
 };
 
 export default function AssessmentPage() {
@@ -1681,7 +1719,13 @@ export default function AssessmentPage() {
     }
   };
 
-  const handleAnswer = async (text: string, timeLeft: number, pasteAttempts: number) => {
+  const handleAnswer = async (
+    text: string,
+    timeLeft: number,
+    pasteAttempts: number,
+    keystrokeCount: number,
+    maxBurstChars: number,
+  ) => {
     const q = QUESTIONS[currentQ];
     const record: AnswerRecord = {
       questionId: q.id,
@@ -1692,6 +1736,8 @@ export default function AssessmentPage() {
       timeSpent: timeLeft,
       timeLimit: q.timeLimit,
       pasteAttempts,
+      keystrokeCount,
+      maxBurstChars,
     };
     const updated = [...answers, record];
     setAnswers(updated);

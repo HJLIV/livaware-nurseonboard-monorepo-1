@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap, AlertTriangle } from "lucide-react";
+import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap, AlertTriangle, Activity } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { SUSPECT_BURST_CHAR_THRESHOLD } from "@shared/schema";
 
 interface AssessmentResponseItem {
   questionId?: number;
@@ -22,6 +23,8 @@ interface AssessmentResponseItem {
   timeSpent?: number;
   timeLimit?: number;
   pasteAttempts?: number;
+  keystrokeCount?: number;
+  maxBurstChars?: number;
 }
 
 interface PreboardAssessment {
@@ -51,6 +54,21 @@ function getPasteAttemptStats(assessment: PreboardAssessment): {
     }
   }
   return { total, flaggedQuestions };
+}
+
+function getBurstStats(assessment: PreboardAssessment): {
+  flaggedQuestions: number;
+  maxBurst: number;
+} {
+  const responses = Array.isArray(assessment.responses) ? assessment.responses : [];
+  let flaggedQuestions = 0;
+  let maxBurst = 0;
+  for (const r of responses) {
+    const burst = typeof r?.maxBurstChars === "number" ? r.maxBurstChars : 0;
+    if (burst > maxBurst) maxBurst = burst;
+    if (burst >= SUSPECT_BURST_CHAR_THRESHOLD) flaggedQuestions += 1;
+  }
+  return { flaggedQuestions, maxBurst };
 }
 
 function AssessmentDetailDialog({
@@ -280,6 +298,7 @@ export default function AdminPreboard() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((assessment, i) => {
               const { total: pasteTotal, flaggedQuestions } = getPasteAttemptStats(assessment);
+              const { flaggedQuestions: burstFlagged, maxBurst } = getBurstStats(assessment);
               return (
               <div key={assessment.id} className="animate-fade-in-up" style={{ animationDelay: `${Math.min(i * 50, 400)}ms` }}>
                 <Card className="group border transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
@@ -297,6 +316,17 @@ export default function AdminPreboard() {
                             >
                               <AlertTriangle className="h-3 w-3" />
                               {pasteTotal} paste {pasteTotal === 1 ? "attempt" : "attempts"}
+                            </Badge>
+                          )}
+                          {burstFlagged > 0 && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px] gap-1 px-1.5 py-0"
+                              data-testid={`badge-suspect-typing-list-${assessment.id}`}
+                              title={`Suspect typing pattern: a single chunk of ${maxBurst} characters appeared at once in ${burstFlagged} ${burstFlagged === 1 ? "question" : "questions"} (threshold ${SUSPECT_BURST_CHAR_THRESHOLD}). Possible bypassed paste, voice input, or scripted input.`}
+                            >
+                              <Activity className="h-3 w-3" />
+                              Suspect typing
                             </Badge>
                           )}
                         </div>
