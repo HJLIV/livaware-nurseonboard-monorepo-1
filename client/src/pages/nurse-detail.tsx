@@ -546,9 +546,30 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
     );
   }
 
+  const outstandingCount = data.outstanding ?? 0;
+
   return (
     <Card>
       <CardContent className="p-0">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="text-sm">
+            <span className="font-medium">{data.totalRequired ?? 0}</span>
+            <span className="text-muted-foreground"> required policies</span>
+          </div>
+          {outstandingCount > 0 ? (
+            <Badge
+              variant="outline"
+              className="bg-rose-500/10 text-rose-500 border-rose-500/20"
+              data-testid="nurse-policies-outstanding-summary"
+            >
+              {outstandingCount} outstanding
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+              All acknowledged
+            </Badge>
+          )}
+        </div>
         <table className="w-full text-sm">
           <thead className="border-b text-left">
             <tr className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70">
@@ -569,14 +590,19 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
             {data.policies.map((p) => {
               const tracked = (p.sessionCount ?? 0) > 0 || (p.totalActiveSeconds ?? 0) > 0;
               const skimmed = tracked && (p.totalActiveSeconds ?? 0) < NURSE_DETAIL_SKIM_THRESHOLD;
+              const isOutstanding = p.requireAcknowledgement && (!p.acknowledged || p.needsReacknowledgement);
               return (
-                <tr key={p.id} data-testid={`nurse-policy-row-${p.id}`}>
-                  <td className="px-4 py-3">
+                <tr
+                  key={p.id}
+                  data-testid={`nurse-policy-row-${p.id}`}
+                  className={cn(isOutstanding && "bg-rose-500/5")}
+                >
+                  <td className={cn("px-4 py-3", isOutstanding && "border-l-2 border-rose-500/60")}>
                     <div className="font-medium">{p.title}</div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">v{p.version}</div>
                   </td>
                   <td className="px-4 py-3">
-                    {p.acknowledged ? (
+                    {p.acknowledged && !p.needsReacknowledgement ? (
                       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
                         Acknowledged
                       </Badge>
@@ -585,7 +611,9 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
                         Needs re-ack
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-muted-foreground">Outstanding</Badge>
+                      <Badge variant="outline" className="bg-rose-500/10 text-rose-500 border-rose-500/20">
+                        Outstanding
+                      </Badge>
                     )}
                   </td>
                   {canViewReadBehaviour && (
