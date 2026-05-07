@@ -1,5 +1,11 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
+import { storage as arcadeStorage } from "../arcade-storage";
+import { scoreAttempt, type TaskResponse as ArcadeTaskResponse } from "../arcade-scoring";
+import { db } from "../db";
+import { arcadeUsers } from "@shared/schema";
+import type { ScenarioContent } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { upload, validatePortalToken, uploadLimiter } from "../middleware";
 import { sendReferenceRequestEmail } from "../outlook";
 import { parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
@@ -92,6 +98,51 @@ function triageHealthDeclarationInBackground(declaration: HealthDeclaration) {
         console.error(`[Health Triage] Could not mark as skipped:`, (updateErr as Error).message);
       }
     });
+}
+
+// ─── Portal-scoped Skills Arcade helpers ──────────────────────────────
+// Resolve (and lazily provision) the arcade user record for the nurse
+// behind a validated portal token. We don't create scaffolding modules
+// here — assignments are created out-of-band by trainers/admins; if no
+// arcade user exists yet we just provision an empty nurse user so the
+// portal page can render the empty-state correctly.
+async function resolvePortalArcadeUserId(req: Request): Promise<string> {
+  const nurseId = (req as any).nurseId as string;
+  const [existingByNurse] = await db
+    .select()
+    .from(arcadeUsers)
+    .where(eq(arcadeUsers.nurseId, nurseId));
+  if (existingByNurse) return existingByNurse.id;
+
+  const candidate = await storage.getCandidate(nurseId);
+  const email = (candidate?.email ?? "").toLowerCase();
+  if (email) {
+    const existingByEmail = await arcadeStorage.getUserByEmail(email);
+    if (existingByEmail) {
+      if (!existingByEmail.nurseId) {
+        await db
+          .update(arcadeUsers)
+          .set({ nurseId })
+          .where(eq(arcadeUsers.id, existingByEmail.id));
+      }
+      return existingByEmail.id;
+    }
+  }
+
+  // Provision an empty arcade user so future assignments land somewhere.
+  // The password field is required but never used — portal access is
+  // gated solely by the magic-link token.
+  const username = email || `nurse-${nurseId}`;
+  const created = await arcadeStorage.createUser({
+    username,
+    password: "portal-only",
+    name: candidate?.fullName ?? "Nurse",
+    email: email || `nurse-${nurseId}@portal.local`,
+    role: "nurse",
+    active: true,
+    nurseId,
+  } as any);
+  return created.id;
 }
 
 export function registerPortalRoutes(app: Express) {
@@ -962,5 +1013,160 @@ export function registerPortalRoutes(app: Express) {
       detail: { stepKey, previous: current ?? "pending", next },
     });
     res.json({ stepKey, status: next, requiresAdminVerification: requiresAdmin });
+  });
+
+  // ─── Portal-scoped Skills Arcade endpoints ──────────────────────────
+  // These mirror the session-based /api/nurse/* arcade endpoints but
+  // resolve the nurse from the portal token, so the portal never depends
+  // on (or leaks data through) a platform admin session that happens to
+  // be active in the same browser.
+  app.get("/api/portal/:token/arcade/dashboard", validatePortalToken, async (req, res) => {
+    try {
+      const userId = await resolvePortalArcadeUserId(req);
+      const allModules = await arcadeStorage.getAllModules();
+      const userAssignments = await arcadeStorage.getAssignmentsByUser(userId);
+      const assignmentData = await Promise.all(
+        userAssignments.map(async (a) => {
+          const mod = allModules.find((m) => m.id === a.moduleId);
+          const attemptsList = await arcadeStorage.getAttemptsByAssignment(a.id);
+          const failedAttempts = attemptsList.filter((at) => at.result === "fail").length;
+          const lastAttempt = attemptsList[0];
+          return {
+            id: a.id,
+            moduleId: a.moduleId,
+            moduleName: mod?.name ?? "Unknown",
+            moduleDescription: mod?.description ?? "",
+            moduleIcon: mod?.icon ?? "BookOpen",
+            moduleColor: mod?.color ?? "blue",
+            status: a.status,
+            dueAt: a.dueAt,
+            attemptCount: attemptsList.length,
+            failedAttempts,
+            lastAttemptResult: lastAttempt?.result ?? null,
+            moduleVersionId: a.moduleVersionId,
+          };
+        })
+      );
+      const stats = {
+        totalAssigned: assignmentData.length,
+        completed: assignmentData.filter((a) => a.status === "passed").length,
+        inProgress: assignmentData.filter((a) => a.status === "in_progress" || a.status === "failed").length,
+        locked: assignmentData.filter((a) => a.status === "locked").length,
+      };
+      res.json({ assignments: assignmentData, stats });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/portal/:token/arcade/assignments/:id", validatePortalToken, async (req, res) => {
+    try {
+      const userId = await resolvePortalArcadeUserId(req);
+      const assignment = await arcadeStorage.getAssignment(String(req.params.id));
+      if (!assignment || assignment.userId !== userId) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+      const allModules = await arcadeStorage.getAllModules();
+      const mod = allModules.find((m) => m.id === assignment.moduleId);
+      const attemptsList = await arcadeStorage.getAttemptsByAssignment(assignment.id);
+      const failedAttempts = attemptsList.filter((at) => at.result === "fail").length;
+      res.json({
+        moduleName: mod?.name ?? "Unknown",
+        moduleDescription: mod?.description ?? "",
+        status: assignment.status,
+        attemptCount: attemptsList.length,
+        failedAttempts,
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/portal/:token/arcade/attempts/start", validatePortalToken, async (req, res) => {
+    try {
+      const userId = await resolvePortalArcadeUserId(req);
+      const assignmentId = String(req.body?.assignmentId ?? "");
+      if (!assignmentId) return res.status(400).json({ message: "assignmentId is required" });
+      const assignment = await arcadeStorage.getAssignment(assignmentId);
+      if (!assignment || assignment.userId !== userId) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+      if (assignment.status === "locked") {
+        return res.status(403).json({ message: "This module is locked. Face-to-face training required." });
+      }
+      const scenarioList = await arcadeStorage.getScenariosByModuleVersion(assignment.moduleVersionId);
+      if (scenarioList.length === 0) return res.status(404).json({ message: "No scenarios available" });
+      const scenario = scenarioList[Math.floor(Math.random() * scenarioList.length)];
+      const attempt = await arcadeStorage.createAttempt({
+        userId,
+        moduleVersionId: assignment.moduleVersionId,
+        scenarioId: scenario.id,
+        assignmentId: assignment.id,
+      });
+      if (assignment.status === "not_started") {
+        await arcadeStorage.updateAssignmentStatus(assignment.id, "in_progress");
+      }
+      const allModules = await arcadeStorage.getAllModules();
+      const mod = allModules.find((m) => m.id === assignment.moduleId);
+      res.json({
+        attemptId: attempt.id,
+        scenario: { id: scenario.id, title: scenario.title, contentJson: scenario.contentJson },
+        moduleName: mod?.name ?? "Unknown",
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/portal/:token/arcade/attempts/submit", validatePortalToken, async (req, res) => {
+    try {
+      const userId = await resolvePortalArcadeUserId(req);
+      const attemptId = String(req.body?.attemptId ?? "");
+      const responses = Array.isArray(req.body?.responses) ? req.body.responses : null;
+      if (!attemptId || !responses) return res.status(400).json({ message: "Invalid submission format" });
+      const attempt = await arcadeStorage.getAttempt(attemptId);
+      if (!attempt || attempt.userId !== userId) {
+        return res.status(404).json({ message: "Attempt not found" });
+      }
+      const scenario = await arcadeStorage.getScenario(attempt.scenarioId);
+      if (!scenario) return res.status(404).json({ message: "Scenario not found" });
+      const result = scoreAttempt(scenario.contentJson as ScenarioContent, responses as ArcadeTaskResponse[]);
+      await arcadeStorage.updateAttempt(attemptId, {
+        submittedAt: new Date(),
+        result: result.passed ? "pass" : "fail",
+        minorCount: result.minorCount,
+        majorCount: result.majorCount,
+        responseJson: responses,
+        feedbackJson: result,
+      });
+      const assignment = await arcadeStorage.getAssignment(attempt.assignmentId);
+      if (assignment) {
+        if (result.passed) {
+          await arcadeStorage.updateAssignmentStatus(assignment.id, "passed");
+        } else {
+          const failCount = await arcadeStorage.getFailedAttemptCount(attempt.userId, attempt.moduleVersionId);
+          if (failCount >= 4) {
+            await arcadeStorage.updateAssignmentStatus(assignment.id, "locked");
+            await arcadeStorage.createRemediationCase({
+              userId: attempt.userId,
+              moduleVersionId: attempt.moduleVersionId,
+              moduleId: assignment.moduleId,
+              status: "open",
+            });
+            await arcadeStorage.upsertClearance({
+              userId: attempt.userId,
+              moduleId: assignment.moduleId,
+              moduleVersionId: attempt.moduleVersionId,
+              status: "restricted",
+            });
+          } else {
+            await arcadeStorage.updateAssignmentStatus(assignment.id, "failed");
+          }
+        }
+      }
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 }

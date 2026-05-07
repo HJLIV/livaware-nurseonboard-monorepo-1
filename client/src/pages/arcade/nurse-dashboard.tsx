@@ -70,13 +70,23 @@ const adminStatCards = [
   { key: "totalAssigned" as const, label: "Total Modules", icon: Target, gradient: "from-blue-500/8", ring: "ring-blue-500/20", iconBg: "bg-blue-500/15", iconColor: "text-blue-400" },
 ];
 
-export default function NurseDashboard() {
+interface NurseDashboardProps {
+  portalToken?: string;
+}
+
+export default function NurseDashboard({ portalToken }: NurseDashboardProps = {}) {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterCategory>("all");
-  const { data, isLoading } = useQuery<DashboardData>({ queryKey: ["/api/nurse/dashboard"] });
+  const isPortalMode = !!portalToken;
+  const apiBase = isPortalMode ? `/api/portal/${portalToken}/arcade` : "/api/nurse";
+  const linkBase = isPortalMode ? `/portal/${portalToken}/arcade` : "/arcade";
+  const { data, isLoading } = useQuery<DashboardData>({ queryKey: [`${apiBase}/dashboard`] });
 
-  const isAdmin = data?.isAdmin ?? false;
+  // Portal-mode visitors are always nurses — the admin variant of this
+  // page (module library + admin stat cards) must never render here even
+  // if a platform admin happens to be signed in in the same browser.
+  const isAdmin = !isPortalMode && (data?.isAdmin ?? false);
   const stats = data?.stats ?? { totalAssigned: 0, completed: 0, inProgress: 0, locked: 0 };
   const assignments = data?.assignments ?? [];
   const completionPercent = stats.totalAssigned > 0 ? Math.round((stats.completed / stats.totalAssigned) * 100) : 0;
@@ -246,11 +256,17 @@ export default function NurseDashboard() {
                   You must not perform {lockedAssignments.length > 1 ? "these skills" : "this skill"} independently until cleared by your trainer.
                 </p>
               </div>
-              <Link href="/arcade/trainer">
+              {isPortalMode ? (
                 <Button size="sm" variant="outline" className="shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400" data-testid="button-book-signoff">
                   Book sign-off
                 </Button>
-              </Link>
+              ) : (
+                <Link href="/arcade/trainer">
+                  <Button size="sm" variant="outline" className="shrink-0 border-amber-500/30 text-amber-600 dark:text-amber-400" data-testid="button-book-signoff">
+                    Book sign-off
+                  </Button>
+                </Link>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -308,7 +324,7 @@ export default function NurseDashboard() {
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50">
               All Modules ({filteredAssignments.length})
             </p>
-            {filteredAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} isAdmin />)}
+            {filteredAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} isAdmin linkBase={linkBase} />)}
           </div>
         ) : (
           <>
@@ -317,7 +333,7 @@ export default function NurseDashboard() {
                 {activeFilter === "all" && (
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50">Active</p>
                 )}
-                {activeAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
+                {activeAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} linkBase={linkBase} />)}
               </div>
             )}
 
@@ -326,7 +342,7 @@ export default function NurseDashboard() {
                 {activeFilter === "all" && (
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-500/70 mt-4">Locked — Needs Sign-off</p>
                 )}
-                {lockedFiltered.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
+                {lockedFiltered.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} linkBase={linkBase} />)}
               </div>
             )}
 
@@ -335,7 +351,7 @@ export default function NurseDashboard() {
                 {activeFilter === "all" && (
                   <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-500/70 mt-4">Completed</p>
                 )}
-                {passedAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} />)}
+                {passedAssignments.map((a, i) => <ModuleCard key={a.id} assignment={a} index={i} linkBase={linkBase} />)}
               </div>
             )}
           </>
@@ -345,7 +361,7 @@ export default function NurseDashboard() {
   );
 }
 
-function ModuleCard({ assignment: a, index, isAdmin }: { assignment: AssignmentItem; index: number; isAdmin?: boolean }) {
+function ModuleCard({ assignment: a, index, isAdmin, linkBase = "/arcade" }: { assignment: AssignmentItem; index: number; isAdmin?: boolean; linkBase?: string }) {
   const Icon = iconMap[a.moduleIcon] || BookOpen;
   const isLocked = a.status === "locked";
   const isPassed = a.status === "passed";
@@ -386,7 +402,7 @@ function ModuleCard({ assignment: a, index, isAdmin }: { assignment: AssignmentI
 
               {isAdmin ? (
                 <div className="flex items-center justify-end gap-2 mt-3">
-                  <Link href={`/arcade/walkthrough/${a.moduleId}`}>
+                  <Link href={`${linkBase}/walkthrough/${a.moduleId}`}>
                     <Button size="sm" variant="outline" className="gap-1 font-semibold" data-testid={`button-walkthrough-${a.moduleId}`}>
                       View Walkthrough
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -437,7 +453,7 @@ function ModuleCard({ assignment: a, index, isAdmin }: { assignment: AssignmentI
                         Book sign-off
                       </Button>
                     ) : (
-                      <Link href={`/arcade/scenario/${a.id}`}>
+                      <Link href={`${linkBase}/scenario/${a.id}`}>
                         <Button size="sm" variant={isPassed ? "outline" : "default"} className="gap-1 font-semibold" data-testid={`button-start-${a.moduleId}`}>
                           {a.status === "not_started" ? "Start" : isPassed ? "Review" : "Continue"}
                           <ArrowRight className="w-3.5 h-3.5" />

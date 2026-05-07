@@ -34,6 +34,8 @@ const ArcadeNurseDashboard = lazy(() => import("@/pages/arcade/nurse-dashboard")
 const ArcadeScenarioPlayer = lazy(() => import("@/pages/arcade/scenario-player"));
 const ArcadeTrainerRemediation = lazy(() => import("@/pages/arcade/trainer-remediation"));
 const ArcadeWalkthrough = lazy(() => import("@/pages/arcade/walkthrough"));
+const PortalArcade = lazy(() => import("@/pages/portal/portal-arcade"));
+const PortalArcadeScenario = lazy(() => import("@/pages/portal/portal-arcade-scenario"));
 const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
 const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
 const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
@@ -104,6 +106,14 @@ function AuthenticatedRouter() {
         <Route path="/portal/:token" component={PortalHub} />
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
+        {/* Portal-token-gated arcade routes — these must come BEFORE the
+            session-auth /arcade routes below so a nurse following a
+            portal link never falls through to the platform admin view
+            (which would happen if a platform admin session were active
+            in the same browser). */}
+        <Route path="/portal/:token/arcade" component={PortalArcade} />
+        <Route path="/portal/:token/arcade/scenario/:assignmentId" component={PortalArcadeScenario} />
+        <Route path="/portal/:token/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>
         <Route path="/referee/:token" component={RefereeForm} />
         <Route path="/preboard/assessment" component={PreboardAssessment} />
 

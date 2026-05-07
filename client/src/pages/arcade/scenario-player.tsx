@@ -78,7 +78,11 @@ const taskTypeLabels: Record<string, string> = {
   calculation: "Calculation",
 };
 
-export default function ScenarioPlayer() {
+interface ScenarioPlayerProps {
+  portalToken?: string;
+}
+
+export default function ScenarioPlayer({ portalToken }: ScenarioPlayerProps = {}) {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -88,6 +92,13 @@ export default function ScenarioPlayer() {
   const [responses, setResponses] = useState<TaskResponse[]>([]);
   const [result, setResult] = useState<ScoringResult | null>(null);
 
+  // When launched from the nurse-facing portal, route everything through
+  // the portal-token-gated arcade endpoints + send "back to dashboard"
+  // navigation back to the portal hub instead of the platform root.
+  const isPortalMode = !!portalToken;
+  const apiBase = isPortalMode ? `/api/portal/${portalToken}/arcade` : "/api/nurse";
+  const dashboardHref = isPortalMode ? `/portal/${portalToken}/arcade` : "/";
+
   const { data: assignmentInfo, isLoading: loadingInfo } = useQuery<{
     moduleName: string;
     moduleDescription: string;
@@ -95,12 +106,12 @@ export default function ScenarioPlayer() {
     attemptCount: number;
     failedAttempts: number;
   }>({
-    queryKey: ["/api/nurse/assignments", assignmentId],
+    queryKey: [`${apiBase}/assignments`, assignmentId],
   });
 
   const startMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/nurse/attempts/start", { assignmentId });
+      const res = await apiRequest("POST", `${apiBase}/attempts/start`, { assignmentId });
       return await res.json();
     },
     onSuccess: (data: ScenarioData) => {
@@ -123,13 +134,13 @@ export default function ScenarioPlayer() {
 
   const submitMutation = useMutation({
     mutationFn: async (payload: { attemptId: string; responses: TaskResponse[] }) => {
-      const res = await apiRequest("POST", "/api/nurse/attempts/submit", payload);
+      const res = await apiRequest("POST", `${apiBase}/attempts/submit`, payload);
       return await res.json();
     },
     onSuccess: (data: ScoringResult) => {
       setResult(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/nurse/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/nurse/assignments", assignmentId] });
+      queryClient.invalidateQueries({ queryKey: [`${apiBase}/dashboard`] });
+      queryClient.invalidateQueries({ queryKey: [`${apiBase}/assignments`, assignmentId] });
     },
     onError: (e: Error) => {
       toast({
@@ -212,7 +223,7 @@ export default function ScenarioPlayer() {
           setResult(null);
           setStarted(false);
         }}
-        onBack={() => navigate("/")}
+        onBack={() => navigate(dashboardHref)}
         assignmentStatus={assignmentInfo?.status}
       />
     );
@@ -225,7 +236,7 @@ export default function ScenarioPlayer() {
 
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/")} data-testid="button-back">
+        <Button variant="ghost" size="sm" onClick={() => navigate(dashboardHref)} data-testid="button-back">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Dashboard
         </Button>
 

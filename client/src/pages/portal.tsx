@@ -2820,7 +2820,7 @@ export default function PortalPage() {
     const fallbackJourney = {
       preboard: { status: "in_progress", actionUrl: `/preboard/assessment?token=${token}`, label: "Continue" },
       onboard: { status: "in_progress", actionUrl: `/portal/page/${token}`, label: "Continue" },
-      skillsArcade: { status: "in_progress", actionUrl: `/arcade?token=${token}`, label: "Continue" },
+      skillsArcade: { status: "in_progress", actionUrl: `/portal/${token}/arcade`, label: "Continue" },
     };
     const journey = portalHub?.journey ?? fallbackJourney;
     return buildPortalGroups({

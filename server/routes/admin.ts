@@ -559,7 +559,7 @@ export function registerNurseRoutes(app: Express) {
         },
         skillsArcade: {
           status: arcadeDone ? "completed" : "in_progress",
-          actionUrl: arcadeDone ? `/arcade?token=${link.token}` : `/arcade?token=${link.token}`,
+          actionUrl: arcadeDone ? `/portal/${link.token}/arcade` : `/portal/${link.token}/arcade`,
           label: arcadeDone ? "Review Modules" : "Start Skills Arcade",
         },
       };
