@@ -14,7 +14,6 @@ import {
   ArrowRight,
   User,
   Shield,
-  Clock,
   Sparkles,
   BookOpenCheck,
 } from "lucide-react";
@@ -45,42 +44,34 @@ interface PortalData {
   firstVisit?: boolean;
 }
 
-const introStages = [
+const onboardingProcessSteps = [
   {
     number: 1,
-    title: "Applicant Assessment",
-    description: "Your first step. A short clinical and situational assessment so we can understand how you think and approach care. This helps us decide whether to move forward with your placement.",
-    icon: ClipboardCheck,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/10",
-    ringColor: "ring-blue-500/20",
-    duration: "10 – 15 minutes",
+    title: "Initial Calls",
+    description:
+      "We begin by getting to know you—your qualifications, experience, and aspirations to ensure a fit not just for the role but also for the culture and values of the organisations we serve.",
   },
   {
     number: 2,
-    title: "Candidate Onboarding",
-    description: "Once you pass the assessment, we'll ask you to upload your professional documents — NMC PIN, DBS certificate, right-to-work evidence, training certificates, and references. Our AI-assisted verification speeds things up.",
-    icon: ShieldCheck,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500/10",
-    ringColor: "ring-emerald-500/20",
-    duration: "20 – 40 minutes",
+    title: "Qualification Verification",
+    description:
+      "We meticulously verify your credentials to maintain the integrity and quality of healthcare professionals going into people's homes.",
   },
   {
     number: 3,
-    title: "Pre-Induction",
-    description: "Interactive clinical scenarios that assess your hands-on competency across key nursing skills — medication administration, wound care, IV therapy, and more.",
-    icon: Gamepad2,
-    color: "text-amber-400",
-    bgColor: "bg-amber-500/10",
-    ringColor: "ring-amber-500/20",
-    duration: "30 – 60 minutes",
+    title: "Background Checks",
+    description:
+      "Comprehensive background screenings are conducted to ensure the safety and trustworthiness of our workforce, aligning with industry regulations and client expectations.",
+  },
+  {
+    number: 4,
+    title: "Compliance Training",
+    description:
+      "You will undergo specialised training sessions focusing on regulatory standards and best practices in healthcare. These sessions are crucial for upholding our commitment to service excellence and patient care.",
   },
 ];
 
-function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue: () => void }) {
-  const firstName = nurseName.split(" ")[0];
-
+function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
   return (
     <div data-testid="portal-welcome-intro">
       <div className="mx-auto max-w-2xl py-2">
@@ -88,64 +79,84 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 ring-1 ring-primary/20 mb-5">
             <Sparkles className="w-8 h-8 text-primary" />
           </div>
-          <h2 className="font-serif text-3xl font-light tracking-tight mb-3">
-            Welcome, {firstName}
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-3">
+            Welcome
+          </p>
+          <h2 className="font-serif text-3xl font-light tracking-tight mb-4">
+            Ensuring compliance by Livaware
           </h2>
-          <p className="text-muted-foreground leading-relaxed max-w-md mx-auto">
-            Thank you for your interest in joining us. We'd like to start with a short assessment to understand how you approach clinical care. Here's what to expect.
+          <p className="text-muted-foreground leading-relaxed">
+            As a leading provider in personal healthcare ecosystems, Livaware is committed to maintaining the highest standards of clinical excellence and compliance in the healthcare sector. We partner with Livaware Ltd to onboard and ensure initial compliance of staff to ensure only those with the most potential are provided to work in people's homes.
           </p>
         </div>
 
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-in-up" style={{ animationDelay: "100ms" }}>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50 mb-4 text-center">
-            Your journey in three stages
+            Understanding our onboarding process
           </p>
 
-          <div className="space-y-4">
-            {introStages.map((stage, i) => {
-              const Icon = stage.icon;
-              return (
-                <div
-                  key={stage.number}
-                  className="animate-fade-in-up"
-                  style={{ animationDelay: `${(i + 1) * 100}ms` }}
-                >
-                  <Card className={`relative overflow-hidden ring-1 ${stage.ringColor} border-transparent`}>
-                    <CardContent className="p-5">
-                      <div className="flex gap-4">
-                        <div className="flex flex-col items-center gap-2 shrink-0">
-                          <div className={cn(
-                            "flex h-11 w-11 items-center justify-center rounded-xl",
-                            stage.bgColor,
-                          )}>
-                            <Icon className={cn("h-5 w-5", stage.color)} />
-                          </div>
-                          <span className="text-[10px] font-bold text-muted-foreground/40 uppercase">
-                            Stage {stage.number}
-                          </span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold mb-1">{stage.title}</h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            {stage.description}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-2.5">
-                            <Clock className="w-3 h-3 text-muted-foreground/50" />
-                            <span className="text-[11px] text-muted-foreground/60 font-medium">
-                              {stage.duration}
-                            </span>
-                          </div>
-                        </div>
+          <div className="space-y-3">
+            {onboardingProcessSteps.map((step, i) => (
+              <div
+                key={step.number}
+                className="animate-fade-in-up"
+                style={{ animationDelay: `${(i + 2) * 100}ms` }}
+              >
+                <Card className="relative overflow-hidden ring-1 ring-primary/15 border-transparent">
+                  <CardContent className="p-5">
+                    <div className="flex gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                        <span className="font-serif text-lg font-light text-primary">
+                          {step.number}
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold mb-1">{step.title}</h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
           </div>
         </div>
 
-        <Card className="bg-card/50 border-dashed animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+        <div className="space-y-5 mb-8 animate-fade-in-up" style={{ animationDelay: "600ms" }}>
+          <div>
+            <h3 className="font-serif text-xl font-light tracking-tight mb-2">
+              What to expect after onboarding
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-2">
+              Upon completion of the onboarding process, you will be fully equipped to become a Livaware. As a verified member, you'll have the opportunity to work directly with a variety of clients, ranging from individual end-users to larger institutions needing professional healthcare services.
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              At Livaware, we also recognise and reward excellence. Top performers will have the opportunity to engage in special assignments and projects in collaboration with Livaware, further enhancing your career trajectory and exposure in the healthcare industry.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-serif text-xl font-light tracking-tight mb-2">
+              Commitment to your growth
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              We believe in nurturing the potential of our associates. Through continuous education, performance feedback, and career development opportunities, we aim to help you grow professionally and personally.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-serif text-xl font-light tracking-tight mb-2">
+              Good luck!
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              We hope to have you join us and contribute to an ecosystem built on integrity, expertise, and compassion. Together, we will advance the standards of healthcare and make a significant impact on the lives of those we serve.
+            </p>
+          </div>
+        </div>
+
+        <Card className="bg-card/50 border-dashed animate-fade-in-up" style={{ animationDelay: "700ms" }}>
           <CardContent className="p-5">
             <div className="flex gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/8 shrink-0">
@@ -161,9 +172,9 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
           </CardContent>
         </Card>
 
-        <div className="mt-8 text-center animate-fade-in-up" style={{ animationDelay: "500ms" }}>
+        <div className="mt-8 text-center animate-fade-in-up" style={{ animationDelay: "800ms" }}>
           <Button size="lg" onClick={onContinue} className="gap-2 px-8 font-semibold">
-            Begin Assessment
+            Continue
             <ArrowRight className="w-4 h-4" />
           </Button>
           <p className="text-[11px] text-muted-foreground mt-3">
@@ -384,9 +395,30 @@ export default function PortalHub() {
 
   useEffect(() => {
     if (portal && showIntro === null) {
-      setShowIntro(portal.firstVisit === true);
+      // Show the Livaware compliance welcome to every active nurse the
+      // first time they land here after this copy was rolled out, not
+      // just brand-new portal links. We key the "seen" flag by token +
+      // copy version so each nurse sees it once and won't see it again
+      // after they click Continue.
+      const seenKey = `portal-intro-seen:v2:${token}`;
+      let alreadySeen = false;
+      try {
+        alreadySeen = window.localStorage.getItem(seenKey) === "1";
+      } catch {
+        alreadySeen = false;
+      }
+      setShowIntro(!alreadySeen);
     }
-  }, [portal, showIntro]);
+  }, [portal, showIntro, token]);
+
+  const dismissIntro = () => {
+    try {
+      window.localStorage.setItem(`portal-intro-seen:v2:${token}`, "1");
+    } catch {
+      // ignore — storage may be unavailable (private mode, etc.)
+    }
+    setShowIntro(false);
+  };
 
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
 
@@ -453,10 +485,7 @@ export default function PortalHub() {
       activeKey="overview"
     >
       {showIntro ? (
-        <WelcomeIntro
-          nurseName={portal.nurse.fullName}
-          onContinue={() => setShowIntro(false)}
-        />
+        <WelcomeIntro onContinue={dismissIntro} />
       ) : (
         <OverviewPanel
           portal={portal}
