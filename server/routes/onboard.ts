@@ -128,7 +128,7 @@ export function registerAdminRoutes(app: Express) {
       const candidate = await storage.getCandidate(param(req, "id"));
       if (!candidate) return res.status(404).json({ message: "Not found" });
       const filePath = `/api/uploads/${req.file.filename}`;
-      await storage.updateNurse(candidate.id, { passportPhotoPath: filePath });
+      await storage.updateCandidate(candidate.id, { passportPhotoPath: filePath });
       await storage.createAuditLog({ nurseId: candidate.id, action: "passport_photo_uploaded", agentName: agentFor(req), detail: { filename: req.file.originalname, filePath } });
       res.json({ passportPhotoPath: filePath });
     } catch (err: any) {
@@ -195,7 +195,7 @@ export function registerAdminRoutes(app: Express) {
     try {
       const candidate = await storage.getCandidate(param(req, "id"));
       if (!candidate) return res.status(404).json({ message: "Not found" });
-      await storage.updateNurse(candidate.id, { passportPhotoPath: null });
+      await storage.updateCandidate(candidate.id, { passportPhotoPath: null });
       await storage.createAuditLog({ nurseId: candidate.id, action: "passport_photo_removed", agentName: agentFor(req), detail: {} });
       res.json({ success: true });
     } catch (err: any) {
