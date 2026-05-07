@@ -707,6 +707,48 @@ export const insertEqualOpportunitiesSchema = createInsertSchema(equalOpportunit
 export type EqualOpportunities = typeof equalOpportunities.$inferSelect;
 export type InsertEqualOpportunities = z.infer<typeof insertEqualOpportunitiesSchema>;
 
+// ==================== POLICIES (admin-managed master list) ====================
+// Admin-managed list of policies that every nurse must read & sign in the
+// portal. Distinct from `inductionPolicies`, which is a per-nurse static
+// checklist seeded from a constant.
+export const policies = pgTable("policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  body: text("body"),
+  pdfDocumentId: varchar("pdf_document_id"),
+  pdfUrl: text("pdf_url"),
+  version: text("version").notNull().default("1.0"),
+  isActive: boolean("is_active").default(true).notNull(),
+  requireAcknowledgement: boolean("require_acknowledgement").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// One row per (nurse, policy version) acknowledgement. Storing the version
+// snapshot means re-publishing a new version of a policy will surface as
+// "needs re-acknowledgement" without losing the historical record.
+export const policyAcknowledgements = pgTable("policy_acknowledgements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  policyId: varchar("policy_id").notNull().references(() => policies.id),
+  policyVersion: text("policy_version").notNull(),
+  acknowledgedAt: timestamp("acknowledged_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+}, (table) => [
+  index("policy_acks_nurse_id_idx").on(table.nurseId),
+  index("policy_acks_policy_id_idx").on(table.policyId),
+]);
+
+export const insertPolicySchema = createInsertSchema(policies).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPolicyAcknowledgementSchema = createInsertSchema(policyAcknowledgements).omit({ id: true, acknowledgedAt: true });
+export type Policy = typeof policies.$inferSelect;
+export type InsertPolicy = z.infer<typeof insertPolicySchema>;
+export type PolicyAcknowledgement = typeof policyAcknowledgements.$inferSelect;
+export type InsertPolicyAcknowledgement = z.infer<typeof insertPolicyAcknowledgementSchema>;
+
 // ==================== STAGE DISPLAY NAMES ====================
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {
   preboard: "Applicant",

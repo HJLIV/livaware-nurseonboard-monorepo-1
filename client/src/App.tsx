@@ -50,6 +50,8 @@ const CompetencyMatrixPage = lazy(() => import("@/pages/reports/competency-matri
 
 // Admin platform settings
 const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
+const AdminPoliciesPage = lazy(() => import("@/pages/admin-policies"));
+const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
 
 function LoadingSpinner() {
   return (
@@ -101,6 +103,7 @@ function AuthenticatedRouter() {
         {/* Public portal & referee routes - no auth required */}
         <Route path="/portal/:token" component={PortalHub} />
         <Route path="/portal/page/:token" component={PortalPage} />
+        <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
         <Route path="/referee/:token" component={RefereeForm} />
         <Route path="/preboard/assessment" component={PreboardAssessment} />
 
@@ -143,6 +146,7 @@ function AuthenticatedRouter() {
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
+              <Route path="/admin/policies">{() => <AppLayout><AdminRoute component={AdminPoliciesPage} /></AppLayout>}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />

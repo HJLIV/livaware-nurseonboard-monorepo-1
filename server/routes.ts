@@ -137,5 +137,9 @@ export async function registerRoutes(
   const { registerDocumentRoutes } = await import("./routes/documents");
   registerDocumentRoutes(app);
 
+  // === POLICIES (admin-managed library + nurse acknowledgements) ===
+  const { registerPolicyRoutes } = await import("./routes/policies");
+  registerPolicyRoutes(app);
+
   return httpServer;
 }

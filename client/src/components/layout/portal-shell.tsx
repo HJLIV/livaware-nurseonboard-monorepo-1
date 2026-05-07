@@ -573,6 +573,8 @@ interface BuildGroupsArgs {
   stepStatuses: Record<string, string>;
   selectOverview: () => void;
   selectOnboardingStep: (stepKey: string) => void;
+  policiesSummary?: { totalRequired: number; outstanding: number } | null;
+  selectPolicies?: () => void;
 }
 
 // Additional onboarding declarations the candidate must complete alongside
@@ -593,7 +595,26 @@ export function buildPortalGroups({
   stepStatuses,
   selectOverview,
   selectOnboardingStep,
+  policiesSummary,
+  selectPolicies,
 }: BuildGroupsArgs): PortalSidebarGroup[] {
+  // Compute the Policies item status from the live summary. If we don't yet
+  // have the data (initial load), fall back to a neutral "in_progress" so
+  // the item is at least clickable.
+  let policiesStatus: PortalItemStatus = "in_progress";
+  let policiesHint: string | undefined;
+  if (policiesSummary) {
+    if (policiesSummary.totalRequired === 0) {
+      policiesStatus = "completed";
+      policiesHint = "No policies require acknowledgement";
+    } else if (policiesSummary.outstanding === 0) {
+      policiesStatus = "completed";
+      policiesHint = `All ${policiesSummary.totalRequired} acknowledged`;
+    } else {
+      policiesStatus = "in_progress";
+      policiesHint = `${policiesSummary.outstanding} of ${policiesSummary.totalRequired} outstanding`;
+    }
+  }
   return [
     {
       key: "overview",
@@ -656,9 +677,10 @@ export function buildPortalGroups({
         {
           key: "compliance:policies",
           label: "Policies to read & sign",
-          status: "coming_soon",
-          disabled: true,
-          hint: "Coming soon",
+          status: policiesStatus,
+          hint: policiesHint,
+          onClick: selectPolicies,
+          disabled: !selectPolicies,
         },
         {
           key: "compliance:training_docs",

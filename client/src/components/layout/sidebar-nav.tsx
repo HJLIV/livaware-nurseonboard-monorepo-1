@@ -89,6 +89,7 @@ const sections: NavSectionDef[] = [
       { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },
       { label: "Documents to Review", href: "/documents/review", icon: AlertTriangle, adminOnly: true, badgeKey: "documentsReview" },
       { label: "Audit Trail", href: "/audit", icon: ScrollText, adminOnly: true },
+      { label: "Policies", href: "/admin/policies", icon: FileText, adminOnly: true },
       { label: "Settings", href: "/settings", icon: Settings, adminOnly: true },
       { label: "Admin Guide", href: "/guide", icon: BookOpen },
     ],

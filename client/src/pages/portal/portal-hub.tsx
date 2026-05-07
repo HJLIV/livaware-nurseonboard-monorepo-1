@@ -185,10 +185,14 @@ function OverviewPanel({
   portal,
   stepStatuses,
   onJumpToOnboarding,
+  policiesSummary,
+  onOpenPolicies,
 }: {
   portal: PortalData;
   stepStatuses: Record<string, string>;
   onJumpToOnboarding: (stepKey?: string) => void;
+  policiesSummary: { totalRequired: number; outstanding: number } | null;
+  onOpenPolicies: () => void;
 }) {
   const { nurse, journey, token } = portal;
 
@@ -227,15 +231,27 @@ function OverviewPanel({
     },
     {
       key: "compliance",
-      label: "Compliance",
-      description: "Policies, training documents, Livaware modules and the Clinical Skills Arcade.",
+      label: "Policies & attestations",
+      description: "Read and acknowledge the policies that form part of your compliance file.",
       icon: BookOpenCheck,
       color: "text-amber-400",
       bgColor: "bg-amber-500/10",
-      status: journey.skillsArcade.status,
-      actionUrl: journey.skillsArcade.actionUrl,
-      actionLabel: "Open Skills Arcade",
-      progress: "Policies, training documents and Livaware modules coming soon",
+      status: policiesSummary
+        ? policiesSummary.totalRequired === 0
+          ? "not_started"
+          : policiesSummary.outstanding === 0
+            ? "completed"
+            : "in_progress"
+        : "not_started",
+      actionUrl: undefined,
+      actionLabel: policiesSummary && policiesSummary.outstanding > 0 ? "Review & sign" : "Open policies",
+      progress: policiesSummary
+        ? policiesSummary.totalRequired === 0
+          ? "No policies to acknowledge yet"
+          : policiesSummary.outstanding === 0
+            ? `All ${policiesSummary.totalRequired} policies acknowledged`
+            : `${policiesSummary.outstanding} of ${policiesSummary.totalRequired} outstanding`
+        : "Loading…",
     },
   ];
 
@@ -269,6 +285,8 @@ function OverviewPanel({
           const handleAction = () => {
             if (stage.key === "onboard") {
               onJumpToOnboarding();
+            } else if (stage.key === "compliance") {
+              onOpenPolicies();
             } else if (stage.actionUrl) {
               window.location.href = stage.actionUrl;
             }
@@ -353,6 +371,17 @@ export default function PortalHub() {
     enabled: !!token && !!portal && !chaseStatus?.isChase,
   });
 
+  // Live policies summary so the sidebar item shows accurate progress and
+  // the Compliance overview row reflects what's still outstanding.
+  const { data: policiesData } = useQuery<{
+    policies: Array<unknown>;
+    totalRequired: number;
+    outstanding: number;
+  }>({
+    queryKey: [`/api/portal/${token}/policies`],
+    enabled: !!token && !!portal && !chaseStatus?.isChase,
+  });
+
   useEffect(() => {
     if (portal && showIntro === null) {
       setShowIntro(portal.firstVisit === true);
@@ -370,8 +399,12 @@ export default function PortalHub() {
       selectOverview: () => navigate(`/portal/${token}`),
       selectOnboardingStep: (stepKey) =>
         navigate(`/portal/page/${token}?step=${stepKey}`),
+      policiesSummary: policiesData
+        ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
+        : null,
+      selectPolicies: () => navigate(`/portal/policies/${token}`),
     });
-  }, [portal, token, stepStatuses, navigate]);
+  }, [portal, token, stepStatuses, navigate, policiesData]);
 
   if (isLoading || chaseLoading || (portal && showIntro === null)) {
     return (
@@ -434,6 +467,10 @@ export default function PortalHub() {
               : `/portal/page/${token}`;
             navigate(target);
           }}
+          policiesSummary={policiesData
+            ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
+            : null}
+          onOpenPolicies={() => navigate(`/portal/policies/${token}`)}
         />
       )}
     </PortalShell>
