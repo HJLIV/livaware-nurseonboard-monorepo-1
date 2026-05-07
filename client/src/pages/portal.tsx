@@ -5,6 +5,7 @@ import {
   PortalShell,
   buildPortalGroups,
   type PortalSidebarGroup,
+  type PortalToDoCounts,
 } from "@/components/layout/portal-shell";
 import { FileUpload } from "@/components/shared/file-upload";
 import { SpecialismSelector } from "@/components/specialism-selector";
@@ -2765,8 +2766,40 @@ export default function PortalPage() {
     enabled: !!verifyData,
   });
 
+  const { data: trainings } = useQuery<MandatoryTraining[]>({
+    queryKey: ["/api/portal", token, "mandatory-training"],
+    enabled: !!verifyData,
+  });
+
+  const { data: refs } = useQuery<Reference[]>({
+    queryKey: ["/api/portal", token, "references"],
+    enabled: !!verifyData,
+  });
+
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
   const totalSteps = PORTAL_STEPS.length;
+
+  // Required document categories the candidate must upload at least one of.
+  // Mirrors the categories used by the per-step uploaders in this file.
+  const REQUIRED_DOC_CATEGORIES = [
+    "identity",
+    "proof_of_address",
+    "nmc",
+    "dbs",
+    "right_to_work",
+    "indemnity",
+  ];
+
+  const todoCounts = useMemo<PortalToDoCounts>(() => {
+    const docsByCat = new Set(
+      (portalDocs || []).map((d: any) => d.category).filter(Boolean),
+    );
+    const documents = REQUIRED_DOC_CATEGORIES.filter((c) => !docsByCat.has(c)).length;
+    const completedTraining = (trainings || []).filter((t) => t.certificateUploaded).length;
+    const training = Math.max(0, MANDATORY_TRAINING_MODULES.length - completedTraining);
+    const references = Math.max(0, 2 - (refs || []).length);
+    return { documents, training, references };
+  }, [portalDocs, trainings, refs]);
 
   const goToStep = useCallback(
     (stepIndex: number) => {
@@ -2853,6 +2886,7 @@ export default function PortalPage() {
       candidateName={activeCandidate.fullName}
       groups={groups}
       activeKey={activeKey}
+      todoCounts={todoCounts}
     >
       <div className="space-y-4" data-testid="portal-page">
         {stepComponents[currentStep]}

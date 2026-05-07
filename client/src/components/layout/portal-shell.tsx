@@ -57,12 +57,19 @@ export interface PortalSidebarGroup {
   defaultOpen?: boolean;
 }
 
+export interface PortalToDoCounts {
+  documents: number;
+  training: number;
+  references: number;
+}
+
 interface PortalShellProps {
   token: string;
   candidateName: string;
   groups: PortalSidebarGroup[];
   activeKey: string;
   onItemSelect?: (item: PortalSidebarItem) => void;
+  todoCounts?: PortalToDoCounts;
   children: ReactNode;
 }
 
@@ -313,13 +320,44 @@ function GroupSection({
 function ToDoSummary({
   groups,
   onSelect,
+  counts,
 }: {
   groups: PortalSidebarGroup[];
   onSelect?: (item: PortalSidebarItem) => void;
+  counts?: PortalToDoCounts;
 }) {
   const outstanding = useMemo(() => getOutstandingSummary(groups), [groups]);
   const total = outstanding.length;
   const top = outstanding.slice(0, 4);
+
+  const countRows = useMemo(() => {
+    if (!counts) return [] as { key: string; label: string; value: number }[];
+    const rows: { key: string; label: string; value: number }[] = [];
+    if (counts.documents > 0) {
+      rows.push({
+        key: "documents",
+        label: counts.documents === 1 ? "document missing" : "documents missing",
+        value: counts.documents,
+      });
+    }
+    if (counts.training > 0) {
+      rows.push({
+        key: "training",
+        label: counts.training === 1
+          ? "training certificate outstanding"
+          : "training certificates outstanding",
+        value: counts.training,
+      });
+    }
+    if (counts.references > 0) {
+      rows.push({
+        key: "references",
+        label: counts.references === 1 ? "reference needed" : "references needed",
+        value: counts.references,
+      });
+    }
+    return rows;
+  }, [counts]);
 
   return (
     <div
@@ -335,6 +373,22 @@ function ToDoSummary({
           {total === 0 ? "All caught up" : `${total} outstanding`}
         </span>
       </div>
+      {countRows.length > 0 && (
+        <div className="space-y-1 mb-2" data-testid="portal-shell-todo-counts">
+          {countRows.map((row) => (
+            <div
+              key={row.key}
+              className="flex items-baseline gap-1.5 text-xs text-foreground/85"
+              data-testid={`portal-shell-todo-count-${row.key}`}
+            >
+              <span className="font-serif text-base font-light text-primary tabular-nums">
+                {row.value}
+              </span>
+              <span className="text-muted-foreground">{row.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {total === 0 ? (
         <p className="text-xs text-muted-foreground leading-relaxed">
           You've completed every required step. Thank you!
@@ -374,14 +428,16 @@ function SidebarContent({
   groups,
   activeKey,
   onItemSelect,
+  todoCounts,
 }: {
   groups: PortalSidebarGroup[];
   activeKey: string;
   onItemSelect?: (item: PortalSidebarItem) => void;
+  todoCounts?: PortalToDoCounts;
 }) {
   return (
     <div className="space-y-1">
-      <ToDoSummary groups={groups} onSelect={onItemSelect} />
+      <ToDoSummary groups={groups} onSelect={onItemSelect} counts={todoCounts} />
       {groups.map((group) => (
         <GroupSection
           key={group.key}
@@ -399,6 +455,7 @@ export function PortalShell({
   groups,
   activeKey,
   onItemSelect,
+  todoCounts,
   children,
 }: PortalShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -464,6 +521,7 @@ export function PortalShell({
                 groups={groups}
                 activeKey={activeKey}
                 onItemSelect={handleSelect}
+                todoCounts={todoCounts}
               />
             </div>
           </aside>
@@ -484,6 +542,7 @@ export function PortalShell({
               groups={groups}
               activeKey={activeKey}
               onItemSelect={handleSelect}
+              todoCounts={todoCounts}
             />
           </div>
         </SheetContent>
