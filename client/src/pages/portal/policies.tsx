@@ -2,10 +2,11 @@
 // policies and lets the nurse acknowledge each one. Mirrors the look &
 // feel of the rest of the portal (PortalShell sidebar + serif eyebrow).
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { usePolicyReadTracking, type PolicyReadEventPayload } from "@/lib/policy-read-tracking";
 import {
   PortalShell,
   buildPortalGroups,
@@ -17,6 +18,119 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, FileText, ExternalLink, AlertCircle } from "lucide-react";
+
+function PolicyCard({
+  token,
+  policy: p,
+  onAcknowledge,
+  acknowledgePending,
+}: {
+  token: string;
+  policy: PortalPolicy;
+  onAcknowledge: (events: PolicyReadEventPayload[]) => void;
+  acknowledgePending: boolean;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const isAcked = p.acknowledged;
+  const needsRe = p.needsReacknowledgement;
+  // Track only while the policy is awaiting (re-)acknowledgement; once
+  // it's settled we don't need any more signal.
+  const trackingEnabled = p.requireAcknowledgement && (!isAcked || needsRe);
+  const tracker = usePolicyReadTracking({
+    token,
+    policyId: p.id,
+    enabled: trackingEnabled,
+    cardRef,
+    bodyRef,
+  });
+
+  const handleAcknowledge = () => {
+    // Drain pending events synchronously and pass them to the
+    // acknowledge POST so the server can ingest them transactionally
+    // before rolling up the summary — avoids a race against the
+    // fire-and-forget sendBeacon path.
+    const pending = tracker.drainPending();
+    onAcknowledge(pending);
+  };
+
+  return (
+    <Card
+      ref={cardRef}
+      data-testid={`policy-card-${p.id}`}
+      className={isAcked ? "ring-1 ring-emerald-500/15" : needsRe ? "ring-1 ring-amber-500/30" : ""}
+    >
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-semibold">{p.title}</h3>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                v{p.version}
+              </span>
+            </div>
+            {needsRe && (
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Updated since you last acknowledged (was v{p.acknowledgedVersion}). Please re-acknowledge.
+              </p>
+            )}
+          </div>
+          {isAcked && (
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shrink-0">
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+              Acknowledged
+            </Badge>
+          )}
+        </div>
+
+        {p.body && (
+          <div
+            ref={bodyRef}
+            className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-3 max-h-64 overflow-y-auto pr-2"
+            data-testid={`policy-body-${p.id}`}
+          >
+            {p.body}
+          </div>
+        )}
+
+        {p.pdfUrl && (
+          <a
+            href={p.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => tracker.notePdfOpen()}
+            className="text-xs text-primary inline-flex items-center gap-1 mb-3 hover:underline"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Open full PDF
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+
+        {p.requireAcknowledgement && (
+          <div className="flex items-center justify-between gap-3 pt-3 border-t">
+            <p className="text-xs text-muted-foreground">
+              {isAcked && p.acknowledgedAt
+                ? `Acknowledged on ${new Date(p.acknowledgedAt).toLocaleDateString()}`
+                : "Confirm you have read and understood this policy."}
+            </p>
+            {!isAcked && (
+              <Button
+                size="sm"
+                onClick={handleAcknowledge}
+                disabled={acknowledgePending}
+                data-testid={`button-acknowledge-${p.id}`}
+              >
+                {needsRe ? "Re-acknowledge" : "I have read & understood"}
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface PortalPolicy {
   id: string;
@@ -89,10 +203,11 @@ export default function PortalPoliciesPage() {
   }, [portal, token, stepStatuses, navigate, policies]);
 
   const acknowledgeMutation = useMutation({
-    mutationFn: async (policyId: string) => {
+    mutationFn: async ({ policyId, events }: { policyId: string; events: PolicyReadEventPayload[] }) => {
       const res = await apiRequest(
         "POST",
         `/api/portal/${token}/policies/${policyId}/acknowledge`,
+        { events },
       );
       return await res.json();
     },
@@ -151,84 +266,15 @@ export default function PortalPoliciesPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {policies.policies.map((p) => {
-            const isAcked = p.acknowledged;
-            const needsRe = p.needsReacknowledgement;
-            return (
-              <Card
-                key={p.id}
-                data-testid={`policy-card-${p.id}`}
-                className={isAcked ? "ring-1 ring-emerald-500/15" : needsRe ? "ring-1 ring-amber-500/30" : ""}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm font-semibold">{p.title}</h3>
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                          v{p.version}
-                        </span>
-                      </div>
-                      {needsRe && (
-                        <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Updated since you last acknowledged (was v{p.acknowledgedVersion}). Please re-acknowledge.
-                        </p>
-                      )}
-                    </div>
-                    {isAcked && (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shrink-0">
-                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                        Acknowledged
-                      </Badge>
-                    )}
-                  </div>
-
-                  {p.body && (
-                    <div
-                      className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-3 max-h-64 overflow-y-auto pr-2"
-                      data-testid={`policy-body-${p.id}`}
-                    >
-                      {p.body}
-                    </div>
-                  )}
-
-                  {p.pdfUrl && (
-                    <a
-                      href={p.pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary inline-flex items-center gap-1 mb-3 hover:underline"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Open full PDF
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-
-                  {p.requireAcknowledgement && (
-                    <div className="flex items-center justify-between gap-3 pt-3 border-t">
-                      <p className="text-xs text-muted-foreground">
-                        {isAcked && p.acknowledgedAt
-                          ? `Acknowledged on ${new Date(p.acknowledgedAt).toLocaleDateString()}`
-                          : "Confirm you have read and understood this policy."}
-                      </p>
-                      {!isAcked && (
-                        <Button
-                          size="sm"
-                          onClick={() => acknowledgeMutation.mutate(p.id)}
-                          disabled={acknowledgeMutation.isPending}
-                          data-testid={`button-acknowledge-${p.id}`}
-                        >
-                          {needsRe ? "Re-acknowledge" : "I have read & understood"}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {policies.policies.map((p) => (
+            <PolicyCard
+              key={p.id}
+              token={token!}
+              policy={p}
+              onAcknowledge={(events) => acknowledgeMutation.mutate({ policyId: p.id, events })}
+              acknowledgePending={acknowledgeMutation.isPending}
+            />
+          ))}
         </div>
       )}
     </div>

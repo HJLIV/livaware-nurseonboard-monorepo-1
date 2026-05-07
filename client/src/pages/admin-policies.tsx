@@ -53,6 +53,29 @@ interface Acknowledgement {
   policyVersion: string;
   acknowledgedAt: string;
   ipAddress: string | null;
+  totalActiveSeconds: number;
+  sessionCount: number;
+  scrolledToEnd: boolean;
+  openedPdf: boolean;
+}
+
+interface ReadSummary {
+  totalAcknowledgements: number;
+  trackedAcknowledgements: number;
+  medianReadSeconds: number | null;
+  skimmedCount: number;
+  skimmedPct: number | null;
+  skimThresholdSeconds: number;
+}
+
+const SKIM_THRESHOLD_SECONDS = 10;
+
+function formatReadDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
 }
 
 interface FormState {
@@ -90,6 +113,11 @@ export default function AdminPoliciesPage() {
 
   const { data: acknowledgements } = useQuery<Acknowledgement[]>({
     queryKey: [`/api/admin/policies/${viewingAcks?.id}/acknowledgements`],
+    enabled: !!viewingAcks,
+  });
+
+  const { data: readSummary } = useQuery<ReadSummary>({
+    queryKey: [`/api/admin/policies/${viewingAcks?.id}/read-summary`],
     enabled: !!viewingAcks,
   });
 
@@ -471,28 +499,76 @@ export default function AdminPoliciesPage() {
               No acknowledgements yet.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nurse ID</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Acknowledged</TableHead>
-                  <TableHead>IP</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {acknowledgements.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-mono text-xs">{a.nurseId.slice(0, 8)}…</TableCell>
-                    <TableCell>v{a.policyVersion}</TableCell>
-                    <TableCell className="text-xs">
-                      {new Date(a.acknowledgedAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{a.ipAddress || "—"}</TableCell>
+            <div className="space-y-4">
+              {readSummary && readSummary.trackedAcknowledgements > 0 && (
+                <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">Median read time</p>
+                    <p className="font-serif text-2xl font-light">{formatReadDuration(readSummary.medianReadSeconds)}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">across {readSummary.trackedAcknowledgements} tracked</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">
+                      Acked in &lt;{readSummary.skimThresholdSeconds}s
+                    </p>
+                    <p className="font-serif text-2xl font-light">
+                      {readSummary.skimmedPct == null ? "—" : `${readSummary.skimmedPct}%`}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">Likely skimmed</p>
+                    <p className="font-serif text-2xl font-light">{readSummary.skimmedCount}</p>
+                  </div>
+                </div>
+              )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nurse ID</TableHead>
+                    <TableHead>Version</TableHead>
+                    <TableHead>Acknowledged</TableHead>
+                    <TableHead>Time spent</TableHead>
+                    <TableHead className="text-center">Sessions</TableHead>
+                    <TableHead className="text-center">Scrolled</TableHead>
+                    <TableHead className="text-center">PDF</TableHead>
+                    <TableHead>IP</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {acknowledgements.map((a) => {
+                    const tracked = a.sessionCount > 0 || a.totalActiveSeconds > 0;
+                    const skimmed = tracked && a.totalActiveSeconds < SKIM_THRESHOLD_SECONDS;
+                    return (
+                      <TableRow key={a.id} data-testid={`ack-row-${a.id}`}>
+                        <TableCell className="font-mono text-xs">{a.nurseId.slice(0, 8)}…</TableCell>
+                        <TableCell>v{a.policyVersion}</TableCell>
+                        <TableCell className="text-xs">
+                          {new Date(a.acknowledgedAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span>{tracked ? formatReadDuration(a.totalActiveSeconds) : "—"}</span>
+                            {skimmed && (
+                              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
+                                skimmed
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-center">{tracked ? a.sessionCount : "—"}</TableCell>
+                        <TableCell className="text-xs text-center">
+                          {tracked ? (a.scrolledToEnd ? "Yes" : "No") : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-center">
+                          {tracked ? (a.openedPdf ? "Yes" : "No") : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{a.ipAddress || "—"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </DialogContent>
       </Dialog>

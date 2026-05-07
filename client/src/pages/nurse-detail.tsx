@@ -27,6 +27,7 @@ import {
   Check,
   Link2,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStageDisplayName } from "@shared/schema";
@@ -480,6 +481,125 @@ function ArcadeTab({ nurseId }: { nurseId: string }) {
   );
 }
 
+interface NursePolicyRow {
+  id: string;
+  title: string;
+  version: string;
+  requireAcknowledgement: boolean;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+  acknowledgedVersion: string | null;
+  needsReacknowledgement: boolean;
+  totalActiveSeconds: number | null;
+  sessionCount: number | null;
+  scrolledToEnd: boolean | null;
+  openedPdf: boolean | null;
+}
+
+interface NursePoliciesResponse {
+  policies: NursePolicyRow[];
+  totalRequired: number;
+  outstanding: number;
+}
+
+function formatReadDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+}
+
+const NURSE_DETAIL_SKIM_THRESHOLD = 10;
+
+function PoliciesTab({ nurseId }: { nurseId: string }) {
+  const { data, isLoading } = useQuery<NursePoliciesResponse>({
+    queryKey: [`/api/nurses/${nurseId}/policy-acknowledgements`],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+      </div>
+    );
+  }
+
+  if (!data || data.policies.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" />
+          <p className="text-sm text-muted-foreground">No policies published yet</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <table className="w-full text-sm">
+          <thead className="border-b text-left">
+            <tr className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70">
+              <th className="px-4 py-3 font-medium">Policy</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Time spent</th>
+              <th className="px-4 py-3 font-medium text-center">Sessions</th>
+              <th className="px-4 py-3 font-medium text-center">Scrolled</th>
+              <th className="px-4 py-3 font-medium text-center">PDF</th>
+              <th className="px-4 py-3 font-medium">Acknowledged</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {data.policies.map((p) => {
+              const tracked = (p.sessionCount ?? 0) > 0 || (p.totalActiveSeconds ?? 0) > 0;
+              const skimmed = tracked && (p.totalActiveSeconds ?? 0) < NURSE_DETAIL_SKIM_THRESHOLD;
+              return (
+                <tr key={p.id} data-testid={`nurse-policy-row-${p.id}`}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{p.title}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">v{p.version}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {p.acknowledged ? (
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                        Acknowledged
+                      </Badge>
+                    ) : p.needsReacknowledgement ? (
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                        Needs re-ack
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">Outstanding</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{tracked ? formatReadDuration(p.totalActiveSeconds) : "—"}</span>
+                      {skimmed && (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
+                          skimmed
+                        </Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-center text-xs">{tracked ? p.sessionCount : "—"}</td>
+                  <td className="px-4 py-3 text-center text-xs">{tracked ? (p.scrolledToEnd ? "Yes" : "No") : "—"}</td>
+                  <td className="px-4 py-3 text-center text-xs">{tracked ? (p.openedPdf ? "Yes" : "No") : "—"}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {p.acknowledgedAt ? new Date(p.acknowledgedAt).toLocaleString() : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AuditTab({ nurseId }: { nurseId: string }) {
   const { data: logs, isLoading } = useQuery<AuditLog[]>({
     queryKey: [`/api/nurses/${nurseId}/audit-log`],
@@ -614,6 +734,7 @@ export default function NurseDetail() {
             <TabsTrigger value="preboard">Applicant</TabsTrigger>
             <TabsTrigger value="onboard">Candidate</TabsTrigger>
             <TabsTrigger value="arcade">Pre-Induction</TabsTrigger>
+            <TabsTrigger value="policies">Policies</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 
@@ -631,6 +752,10 @@ export default function NurseDetail() {
 
           <TabsContent value="arcade" className="mt-6">
             <ArcadeTab nurseId={nurseId} />
+          </TabsContent>
+
+          <TabsContent value="policies" className="mt-6">
+            <PoliciesTab nurseId={nurseId} />
           </TabsContent>
 
           <TabsContent value="audit" className="mt-6">

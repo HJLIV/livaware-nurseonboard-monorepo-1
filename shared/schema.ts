@@ -737,9 +737,35 @@ export const policyAcknowledgements = pgTable("policy_acknowledgements", {
   acknowledgedAt: timestamp("acknowledged_at").defaultNow().notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  // Reading-behaviour summary, rolled up from policyReadEvents at the
+  // moment the acknowledgement is recorded. Admin-only signal — never
+  // surfaced to the nurse.
+  totalActiveSeconds: integer("total_active_seconds").default(0).notNull(),
+  sessionCount: integer("session_count").default(0).notNull(),
+  scrolledToEnd: boolean("scrolled_to_end").default(false).notNull(),
+  openedPdf: boolean("opened_pdf").default(false).notNull(),
 }, (table) => [
   index("policy_acks_nurse_id_idx").on(table.nurseId),
   index("policy_acks_policy_id_idx").on(table.policyId),
+]);
+
+// Raw read-event log for (nurse, policy, version). The portal page batches
+// these up and POSTs them in the background; the admin UI never reads them
+// directly — they are rolled up onto policyAcknowledgements when the nurse
+// acknowledges.
+export const policyReadEvents = pgTable("policy_read_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  policyId: varchar("policy_id").notNull().references(() => policies.id),
+  policyVersion: text("policy_version").notNull(),
+  // "session" rows carry an active visible-time duration (ms). "pdf_open"
+  // and "scroll_end" are boolean signals (durationMs = 0).
+  eventType: text("event_type").notNull(),
+  durationMs: integer("duration_ms").default(0).notNull(),
+  sessionId: text("session_id"),
+  occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+}, (table) => [
+  index("policy_read_events_nurse_policy_idx").on(table.nurseId, table.policyId, table.policyVersion),
 ]);
 
 export const insertPolicySchema = createInsertSchema(policies).omit({ id: true, createdAt: true, updatedAt: true });
@@ -748,6 +774,7 @@ export type Policy = typeof policies.$inferSelect;
 export type InsertPolicy = z.infer<typeof insertPolicySchema>;
 export type PolicyAcknowledgement = typeof policyAcknowledgements.$inferSelect;
 export type InsertPolicyAcknowledgement = z.infer<typeof insertPolicyAcknowledgementSchema>;
+export type PolicyReadEvent = typeof policyReadEvents.$inferSelect;
 
 // ==================== STAGE DISPLAY NAMES ====================
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {

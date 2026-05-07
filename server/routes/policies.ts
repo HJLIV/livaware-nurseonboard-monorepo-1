@@ -12,11 +12,12 @@ import { db } from "../db";
 import {
   policies,
   policyAcknowledgements,
+  policyReadEvents,
   insertPolicySchema,
   type Policy,
   type PolicyAcknowledgement,
 } from "@shared/schema";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { requireAdmin, validatePortalToken } from "../middleware";
 import { logAction } from "../services/audit";
 import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
@@ -226,8 +227,10 @@ export function registerPolicyRoutes(app: Express) {
       const [existing] = await db.select().from(policies).where(eq(policies.id, id));
       if (!existing) return res.status(404).json({ message: "Policy not found" });
 
-      // Acknowledgements reference this policy. Remove them too so the
-      // delete is unambiguous from the admin's perspective.
+      // Acknowledgements and read-events reference this policy via FK.
+      // Remove the dependent rows first so the delete is unambiguous from
+      // the admin's perspective and doesn't violate FK constraints.
+      await db.delete(policyReadEvents).where(eq(policyReadEvents.policyId, id));
       await db.delete(policyAcknowledgements).where(eq(policyAcknowledgements.policyId, id));
       await db.delete(policies).where(eq(policies.id, id));
 
@@ -258,10 +261,34 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: list acknowledgements for a nurse ────────────────────
+  // Returns the per-nurse policy list with their latest ack + reading-
+  // behaviour fields so the nurse-detail "Policies" view can show admins
+  // exactly how each policy was read.
   app.get("/api/nurses/:id/policy-acknowledgements", requireAdmin, async (req, res) => {
     try {
-      const summary = await buildPolicyListForNurse(String(req.params.id));
-      res.json(summary);
+      const nurseId = String(req.params.id);
+      const summary = await buildPolicyListForNurse(nurseId);
+      const acks = await db
+        .select()
+        .from(policyAcknowledgements)
+        .where(eq(policyAcknowledgements.nurseId, nurseId));
+      // Latest ack per policy id wins.
+      const latestAck = new Map<string, typeof acks[number]>();
+      for (const a of acks) {
+        const prev = latestAck.get(a.policyId);
+        if (!prev || a.acknowledgedAt > prev.acknowledgedAt) latestAck.set(a.policyId, a);
+      }
+      const enriched = summary.policies.map((p) => {
+        const a = latestAck.get(p.id);
+        return {
+          ...p,
+          totalActiveSeconds: a?.totalActiveSeconds ?? null,
+          sessionCount: a?.sessionCount ?? null,
+          scrolledToEnd: a?.scrolledToEnd ?? null,
+          openedPdf: a?.openedPdf ?? null,
+        };
+      });
+      res.json({ ...summary, policies: enriched });
     } catch (err: any) {
       res.status(500).json({ message: err?.message || "Failed to load acknowledgements" });
     }
@@ -279,6 +306,88 @@ export function registerPolicyRoutes(app: Express) {
     }
   });
 
+  // ─── Portal: ingest read-events (invisible tracking) ─────────────
+  // Body: { events: [{ type: "session"|"pdf_open"|"scroll_end", durationMs?, sessionId?, occurredAt? }] }
+  // Used by the portal page to record visible-time, scroll-to-end, and
+  // pdf-open signals. The nurse never sees this fire — it's debounced and
+  // sent on visibilitychange/pagehide.
+  app.post("/api/portal/:token/policies/:id/read-events", validatePortalToken, async (req, res) => {
+    try {
+      const nurseId = (req as any).nurseId as string;
+      const policyId = String(req.params.id);
+      const events = Array.isArray(req.body?.events) ? req.body.events : [];
+      if (events.length === 0) return res.json({ ok: true, inserted: 0 });
+      if (events.length > 200) return res.status(400).json({ message: "Too many events in batch" });
+
+      const [policy] = await db.select().from(policies).where(eq(policies.id, policyId));
+      if (!policy) return res.status(404).json({ message: "Policy not found" });
+
+      const ALLOWED = new Set(["session", "pdf_open", "scroll_end"]);
+      const rows = events
+        .filter((e: any) => e && ALLOWED.has(e.type))
+        .map((e: any) => {
+          const rawMs = Number(e.durationMs ?? 0);
+          // Cap a single session contribution at 1 hour to defend against
+          // clock-skew or buggy clients inflating the total.
+          const durationMs = Number.isFinite(rawMs)
+            ? Math.max(0, Math.min(Math.round(rawMs), 60 * 60 * 1000))
+            : 0;
+          return {
+            nurseId,
+            policyId,
+            policyVersion: policy.version,
+            eventType: String(e.type),
+            durationMs,
+            sessionId: typeof e.sessionId === "string" ? e.sessionId.slice(0, 64) : null,
+          };
+        });
+      if (rows.length === 0) return res.json({ ok: true, inserted: 0 });
+
+      await db.insert(policyReadEvents).values(rows);
+      res.json({ ok: true, inserted: rows.length });
+    } catch (err: any) {
+      console.error("[policies] read-events ingest failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to record read events" });
+    }
+  });
+
+  // ─── Admin: per-policy reading-behaviour aggregate ───────────────
+  app.get("/api/admin/policies/:id/read-summary", requireAdmin, async (req, res) => {
+    try {
+      const policyId = String(req.params.id);
+      const acks = await db
+        .select()
+        .from(policyAcknowledgements)
+        .where(eq(policyAcknowledgements.policyId, policyId));
+
+      const SKIM_THRESHOLD_SECONDS = 10;
+      // Only count acks that have a recorded read time (events were ingested).
+      // Acks created before tracking shipped will have totalActiveSeconds = 0
+      // AND sessionCount = 0; we exclude those from the median to avoid
+      // dragging the number down with "—" rows.
+      const tracked = acks.filter((a) => a.sessionCount > 0 || a.totalActiveSeconds > 0);
+      const seconds = tracked.map((a) => a.totalActiveSeconds).sort((x, y) => x - y);
+      const median = seconds.length === 0
+        ? null
+        : seconds.length % 2 === 1
+          ? seconds[(seconds.length - 1) / 2]
+          : Math.round((seconds[seconds.length / 2 - 1] + seconds[seconds.length / 2]) / 2);
+      const skimmedCount = tracked.filter((a) => a.totalActiveSeconds < SKIM_THRESHOLD_SECONDS).length;
+      const skimmedPct = tracked.length === 0 ? null : Math.round((skimmedCount / tracked.length) * 1000) / 10;
+
+      res.json({
+        totalAcknowledgements: acks.length,
+        trackedAcknowledgements: tracked.length,
+        medianReadSeconds: median,
+        skimmedCount,
+        skimmedPct,
+        skimThresholdSeconds: SKIM_THRESHOLD_SECONDS,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Failed to load read summary" });
+    }
+  });
+
   // ─── Portal: acknowledge a policy ────────────────────────────────
   app.post("/api/portal/:token/policies/:id/acknowledge", validatePortalToken, async (req, res) => {
     try {
@@ -289,8 +398,68 @@ export function registerPolicyRoutes(app: Express) {
       if (!policy) return res.status(404).json({ message: "Policy not found" });
       if (!policy.isActive) return res.status(400).json({ message: "Policy is no longer active" });
 
-      // Idempotent: if the nurse already acked this exact version, return
-      // the existing row instead of inserting a duplicate.
+      // Drain any read-events the client sent in the same request body so
+      // late-arriving signals (e.g. final session before clicking) make it
+      // into the rolled-up summary.
+      const flushEvents = Array.isArray(req.body?.events) ? req.body.events : [];
+      if (flushEvents.length > 0 && flushEvents.length <= 200) {
+        const ALLOWED = new Set(["session", "pdf_open", "scroll_end"]);
+        const rows = flushEvents
+          .filter((e: any) => e && ALLOWED.has(e.type))
+          .map((e: any) => {
+            const rawMs = Number(e.durationMs ?? 0);
+            const durationMs = Number.isFinite(rawMs)
+              ? Math.max(0, Math.min(Math.round(rawMs), 60 * 60 * 1000))
+              : 0;
+            return {
+              nurseId,
+              policyId,
+              policyVersion: policy.version,
+              eventType: String(e.type),
+              durationMs,
+              sessionId: typeof e.sessionId === "string" ? e.sessionId.slice(0, 64) : null,
+            };
+          });
+        if (rows.length > 0) await db.insert(policyReadEvents).values(rows);
+      }
+
+      // Roll up read events for (nurse, policy, version) into the summary
+      // fields stored on the acknowledgement row.
+      const events = await db
+        .select()
+        .from(policyReadEvents)
+        .where(and(
+          eq(policyReadEvents.nurseId, nurseId),
+          eq(policyReadEvents.policyId, policyId),
+          eq(policyReadEvents.policyVersion, policy.version),
+        ));
+      let totalMs = 0;
+      // Count distinct session runs by sessionId. Long uninterrupted reads
+      // are sliced into multiple "session" rows that all share one
+      // sessionId, so this represents true open/close runs rather than
+      // slice rows. Sessions without a sessionId (defensive fallback) are
+      // each counted as their own session.
+      const sessionIds = new Set<string>();
+      let anonSessionRows = 0;
+      let scrolledToEnd = false;
+      let openedPdf = false;
+      for (const ev of events) {
+        if (ev.eventType === "session") {
+          totalMs += ev.durationMs || 0;
+          if (ev.sessionId) sessionIds.add(ev.sessionId);
+          else anonSessionRows += 1;
+        } else if (ev.eventType === "scroll_end") {
+          scrolledToEnd = true;
+        } else if (ev.eventType === "pdf_open") {
+          openedPdf = true;
+        }
+      }
+      const sessionCount = sessionIds.size + anonSessionRows;
+      const totalActiveSeconds = Math.round(totalMs / 1000);
+
+      // Idempotent: if the nurse already acked this exact version, refresh
+      // the rolled-up summary on the existing row (so a later "scroll to
+      // end" still gets reflected) and return it.
       const [existing] = await db
         .select()
         .from(policyAcknowledgements)
@@ -300,7 +469,12 @@ export function registerPolicyRoutes(app: Express) {
           eq(policyAcknowledgements.policyVersion, policy.version),
         ));
       if (existing) {
-        return res.json({ ok: true, acknowledgement: existing, alreadyAcknowledged: true });
+        const [refreshed] = await db
+          .update(policyAcknowledgements)
+          .set({ totalActiveSeconds, sessionCount, scrolledToEnd, openedPdf })
+          .where(eq(policyAcknowledgements.id, existing.id))
+          .returning();
+        return res.json({ ok: true, acknowledgement: refreshed, alreadyAcknowledged: true });
       }
 
       const ipAddress = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
@@ -316,6 +490,10 @@ export function registerPolicyRoutes(app: Express) {
           policyVersion: policy.version,
           ipAddress,
           userAgent,
+          totalActiveSeconds,
+          sessionCount,
+          scrolledToEnd,
+          openedPdf,
         })
         .returning();
 
