@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   CheckCircle, AlertCircle, Loader2, User, Shield, FileCheck,
   Stethoscope, BookOpen, Heart, Users, FileText, ShieldCheck,
@@ -24,7 +25,8 @@ import {
   Lock as LockIcon, Unlock, X
 } from "lucide-react";
 import {
-  PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES
+  PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES,
+  STEPS_REQUIRING_ADMIN_VERIFICATION, STEP_STATUS
 } from "@shared/schema";
 import { ChatWidget } from "@/components/portal/chat-widget";
 import type {
@@ -57,6 +59,142 @@ function parseNextOfKin(value: string | null | undefined): NextOfKinData {
 function serializeNextOfKin(name: string, relationship: string, contactNumber: string): string {
   if (!name && !relationship && !contactNumber) return "";
   return JSON.stringify({ name, relationship, contactNumber });
+}
+
+interface StepCompletionFooterProps {
+  token: string;
+  stepKey: string;
+  stepName: string;
+  status: string | undefined;
+  onCompleted: () => void;
+}
+
+function StepCompletionFooter({ token, stepKey, stepName, status, onCompleted }: StepCompletionFooterProps) {
+  const { toast } = useToast();
+  const requiresAdmin = (STEPS_REQUIRING_ADMIN_VERIFICATION as readonly string[]).includes(stepKey);
+  const isCompleted = status === STEP_STATUS.completed;
+  const isAwaiting = status === STEP_STATUS.awaiting_verification;
+  const isFailed = status === STEP_STATUS.failed;
+
+  // Track + clear the auto-advance timer so it can't fire after unmount or
+  // after the user navigates away from this step manually.
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+    };
+  }, [stepKey]);
+
+  const completeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/portal/${token}/steps/${stepKey}/complete`);
+      return await res.json();
+    },
+    onSuccess: (data: { status: string; requiresAdminVerification?: boolean }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      if (data.status === STEP_STATUS.awaiting_verification) {
+        toast({
+          title: "Submitted for verification",
+          description: `${stepName} is now with our admin team for verification. We'll notify you when it's been reviewed.`,
+        });
+      } else {
+        toast({
+          title: `${stepName} marked complete`,
+          description: "Your progress has been saved. Moving on to the next step.",
+        });
+        // Auto-advance only on definitive completion. Stored in a ref so the
+        // unmount cleanup above can cancel it if the user has moved on.
+        if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = setTimeout(onCompleted, 250);
+      }
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not mark step complete",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  let pillBg = "bg-muted text-muted-foreground";
+  let pillIcon: React.ReactNode = <Info className="h-3.5 w-3.5" />;
+  let pillLabel = "In progress";
+  if (isCompleted) {
+    pillBg = "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
+    pillIcon = <CheckCircle className="h-3.5 w-3.5" />;
+    pillLabel = "Completed";
+  } else if (isAwaiting) {
+    pillBg = "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+    pillIcon = <ShieldCheck className="h-3.5 w-3.5" />;
+    pillLabel = "Awaiting admin verification";
+  } else if (isFailed) {
+    pillBg = "bg-destructive/15 text-destructive";
+    pillIcon = <AlertCircle className="h-3.5 w-3.5" />;
+    pillLabel = "Verification failed — please contact your coordinator";
+  }
+
+  // Button rules:
+  //  - Completed: hide the action button (already done).
+  //  - Awaiting verification (NMC/DBS): show a disabled "Submitted" button.
+  //  - Otherwise: show the active CTA. NMC/DBS reads "Submit for verification";
+  //    everything else reads "Mark step complete".
+  const buttonLabel = isAwaiting
+    ? "Submitted — waiting on admin"
+    : requiresAdmin
+    ? "Submit for verification"
+    : "Mark step complete";
+
+  return (
+    <div
+      className="rounded-lg border border-border bg-card/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+      data-testid={`step-completion-footer-${stepKey}`}
+    >
+      <div className="flex items-start gap-2 min-w-0">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium shrink-0",
+            pillBg
+          )}
+          data-testid={`step-status-pill-${stepKey}`}
+        >
+          {pillIcon}
+          {pillLabel}
+        </span>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {isCompleted ? (
+            <>This step is complete. You can revisit it any time before submission.</>
+          ) : isAwaiting ? (
+            <>You've finished your part of <strong>{stepName}</strong>. Our admin team will verify your submission shortly.</>
+          ) : requiresAdmin ? (
+            <>Once you've finished filling in <strong>{stepName}</strong>, submit it for our admin team to verify.</>
+          ) : (
+            <>When you've finished <strong>{stepName}</strong>, mark it complete to advance the progress bar.</>
+          )}
+        </p>
+      </div>
+      {!isCompleted && (
+        <Button
+          onClick={() => completeMutation.mutate()}
+          disabled={isAwaiting || completeMutation.isPending}
+          className="shrink-0"
+          data-testid={`button-complete-step-${stepKey}`}
+        >
+          {completeMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : isAwaiting ? (
+            <ShieldCheck className="h-4 w-4 mr-2" />
+          ) : (
+            <CheckCircle className="h-4 w-4 mr-2" />
+          )}
+          {buttonLabel}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function UploadedDocList({ docs, category, testIdPrefix }: { docs?: any[]; category: string; testIdPrefix: string }) {
@@ -2637,6 +2775,18 @@ export default function PortalPage() {
       <div className="space-y-4" data-testid="portal-page">
         {stepComponents[currentStep]}
 
+        <StepCompletionFooter
+          token={token}
+          stepKey={currentPortalStep?.key ?? "identity"}
+          stepName={currentPortalStep?.name ?? ""}
+          status={stepStatuses[currentPortalStep?.key ?? "identity"]}
+          onCompleted={() => {
+            // Functional update + clamp keeps us safe if the user has
+            // already navigated to a different step before this fires.
+            setCurrentStep((s) => Math.min(totalSteps, s + 1));
+          }}
+        />
+
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
           {currentStep > 1 && (
             <Button variant="outline" onClick={() => setCurrentStep(currentStep - 1)} data-testid="button-prev-step">
@@ -2644,8 +2794,8 @@ export default function PortalPage() {
             </Button>
           )}
           {currentStep < totalSteps && (
-            <Button onClick={() => setCurrentStep(currentStep + 1)} className="ml-auto" data-testid="button-next-step">
-              Next Step
+            <Button variant="ghost" onClick={() => setCurrentStep(currentStep + 1)} className="ml-auto" data-testid="button-next-step">
+              Skip to next
             </Button>
           )}
         </div>

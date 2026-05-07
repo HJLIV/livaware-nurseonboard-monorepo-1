@@ -11,12 +11,61 @@ import { triageHealthDeclaration, isTriageAvailable } from "../health-triage-ai"
 import { triggerDocumentAnalysis } from "../document-analysis";
 import { applyChaseReplyTrainingUpsert } from "../document-ingest";
 import { evaluateMandatoryTrainingCell } from "../training-status";
-import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
+import { MANDATORY_TRAINING_MODULES, PORTAL_STEPS, STEPS_REQUIRING_ADMIN_VERIFICATION, STEP_STATUS } from "@shared/schema";
 import type { HealthDeclaration } from "@shared/schema";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { uploadsDir } from "../middleware";
+
+// Terminal step statuses must never be silently downgraded by an unrelated
+// candidate edit (e.g. they re-save a profile field after the step has
+// already been marked complete). Admin-side verification routes in
+// onboard.ts intentionally bypass this guard by writing the status field
+// directly without going through it.
+const TERMINAL_STEP_STATUSES: ReadonlySet<string> = new Set([
+  STEP_STATUS.completed,
+  STEP_STATUS.awaiting_verification,
+]);
+
+function applyStepStatusUpdates(
+  current: Record<string, string>,
+  updates: Record<string, string>,
+): Record<string, string> {
+  const next = { ...current };
+  for (const [key, value] of Object.entries(updates)) {
+    const existing = next[key];
+    if (existing && TERMINAL_STEP_STATUSES.has(existing)) {
+      // Keep terminal state — don't let a subsequent edit/upload demote
+      // a step the candidate already explicitly finished.
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+// Guarded step-status writer for portal handlers. Re-reads current state
+// to win against in-flight writes, applies updates while preserving any
+// terminal status (completed / awaiting_verification), and persists. Safe
+// no-op if the state row doesn't exist or no fields actually change.
+async function safeWriteStepStatuses(
+  nurseId: string,
+  updates: Record<string, string>,
+): Promise<void> {
+  const fresh = await storage.getOnboardingState(nurseId);
+  if (!fresh) return;
+  const current = (fresh.stepStatuses as Record<string, string>) || {};
+  const next = applyStepStatusUpdates(current, updates);
+  // Skip the write if nothing actually changed (a terminal-state key
+  // shielded every incoming change).
+  let changed = false;
+  for (const k of Object.keys(updates)) {
+    if (current[k] !== next[k]) { changed = true; break; }
+  }
+  if (!changed) return;
+  await storage.updateOnboardingState(fresh.id, { stepStatuses: next });
+}
 
 function triageHealthDeclarationInBackground(declaration: HealthDeclaration) {
   if (!isTriageAvailable()) {
@@ -67,15 +116,12 @@ export function registerPortalRoutes(app: Express) {
   app.patch("/api/portal/:token/candidate", validatePortalToken, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const candidate = await storage.updateCandidate(nurseId, req.body);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      if (req.body.fullName || req.body.email || req.body.phone || req.body.address) statuses.identity = "in_progress";
-      if (req.body.nmcPin) statuses.nmc = "in_progress";
-      if (req.body.dbsNumber) statuses.dbs = "in_progress";
-      if (req.body.currentEmployer || req.body.yearsQualified || req.body.specialisms) statuses.profile = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    const updates: Record<string, string> = {};
+    if (req.body.fullName || req.body.email || req.body.phone || req.body.address) updates.identity = "in_progress";
+    if (req.body.nmcPin) updates.nmc = "in_progress";
+    if (req.body.dbsNumber) updates.dbs = "in_progress";
+    if (req.body.currentEmployer || req.body.yearsQualified || req.body.specialisms) updates.profile = "in_progress";
+    if (Object.keys(updates).length > 0) await safeWriteStepStatuses(nurseId, updates);
     await storage.createAuditLog({ nurseId, action: "portal_candidate_updated", agentName: "nurse_portal", detail: { fields: Object.keys(req.body) } });
     res.json(candidate);
   });
@@ -98,12 +144,7 @@ export function registerPortalRoutes(app: Express) {
     }
     const data = { ...req.body, nurseId };
     const result = await storage.createEmploymentHistory(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.profile = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { profile: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_employment_added", agentName: "nurse_portal", detail: { employer: result.employer, jobTitle: result.jobTitle } });
     res.status(201).json(result);
   });
@@ -129,12 +170,7 @@ export function registerPortalRoutes(app: Express) {
     }
     const data = { ...req.body, nurseId };
     const result = await storage.createEducationHistory(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.profile = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { profile: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_education_added", agentName: "nurse_portal", detail: { institution: result.institution, qualification: result.qualification } });
     res.status(201).json(result);
   });
@@ -219,12 +255,7 @@ export function registerPortalRoutes(app: Express) {
         expiryDate: documentDate,
         uploadedBy: "nurse",
       });
-      const state = await storage.getOnboardingState(nurseId);
-      if (state) {
-        const statuses = (state.stepStatuses as Record<string, string>) || {};
-        statuses.identity = "in_progress";
-        await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-      }
+      await safeWriteStepStatuses(nurseId, { identity: "in_progress" });
       await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: "Proof of Address", category: "proof_of_address", filename: req.file.originalname } });
       if (doc.filePath) {
         triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address');
@@ -247,18 +278,15 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId, uploadedBy: "nurse" };
     const result = await storage.createDocument(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      if (data.category === "right_to_work") statuses.right_to_work = "in_progress";
-      if (data.category === "identity") statuses.identity = "in_progress";
-      if (data.category === "dbs") statuses.dbs = "in_progress";
-      if (data.category === "indemnity") statuses.indemnity = "in_progress";
-      if (data.category === "profile") statuses.profile = "in_progress";
-      if (data.category === "competency_evidence") statuses.competency = "in_progress";
-      if (data.category === "training_certificate") statuses.training = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    const docUpdates: Record<string, string> = {};
+    if (data.category === "right_to_work") docUpdates.right_to_work = "in_progress";
+    if (data.category === "identity") docUpdates.identity = "in_progress";
+    if (data.category === "dbs") docUpdates.dbs = "in_progress";
+    if (data.category === "indemnity") docUpdates.indemnity = "in_progress";
+    if (data.category === "profile") docUpdates.profile = "in_progress";
+    if (data.category === "competency_evidence") docUpdates.competency = "in_progress";
+    if (data.category === "training_certificate") docUpdates.training = "in_progress";
+    if (Object.keys(docUpdates).length > 0) await safeWriteStepStatuses(nurseId, docUpdates);
     await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: result.type, category: data.category, filename: result.filename } });
     if (result.filePath) {
       triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
@@ -277,12 +305,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createCompetencyDeclaration(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.competency = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { competency: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_competency_declared", agentName: "nurse_portal", detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
     res.status(201).json(result);
   });
@@ -313,12 +336,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createMandatoryTraining(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.training = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { training: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_training_recorded", agentName: "nurse_portal", detail: { module: result.moduleName, certificateDocumentId: result.certificateDocumentId } });
     res.status(201).json(result);
   });
@@ -369,12 +387,7 @@ export function registerPortalRoutes(app: Express) {
         }
       }
 
-      const state = await storage.getOnboardingState(nurseId);
-      if (state) {
-        const statuses = (state.stepStatuses as Record<string, string>) || {};
-        statuses.training = "in_progress";
-        await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-      }
+      await safeWriteStepStatuses(nurseId, { training: "in_progress" });
 
       await storage.createAuditLog({
         nurseId,
@@ -461,12 +474,7 @@ export function registerPortalRoutes(app: Express) {
         autoRecorded.push(mod.matchedModule);
       }
 
-      const state = await storage.getOnboardingState(nurseId);
-      if (state) {
-        const statuses = (state.stepStatuses as Record<string, string>) || {};
-        statuses.training = "in_progress";
-        await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-      }
+      await safeWriteStepStatuses(nurseId, { training: "in_progress" });
 
       await storage.createAuditLog({
         nurseId,
@@ -761,12 +769,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createHealthDeclaration(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.health = result.completed ? "completed" : "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { health: result.completed ? "completed" : "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_health_declared", agentName: "nurse_portal", detail: { ohReferral: result.ohReferralRequired } });
     res.status(201).json(result);
 
@@ -782,12 +785,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createReference(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.references = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { references: "in_progress" });
 
     let emailSent = false;
     if (result.refereeEmail) {
@@ -827,12 +825,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createInductionPolicy(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.induction = "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { induction: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_policy_acknowledged", agentName: "nurse_portal", detail: { policy: result.policyName } });
     res.status(201).json(result);
   });
@@ -846,12 +839,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createProfessionalIndemnity(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.indemnity = result.verified ? "completed" : "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { indemnity: result.verified ? "completed" : "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_indemnity_recorded", agentName: "nurse_portal", detail: { provider: result.provider } });
     res.status(201).json(result);
   });
@@ -876,12 +864,9 @@ export function registerPortalRoutes(app: Express) {
       status: "pending" as const,
     };
     const result = await storage.createDbsVerification(data);
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.dbs = result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, {
+      dbs: result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress",
+    });
     await storage.createAuditLog({ nurseId, action: "portal_dbs_recorded", agentName: "nurse_portal", detail: { certificateNumber: result.certificateNumber } });
     res.status(201).json(result);
   });
@@ -917,12 +902,7 @@ export function registerPortalRoutes(app: Express) {
         ageBand: ageBand || "Prefer not to say",
       });
     }
-    const state = await storage.getOnboardingState(nurseId);
-    if (state) {
-      const statuses = (state.stepStatuses as Record<string, string>) || {};
-      statuses.equal_opportunities = "completed";
-      await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
-    }
+    await safeWriteStepStatuses(nurseId, { equal_opportunities: "completed" });
     await storage.createAuditLog({
       nurseId,
       action: "equal_opportunities_submitted",
@@ -930,5 +910,57 @@ export function registerPortalRoutes(app: Express) {
       detail: { submitted: true },
     });
     res.status(existing ? 200 : 201).json(result);
+  });
+
+  // Explicit per-step "I'm done with this step" action. The candidate
+  // posts here when they've finished the natural work of a step (entered
+  // their PIN, uploaded a doc, filled in a form, etc.) and want the
+  // progress bar to advance.
+  //
+  // For NMC + DBS we never let the candidate self-mark "completed" —
+  // those still require an admin to verify the registration / certificate.
+  // We instead flip the step to "awaiting_verification" so the candidate
+  // can see they've done their part and the admin has the ball.
+  app.post("/api/portal/:token/steps/:stepKey/complete", validatePortalToken, async (req, res) => {
+    const nurseId = (req as any).nurseId;
+    const stepKey = String(req.params.stepKey);
+    const validKeys = PORTAL_STEPS.map((s) => s.key) as readonly string[];
+    if (!validKeys.includes(stepKey)) {
+      return res.status(400).json({ message: "Unknown step key" });
+    }
+    const state = await storage.getOnboardingState(nurseId);
+    if (!state) {
+      return res.status(404).json({ message: "Onboarding state not found" });
+    }
+    const statuses = (state.stepStatuses as Record<string, string>) || {};
+    const current = statuses[stepKey];
+
+    // Don't downgrade an already-verified step.
+    if (current === STEP_STATUS.completed) {
+      return res.json({ stepKey, status: current, alreadyCompleted: true });
+    }
+
+    const requiresAdmin = (STEPS_REQUIRING_ADMIN_VERIFICATION as readonly string[]).includes(stepKey);
+    const next = requiresAdmin ? STEP_STATUS.awaiting_verification : STEP_STATUS.completed;
+    // safeWriteStepStatuses preserves terminal states. We've already
+    // bailed on `completed` above, and `awaiting_verification -> completed`
+    // is impossible here (both candidate-side targets are themselves
+    // terminal), so we re-read + write directly to ensure the upgrade
+    // (in_progress -> awaiting_verification, pending -> completed) goes
+    // through.
+    const fresh = await storage.getOnboardingState(nurseId);
+    const freshStatuses = (fresh?.stepStatuses as Record<string, string>) || {};
+    if (freshStatuses[stepKey] === STEP_STATUS.completed) {
+      return res.json({ stepKey, status: freshStatuses[stepKey], alreadyCompleted: true });
+    }
+    freshStatuses[stepKey] = next;
+    await storage.updateOnboardingState(state.id, { stepStatuses: freshStatuses });
+    await storage.createAuditLog({
+      nurseId,
+      action: requiresAdmin ? "portal_step_submitted_for_verification" : "portal_step_completed",
+      agentName: "nurse_portal",
+      detail: { stepKey, previous: current ?? "pending", next },
+    });
+    res.json({ stepKey, status: next, requiresAdminVerification: requiresAdmin });
   });
 }

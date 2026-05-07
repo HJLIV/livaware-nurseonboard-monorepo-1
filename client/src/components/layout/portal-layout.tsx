@@ -1,6 +1,6 @@
-import { PORTAL_STEPS } from "@shared/schema";
+import { PORTAL_STEPS, STEP_STATUS } from "@shared/schema";
 import { cn } from "@/lib/utils";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Clock } from "lucide-react";
 interface PortalLayoutProps {
   candidateName: string;
   stepStatuses: Record<string, string>;
@@ -17,7 +17,10 @@ export function PortalLayout({
   children,
 }: PortalLayoutProps) {
   const completedCount = PORTAL_STEPS.filter(
-    (s) => stepStatuses[s.key] === "completed"
+    (s) => stepStatuses[s.key] === STEP_STATUS.completed
+  ).length;
+  const awaitingCount = PORTAL_STEPS.filter(
+    (s) => stepStatuses[s.key] === STEP_STATUS.awaiting_verification
   ).length;
   const progressPercent = Math.round((completedCount / PORTAL_STEPS.length) * 100);
 
@@ -46,6 +49,11 @@ export function PortalLayout({
             </h2>
             <span className="text-sm text-muted-foreground" data-testid="text-progress-label">
               {completedCount} of {PORTAL_STEPS.length} steps complete
+              {awaitingCount > 0 && (
+                <span className="ml-1 text-amber-600 dark:text-amber-400">
+                  · {awaitingCount} awaiting verification
+                </span>
+              )}
             </span>
           </div>
           <div className="w-full bg-secondary rounded-full h-2 overflow-hidden" data-testid="portal-progress-bar">
@@ -69,8 +77,9 @@ export function PortalLayout({
           >
             <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
               {PORTAL_STEPS.map((step, idx) => {
-                const status = stepStatuses[step.key] || "pending";
-                const isCompleted = status === "completed";
+                const status = stepStatuses[step.key] || STEP_STATUS.pending;
+                const isCompleted = status === STEP_STATUS.completed;
+                const isAwaiting = status === STEP_STATUS.awaiting_verification;
                 const isActive = idx + 1 === currentStep;
 
                 return (
@@ -81,7 +90,7 @@ export function PortalLayout({
                       "flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors whitespace-nowrap lg:whitespace-normal w-full",
                       isActive
                         ? "bg-primary text-primary-foreground"
-                        : isCompleted
+                        : isCompleted || isAwaiting
                         ? "text-foreground hover:bg-secondary"
                         : "text-muted-foreground hover:bg-secondary"
                     )}
@@ -92,15 +101,28 @@ export function PortalLayout({
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                         isCompleted
                           ? "bg-[#5DB88A]/20 text-[#5DB88A]"
+                          : isAwaiting
+                          ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
                           : isActive
                           ? "bg-primary-foreground/20 text-primary-foreground"
                           : "bg-secondary text-muted-foreground"
                       )}
                     >
-                      {isCompleted ? <Check className="h-3.5 w-3.5" /> : step.step}
+                      {isCompleted ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : isAwaiting ? (
+                        <Clock className="h-3.5 w-3.5" />
+                      ) : (
+                        step.step
+                      )}
                     </span>
                     <span className="hidden lg:inline">{step.name}</span>
-                    {isActive && (
+                    {isAwaiting && (
+                      <span className="hidden lg:inline ml-auto text-[10px] font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                        pending
+                      </span>
+                    )}
+                    {isActive && !isAwaiting && (
                       <ChevronRight className="h-4 w-4 ml-auto hidden lg:block" />
                     )}
                   </button>

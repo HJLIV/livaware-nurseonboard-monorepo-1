@@ -796,6 +796,30 @@ export const PORTAL_STEPS = [
   { step: 11, name: "Equal Opportunities", key: "equal_opportunities" },
 ] as const;
 
+export type PortalStepKey = (typeof PORTAL_STEPS)[number]["key"];
+
+// Step keys whose final "completed" state requires an admin to verify the
+// candidate's submission (NMC PIN check, DBS background check). When a
+// candidate finishes their part of one of these steps the status flips to
+// "awaiting_verification"; only the admin verification endpoints in
+// server/routes/onboard.ts may promote it to "completed".
+export const STEPS_REQUIRING_ADMIN_VERIFICATION: readonly PortalStepKey[] = [
+  "nmc",
+  "dbs",
+];
+
+// Canonical step status values stored in onboardingStates.stepStatuses.
+// Plain strings (the column is jsonb<Record<string,string>>) — kept as a
+// const map so server + client agree on the spelling.
+export const STEP_STATUS = {
+  pending: "pending",
+  in_progress: "in_progress",
+  awaiting_verification: "awaiting_verification",
+  completed: "completed",
+  failed: "failed",
+} as const;
+export type StepStatus = (typeof STEP_STATUS)[keyof typeof STEP_STATUS];
+
 export const COMPETENCY_MATRIX = [
   { domain: "Core Clinical", competency: "Basic Life Support (adult)", mandatory: true, minimumLevel: "level_3" },
   { domain: "Core Clinical", competency: "Immediate Life Support", mandatory: false, minimumLevel: "level_2" },
