@@ -18,7 +18,13 @@ import {
   type PolicyAcknowledgement,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
-import { requireAdmin, requireSuperAdmin, validatePortalToken } from "../middleware";
+import {
+  requireAdmin,
+  requireSuperAdmin,
+  validatePortalToken,
+  requirePolicyReadBehaviour,
+  userCanViewPolicyReadBehaviour,
+} from "../middleware";
 import { logAction } from "../services/audit";
 import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
 
@@ -247,6 +253,10 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: list acknowledgements (audit/reporting) ──────────────
+  // Reading-behaviour fields (totalActiveSeconds / sessionCount /
+  // scrolledToEnd / openedPdf) are only included for admins in the
+  // stricter "policy read-behaviour" tier; everyone else just sees the
+  // basic acknowledgement audit (who/when/version/IP).
   app.get("/api/admin/policies/:id/acknowledgements", requireAdmin, async (req, res) => {
     try {
       const rows = await db
@@ -254,7 +264,11 @@ export function registerPolicyRoutes(app: Express) {
         .from(policyAcknowledgements)
         .where(eq(policyAcknowledgements.policyId, String(req.params.id)))
         .orderBy(desc(policyAcknowledgements.acknowledgedAt));
-      res.json(rows);
+      const canViewBehaviour = await userCanViewPolicyReadBehaviour(req);
+      const sanitized = canViewBehaviour
+        ? rows
+        : rows.map(({ totalActiveSeconds: _t, sessionCount: _s, scrolledToEnd: _sc, openedPdf: _o, ...rest }) => rest);
+      res.json(sanitized);
     } catch (err: any) {
       res.status(500).json({ message: err?.message || "Failed to load acknowledgements" });
     }
@@ -278,17 +292,23 @@ export function registerPolicyRoutes(app: Express) {
         const prev = latestAck.get(a.policyId);
         if (!prev || a.acknowledgedAt > prev.acknowledgedAt) latestAck.set(a.policyId, a);
       }
+      // Only the stricter "policy read-behaviour" tier sees the
+      // time-spent / scrolled / pdf-opened columns; other admins still
+      // get the acknowledgement list, just without those fields.
+      const canViewBehaviour = await userCanViewPolicyReadBehaviour(req);
       const enriched = summary.policies.map((p) => {
         const a = latestAck.get(p.id);
-        return {
-          ...p,
-          totalActiveSeconds: a?.totalActiveSeconds ?? null,
-          sessionCount: a?.sessionCount ?? null,
-          scrolledToEnd: a?.scrolledToEnd ?? null,
-          openedPdf: a?.openedPdf ?? null,
-        };
+        return canViewBehaviour
+          ? {
+              ...p,
+              totalActiveSeconds: a?.totalActiveSeconds ?? null,
+              sessionCount: a?.sessionCount ?? null,
+              scrolledToEnd: a?.scrolledToEnd ?? null,
+              openedPdf: a?.openedPdf ?? null,
+            }
+          : p;
       });
-      res.json({ ...summary, policies: enriched });
+      res.json({ ...summary, policies: enriched, canViewReadBehaviour: canViewBehaviour });
     } catch (err: any) {
       res.status(500).json({ message: err?.message || "Failed to load acknowledgements" });
     }
@@ -352,7 +372,10 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Admin: per-policy reading-behaviour aggregate ───────────────
-  app.get("/api/admin/policies/:id/read-summary", requireAdmin, async (req, res) => {
+  // Gated on the stricter `requirePolicyReadBehaviour` tier — regular
+  // admins get a 403 here even though they can still see the basic
+  // acknowledgement audit list above.
+  app.get("/api/admin/policies/:id/read-summary", requirePolicyReadBehaviour, async (req, res) => {
     try {
       const policyId = String(req.params.id);
       const acks = await db

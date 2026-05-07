@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getStageDisplayName } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 interface NurseDetail {
   id: string;
@@ -500,6 +501,10 @@ interface NursePoliciesResponse {
   policies: NursePolicyRow[];
   totalRequired: number;
   outstanding: number;
+  // Server echoes whether the requesting admin is in the stricter
+  // "policy read-behaviour" tier. The client also has this on /api/auth/me;
+  // we keep both so the API response is self-describing.
+  canViewReadBehaviour?: boolean;
 }
 
 function formatReadDuration(seconds: number | null | undefined): string {
@@ -513,6 +518,11 @@ function formatReadDuration(seconds: number | null | undefined): string {
 const NURSE_DETAIL_SKIM_THRESHOLD = 10;
 
 function PoliciesTab({ nurseId }: { nurseId: string }) {
+  const { user } = useAuth();
+  // Stricter admin tier — without this, the time-spent / scrolled / pdf
+  // columns are hidden so reading-behaviour signals stay with compliance
+  // leads only.
+  const canViewReadBehaviour = !!user?.canViewPolicyReadBehaviour;
   const { data, isLoading } = useQuery<NursePoliciesResponse>({
     queryKey: [`/api/nurses/${nurseId}/policy-acknowledgements`],
   });
@@ -544,10 +554,14 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
             <tr className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70">
               <th className="px-4 py-3 font-medium">Policy</th>
               <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Time spent</th>
-              <th className="px-4 py-3 font-medium text-center">Sessions</th>
-              <th className="px-4 py-3 font-medium text-center">Scrolled</th>
-              <th className="px-4 py-3 font-medium text-center">PDF</th>
+              {canViewReadBehaviour && (
+                <>
+                  <th className="px-4 py-3 font-medium">Time spent</th>
+                  <th className="px-4 py-3 font-medium text-center">Sessions</th>
+                  <th className="px-4 py-3 font-medium text-center">Scrolled</th>
+                  <th className="px-4 py-3 font-medium text-center">PDF</th>
+                </>
+              )}
               <th className="px-4 py-3 font-medium">Acknowledged</th>
             </tr>
           </thead>
@@ -574,19 +588,23 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
                       <Badge variant="outline" className="text-muted-foreground">Outstanding</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs">{tracked ? formatReadDuration(p.totalActiveSeconds) : "—"}</span>
-                      {skimmed && (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
-                          skimmed
-                        </Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center text-xs">{tracked ? p.sessionCount : "—"}</td>
-                  <td className="px-4 py-3 text-center text-xs">{tracked ? (p.scrolledToEnd ? "Yes" : "No") : "—"}</td>
-                  <td className="px-4 py-3 text-center text-xs">{tracked ? (p.openedPdf ? "Yes" : "No") : "—"}</td>
+                  {canViewReadBehaviour && (
+                    <>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">{tracked ? formatReadDuration(p.totalActiveSeconds) : "—"}</span>
+                          {skimmed && (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
+                              skimmed
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs">{tracked ? p.sessionCount : "—"}</td>
+                      <td className="px-4 py-3 text-center text-xs">{tracked ? (p.scrolledToEnd ? "Yes" : "No") : "—"}</td>
+                      <td className="px-4 py-3 text-center text-xs">{tracked ? (p.openedPdf ? "Yes" : "No") : "—"}</td>
+                    </>
+                  )}
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     {p.acknowledgedAt ? new Date(p.acknowledgedAt).toLocaleString() : "—"}
                   </td>

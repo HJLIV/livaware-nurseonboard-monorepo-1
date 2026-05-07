@@ -688,6 +688,26 @@ export function migrateLegacyTrainingChaseRecipients(
   return out;
 }
 
+// Settings shape for the policy reading-behaviour permission allowlist.
+// Stored under key = "policy_read_behaviour_permissions".
+//
+// Reading-behaviour columns (time spent, scrolled-to-end, pdf-opened, the
+// median/skimmed summary) are gated on this stricter tier so only the
+// admins explicitly granted access — typically compliance leads — can see
+// what could become an HR/disciplinary signal. The local top-level admin
+// (env `ADMIN_USERNAME`, default "admin") implicitly has access and is the
+// only one who can edit the allowlist. Other admins (Microsoft SSO users,
+// any future admin tier) need to be added by username/email here.
+export const POLICY_READ_BEHAVIOUR_PERMISSIONS_KEY = "policy_read_behaviour_permissions";
+export interface PolicyReadBehaviourPermissions {
+  // Lowercased list of admin identifiers (username or email) who may view
+  // reading-behaviour data in addition to the implicit top-level admin.
+  allowedIdentifiers: string[];
+}
+export const DEFAULT_POLICY_READ_BEHAVIOUR_PERMISSIONS: PolicyReadBehaviourPermissions = {
+  allowedIdentifiers: [],
+};
+
 export const equalOpportunities = pgTable("equal_opportunities", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   candidateRef: varchar("candidate_ref").notNull(),

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Users, FileText, Loader2, Upload } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 interface Policy {
   id: string;
@@ -55,10 +56,13 @@ interface Acknowledgement {
   policyVersion: string;
   acknowledgedAt: string;
   ipAddress: string | null;
-  totalActiveSeconds: number;
-  sessionCount: number;
-  scrolledToEnd: boolean;
-  openedPdf: boolean;
+  // Reading-behaviour fields are only populated for admins in the
+  // stricter "policy read-behaviour" tier; otherwise the server omits
+  // them entirely.
+  totalActiveSeconds?: number;
+  sessionCount?: number;
+  scrolledToEnd?: boolean;
+  openedPdf?: boolean;
 }
 
 interface ReadSummary {
@@ -103,6 +107,10 @@ const emptyForm: FormState = {
 export default function AdminPoliciesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // Stricter admin tier — hides the median/skimmed summary card and the
+  // time-spent / scrolled / pdf columns for admins without the flag.
+  const canViewReadBehaviour = !!user?.canViewPolicyReadBehaviour;
   const [editing, setEditing] = useState<Policy | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -120,7 +128,9 @@ export default function AdminPoliciesPage() {
 
   const { data: readSummary } = useQuery<ReadSummary>({
     queryKey: [`/api/admin/policies/${viewingAcks?.id}/read-summary`],
-    enabled: !!viewingAcks,
+    // Don't even fetch the summary for admins without the stricter
+    // permission — the endpoint will 403 anyway.
+    enabled: !!viewingAcks && canViewReadBehaviour,
   });
 
   const saveMutation = useMutation({
@@ -506,7 +516,7 @@ export default function AdminPoliciesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {readSummary && readSummary.trackedAcknowledgements > 0 && (
+              {canViewReadBehaviour && readSummary && readSummary.trackedAcknowledgements > 0 && (
                 <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">Median read time</p>
@@ -533,17 +543,23 @@ export default function AdminPoliciesPage() {
                     <TableHead>Nurse ID</TableHead>
                     <TableHead>Version</TableHead>
                     <TableHead>Acknowledged</TableHead>
-                    <TableHead>Time spent</TableHead>
-                    <TableHead className="text-center">Sessions</TableHead>
-                    <TableHead className="text-center">Scrolled</TableHead>
-                    <TableHead className="text-center">PDF</TableHead>
+                    {canViewReadBehaviour && (
+                      <>
+                        <TableHead>Time spent</TableHead>
+                        <TableHead className="text-center">Sessions</TableHead>
+                        <TableHead className="text-center">Scrolled</TableHead>
+                        <TableHead className="text-center">PDF</TableHead>
+                      </>
+                    )}
                     <TableHead>IP</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {acknowledgements.map((a) => {
-                    const tracked = a.sessionCount > 0 || a.totalActiveSeconds > 0;
-                    const skimmed = tracked && a.totalActiveSeconds < SKIM_THRESHOLD_SECONDS;
+                    const sessionCount = a.sessionCount ?? 0;
+                    const totalSecs = a.totalActiveSeconds ?? 0;
+                    const tracked = sessionCount > 0 || totalSecs > 0;
+                    const skimmed = tracked && totalSecs < SKIM_THRESHOLD_SECONDS;
                     return (
                       <TableRow key={a.id} data-testid={`ack-row-${a.id}`}>
                         <TableCell className="font-mono text-xs">{a.nurseId.slice(0, 8)}…</TableCell>
@@ -551,23 +567,27 @@ export default function AdminPoliciesPage() {
                         <TableCell className="text-xs">
                           {new Date(a.acknowledgedAt).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span>{tracked ? formatReadDuration(a.totalActiveSeconds) : "—"}</span>
-                            {skimmed && (
-                              <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
-                                skimmed
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs text-center">{tracked ? a.sessionCount : "—"}</TableCell>
-                        <TableCell className="text-xs text-center">
-                          {tracked ? (a.scrolledToEnd ? "Yes" : "No") : "—"}
-                        </TableCell>
-                        <TableCell className="text-xs text-center">
-                          {tracked ? (a.openedPdf ? "Yes" : "No") : "—"}
-                        </TableCell>
+                        {canViewReadBehaviour && (
+                          <>
+                            <TableCell className="text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span>{tracked ? formatReadDuration(totalSecs) : "—"}</span>
+                                {skimmed && (
+                                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px] px-1 py-0">
+                                    skimmed
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-center">{tracked ? sessionCount : "—"}</TableCell>
+                            <TableCell className="text-xs text-center">
+                              {tracked ? (a.scrolledToEnd ? "Yes" : "No") : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-center">
+                              {tracked ? (a.openedPdf ? "Yes" : "No") : "—"}
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell className="text-xs text-muted-foreground">{a.ipAddress || "—"}</TableCell>
                       </TableRow>
                     );

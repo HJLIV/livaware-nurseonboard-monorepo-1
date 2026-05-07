@@ -6,6 +6,12 @@ interface AuthUser {
   username: string;
   name?: string;
   role?: string;
+  email?: string;
+  authMethod?: "local" | "microsoft";
+  // Stricter admin tier flags — gate the policy reading-behaviour columns
+  // and the /settings management UI.
+  isTopLevelAdmin?: boolean;
+  canViewPolicyReadBehaviour?: boolean;
 }
 
 export function useAuth() {

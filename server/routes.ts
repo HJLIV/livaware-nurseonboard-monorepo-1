@@ -103,8 +103,16 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     if (req.session?.isAuthenticated) {
+      // The two extra flags drive the stricter "policy reading-behaviour"
+      // tier on the client — they hide the read-behaviour columns and the
+      // /settings management UI for admins who don't have access.
+      const { isTopLevelAdmin, userCanViewPolicyReadBehaviour } = await import("./middleware");
+      const isTopLevel = isTopLevelAdmin(req);
+      const canViewPolicyReadBehaviour = isTopLevel
+        ? true
+        : await userCanViewPolicyReadBehaviour(req);
       return res.json({
         authenticated: true,
         username: req.session.username,
@@ -112,6 +120,8 @@ export async function registerRoutes(
         email: req.session.email,
         displayName: req.session.displayName,
         authMethod: req.session.authMethod,
+        isTopLevelAdmin: isTopLevel,
+        canViewPolicyReadBehaviour,
       });
     }
     return res.status(401).json({ authenticated: false });
