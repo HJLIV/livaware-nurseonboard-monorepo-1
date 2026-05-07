@@ -1344,13 +1344,36 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
         <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Photo ID / Right to Work</h4>
         {rtwDocs.length > 0 && (
           <div className="space-y-2">
-            {rtwDocs.map((doc: any) => (
+            {rtwDocs.map((doc: any) => {
+              const isImage = doc.mimeType?.startsWith("image/") && !!doc.filePath;
+              return (
               <div key={doc.id} className="rounded-lg border border-card-border" data-testid={`doc-rtw-${doc.id}`}>
                 <div className="flex items-center justify-between p-3">
-                  <div className="flex items-center gap-3">
-                    <FileCheck className="h-4 w-4 text-emerald-500" />
-                    <div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    {isImage ? (
+                      <a
+                        href={doc.filePath}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0"
+                        data-testid={`thumb-rtw-${doc.id}`}
+                      >
+                        <img
+                          src={doc.filePath}
+                          alt={doc.type}
+                          className="h-14 w-14 rounded object-cover border border-border"
+                        />
+                      </a>
+                    ) : (
+                      <FileCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+                    )}
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">{doc.type}</p>
+                      {doc.type === "Share Code Screenshot" && doc.notes && (
+                        <p className="text-xs font-mono text-foreground/80" data-testid={`text-rtw-share-code-${doc.id}`}>
+                          Share code: <span className="font-semibold tracking-wider">{doc.notes}</span>
+                        </p>
+                      )}
                       {doc.filePath ? (
                         <DocumentLink doc={doc} />
                       ) : (
@@ -1359,6 +1382,9 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {doc.type === "Share Code Screenshot" && (
+                      <Badge variant="secondary" className="text-xs">Share code</Badge>
+                    )}
                     {doc.uploadedBy === "nurse" && <PortalBadge />}
                     {doc.expiryDate && (
                       <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
@@ -1392,7 +1418,8 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                   isDeleting={deleteDocMutation.isPending && deleteDocMutation.variables === doc.id}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

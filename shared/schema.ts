@@ -200,6 +200,7 @@ export const documents = pgTable("documents", {
   mimeType: text("mime_type"),
   category: text("category"),
   expiryDate: text("expiry_date"),
+  notes: text("notes"),
   uploadedBy: text("uploaded_by").default("admin"),
   sharepointUrl: text("sharepoint_url"),
   aiStatus: text("ai_status"),

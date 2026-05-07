@@ -408,6 +408,7 @@ export function registerDocumentRoutes(app: Express) {
         fileSize: documents.fileSize,
         mimeType: documents.mimeType,
         category: documents.category,
+        notes: documents.notes,
         sharepointUrl: documents.sharepointUrl,
         aiStatus: documents.aiStatus,
         aiIssues: documents.aiIssues,

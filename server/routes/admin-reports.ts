@@ -15,6 +15,7 @@ import { storage } from "../storage";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { isOutlookConfigured } from "../outlook";
 import { evaluateMandatoryTrainingCell } from "../training-status";
+import { filterValidRtwDocs } from "@shared/rtw-evidence";
 import {
   computeOutstandingTrainingForNurse,
   renderChaseEmail,
@@ -277,7 +278,9 @@ export function registerAdminReportsRoutes(app: Express) {
           pickDocs(nurseDocs, ["proof_of_address"], /\b(utility|bank statement|council tax|tenancy|address)\b/i),
         );
         cells["doc_right_to_work"] = documentCell(
-          pickDocs(nurseDocs, ["right_to_work"], /\b(right to work|share code|rtw|visa|brp)\b/i),
+          filterValidRtwDocs(
+            pickDocs(nurseDocs, ["right_to_work"], /\b(right to work|share code|rtw|visa|brp)\b/i),
+          ),
         );
         cells["doc_cv"] = documentCell(
           pickDocs(nurseDocs, ["profile"], /\b(cv|c\.v\.|résumé|resume|curriculum vitae)\b/i),

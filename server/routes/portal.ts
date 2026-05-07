@@ -7,6 +7,7 @@ import { arcadeUsers } from "@shared/schema";
 import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { upload, validatePortalToken, uploadLimiter } from "../middleware";
+import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { sendReferenceRequestEmail } from "../outlook";
 import { parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
@@ -424,9 +425,20 @@ export function registerPortalRoutes(app: Express) {
   app.post("/api/portal/:token/documents", validatePortalToken, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId, uploadedBy: "nurse" };
+    if (
+      data.category === "right_to_work" &&
+      isShareCodeDoc(data) &&
+      !isValidRtwDoc(data)
+    ) {
+      return res.status(400).json({
+        message: "A share code is required to submit a Share Code Screenshot.",
+      });
+    }
     const result = await storage.createDocument(data);
     const docUpdates: Record<string, string> = {};
-    if (data.category === "right_to_work") docUpdates.right_to_work = "in_progress";
+    if (data.category === "right_to_work" && isValidRtwDoc(data)) {
+      docUpdates.right_to_work = "in_progress";
+    }
     if (data.category === "identity") docUpdates.identity = "in_progress";
     if (data.category === "dbs") docUpdates.dbs = "in_progress";
     if (data.category === "indemnity") docUpdates.indemnity = "in_progress";

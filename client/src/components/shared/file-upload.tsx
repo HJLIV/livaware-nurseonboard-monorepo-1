@@ -16,6 +16,8 @@ interface FileUploadProps {
   onUploadComplete: (file: UploadedFile) => void;
   accept?: string;
   maxSizeMB?: number;
+  capture?: "user" | "environment";
+  hint?: string;
   "data-testid"?: string;
 }
 
@@ -24,6 +26,8 @@ export function FileUpload({
   onUploadComplete,
   accept = ".pdf,.jpg,.jpeg,.png,.doc,.docx",
   maxSizeMB = 10,
+  capture,
+  hint,
   "data-testid": testId,
 }: FileUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -131,6 +135,7 @@ export function FileUpload({
           ref={inputRef}
           type="file"
           accept={accept}
+          {...(capture ? { capture } : {})}
           onChange={handleChange}
           className="hidden"
         />
@@ -149,7 +154,7 @@ export function FileUpload({
                 {isDragOver ? "Drop file here" : "Click to upload or drag and drop"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                PDF, JPG, PNG, DOC up to {maxSizeMB}MB
+                {hint || `PDF, JPG, PNG, DOC up to ${maxSizeMB}MB`}
               </p>
             </div>
           </>

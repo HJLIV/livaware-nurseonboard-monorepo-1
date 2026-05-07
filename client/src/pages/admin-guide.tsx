@@ -274,6 +274,11 @@ const SOP_SECTIONS: SOPSection[] = [
         detail:
           "Candidates fill in 10 sections on the onboarding page: Identity & Contact, NMC PIN, DBS, Health & Disability, Competencies, Employment History, References, Training & Certs, Uniform & Equipment, and Policies & Agreements.",
       },
+      {
+        action: "Right to Work — share code evidence",
+        detail:
+          "When a nurse provides a gov.uk Right to Work share code, they must also upload a screenshot of the gov.uk results page (showing photo, name, expiry and status). The portal blocks the upload until a code is typed, and the platform stores the code alongside the screenshot. A typed code without a screenshot is treated as missing evidence everywhere — compliance AI checks, the onboarding matrix and the per-nurse step status. Admins can see the share code value next to the screenshot in the candidate's Right to Work tab and in the Documents to review queue.",
+      },
     ],
     tips: [
       "Nurses can save progress and return later — the portal remembers where they left off.",

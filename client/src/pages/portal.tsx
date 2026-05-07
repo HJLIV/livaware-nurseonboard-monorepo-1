@@ -1229,7 +1229,11 @@ function RightToWorkStep({ token, status }: { token: string; status?: string }) 
   const { data: docs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
   });
-  const rtwDocs = (docs || []).filter((d: any) => d.category === "right_to_work");
+  const allRtwDocs = (docs || []).filter((d: any) => d.category === "right_to_work");
+  const shareCodeDocs = allRtwDocs.filter((d: any) => d.type === "Share Code Screenshot");
+  const rtwDocs = allRtwDocs.filter((d: any) => d.type !== "Share Code Screenshot");
+  const trimmedCode = shareCode.trim();
+  const canSubmitShareCode = trimmedCode.length > 0;
 
   return (
     <SectionWrapper title="Right to Work" icon={<FileCheck className="h-5 w-5" />} status={status}>
@@ -1285,10 +1289,6 @@ function RightToWorkStep({ token, status }: { token: string; status?: string }) 
             <Label>Expiry Date</Label>
             <Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} data-testid="input-portal-rtw-expiry" />
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label>Share Code (if applicable)</Label>
-            <Input value={shareCode} onChange={e => setShareCode(e.target.value)} placeholder="e.g. ABC123DEF" data-testid="input-portal-share-code" />
-          </div>
         </div>
 
         <div className="space-y-3">
@@ -1317,6 +1317,104 @@ function RightToWorkStep({ token, status }: { token: string; status?: string }) 
               });
             }}
           />
+        </div>
+
+        <div className="rounded-lg border border-card-border bg-muted/30 p-4 space-y-4">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Share code (if you have one)</Label>
+            <p className="text-xs text-muted-foreground">
+              If you generated a Right to Work share code on gov.uk (BRP, visa or EU Settlement holders), enter it
+              below <strong>and</strong> upload a screenshot of the gov.uk results page showing your photo, name,
+              expiry date and status. Both the code and the screenshot are required — a code on its own is not
+              accepted.{" "}
+              <a
+                href="https://www.gov.uk/prove-right-to-work"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+                data-testid="link-portal-share-code-help"
+              >
+                How to get your share code <ExternalLink className="h-3 w-3" />
+              </a>
+            </p>
+          </div>
+
+          {shareCodeDocs.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Submitted share codes</Label>
+              {shareCodeDocs.map((doc: any) => (
+                <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm bg-background">
+                  <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">Share code: {doc.notes || "—"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{doc.originalFilename || doc.filename}</p>
+                  </div>
+                  {doc.filePath && (
+                    <a
+                      href={doc.filePath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                      data-testid={`link-portal-share-code-view-${doc.id}`}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Share code</Label>
+            <Input
+              value={shareCode}
+              onChange={(e) => setShareCode(e.target.value)}
+              placeholder="e.g. ABC123DEF"
+              data-testid="input-portal-share-code"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Screenshot of gov.uk share-code page</Label>
+            <p className="text-xs text-muted-foreground">
+              Upload an image (or take a photo) of the gov.uk page showing your photo, name, expiry date and right
+              to work status.
+            </p>
+            {!canSubmitShareCode && (
+              <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-share-code-required">
+                Enter your share code first, then upload the screenshot to submit.
+              </p>
+            )}
+            <div className={canSubmitShareCode ? "" : "pointer-events-none opacity-50"} data-testid="wrapper-share-code-upload">
+              <FileUpload
+                uploadUrl={`/api/portal/${token}/upload`}
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                capture="environment"
+                hint="Image or PDF up to 10MB — camera capture supported on mobile"
+                data-testid="upload-portal-share-code-screenshot"
+                onUploadComplete={(file) => {
+                  if (!canSubmitShareCode) return;
+                  apiRequest("POST", `/api/portal/${token}/documents`, {
+                    type: "Share Code Screenshot",
+                    filename: file.filename,
+                    originalFilename: file.originalFilename,
+                    filePath: file.filePath,
+                    fileSize: file.fileSize,
+                    mimeType: file.mimeType,
+                    category: "right_to_work",
+                    notes: trimmedCode,
+                  }).then(() => {
+                    setShareCode("");
+                    queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+                    toast({ title: "Share code & screenshot saved" });
+                  });
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </SectionWrapper>

@@ -1,6 +1,7 @@
 import type { Express, Request } from "express";
 import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
+import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { checkDbsCertificate, isDbsConfigured, DbsUpdateServiceError } from "../dbs-service";
@@ -466,8 +467,17 @@ export function registerAdminRoutes(app: Express) {
 
   app.post("/api/candidates/:id/documents", async (req, res) => {
     const data = { ...req.body, nurseId: param(req, "id") };
+    if (
+      data.category === "right_to_work" &&
+      isShareCodeDoc(data) &&
+      !isValidRtwDoc(data)
+    ) {
+      return res.status(400).json({
+        message: "A share code is required to submit a Share Code Screenshot.",
+      });
+    }
     const result = await storage.createDocument(data);
-    if (data.category === "right_to_work") {
+    if (data.category === "right_to_work" && isValidRtwDoc(data)) {
       const state = await storage.getOnboardingState(param(req, "id"));
       if (state) {
         const statuses = (state.stepStatuses as Record<string, string>) || {};
@@ -490,7 +500,7 @@ export function registerAdminRoutes(app: Express) {
       const candidate = await storage.getCandidate(param(req, "id"));
       if (!candidate) return res.status(404).json({ message: "Not found" });
       const filePath = `/api/uploads/${req.file.filename}`;
-      const doc = await storage.createDocument({
+      const docInput = {
         nurseId: candidate.id,
         type: req.body.type || "Document",
         filename: req.file.filename,
@@ -500,9 +510,20 @@ export function registerAdminRoutes(app: Express) {
         mimeType: req.file.mimetype,
         category: req.body.category || "general",
         expiryDate: req.body.expiryDate || null,
+        notes: typeof req.body.notes === "string" ? req.body.notes : null,
         uploadedBy: "admin",
-      });
-      if (doc.category === "right_to_work") {
+      };
+      if (
+        docInput.category === "right_to_work" &&
+        isShareCodeDoc(docInput) &&
+        !isValidRtwDoc(docInput)
+      ) {
+        return res.status(400).json({
+          message: "A share code is required to submit a Share Code Screenshot.",
+        });
+      }
+      const doc = await storage.createDocument(docInput);
+      if (doc.category === "right_to_work" && isValidRtwDoc(doc)) {
         const state = await storage.getOnboardingState(candidate.id);
         if (state) {
           const statuses = (state.stepStatuses as Record<string, string>) || {};

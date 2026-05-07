@@ -71,6 +71,7 @@ interface ReviewRow {
   fileSize: number | null;
   mimeType: string | null;
   category: string | null;
+  notes: string | null;
   sharepointUrl: string | null;
   aiStatus: string | null;
   aiIssues: AiIssueEntry[] | null;
@@ -284,11 +285,36 @@ export default function DocumentsReviewPage() {
                       >
                         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_220px_auto] gap-4 items-start">
                           <div className="flex items-start gap-3 min-w-0">
-                            <FileText className="h-4 w-4 mt-0.5 text-muted-foreground/40 shrink-0" />
+                            {doc.mimeType?.startsWith("image/") && doc.filePath ? (
+                              <a
+                                href={doc.filePath}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0"
+                                data-testid={`thumb-review-${doc.id}`}
+                              >
+                                <img
+                                  src={doc.filePath}
+                                  alt={doc.type}
+                                  className="h-12 w-12 rounded object-cover border border-border"
+                                />
+                              </a>
+                            ) : (
+                              <FileText className="h-4 w-4 mt-0.5 text-muted-foreground/40 shrink-0" />
+                            )}
                             <div className="min-w-0 space-y-1">
                               <p className="text-sm font-medium truncate">
                                 {doc.originalFilename || doc.filename}
                               </p>
+                              {doc.type === "Share Code Screenshot" && doc.notes && (
+                                <p
+                                  className="text-[11px] font-mono text-foreground/80"
+                                  data-testid={`text-review-share-code-${doc.id}`}
+                                >
+                                  Share code:{" "}
+                                  <span className="font-semibold tracking-wider">{doc.notes}</span>
+                                </p>
+                              )}
                               <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60">
                                 <time className="tabular-nums">
                                   {formatDate(doc.uploadedAt)}

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage";
 import { MANDATORY_TRAINING_MODULES, COMPETENCY_MATRIX } from "@shared/schema";
+import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 
 const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
@@ -85,8 +86,12 @@ function computeComplianceStatuses(data: {
   const identityDocs = documents.filter(d =>
     d.category === "identity" || d.type === "passport" || d.type === "identity"
   );
-  const rtwDocs = documents.filter(d =>
+  const rtwDocsAll = documents.filter(d =>
     d.category === "right_to_work" || d.type === "right_to_work"
+  );
+  const rtwDocs = rtwDocsAll.filter(isValidRtwDoc);
+  const invalidShareCodeDocs = rtwDocsAll.filter(
+    (d) => isShareCodeDoc(d) && !isValidRtwDoc(d),
   );
   const completedTraining = training.filter(t => t.completedDate);
   const expiredTraining = training.filter(t => {
@@ -154,11 +159,19 @@ function computeComplianceStatuses(data: {
   // 3. Proof of Right to Work
   {
     const hasRtw = rtwDocs.length > 0;
+    const gaps: string[] = [];
+    if (!hasRtw) gaps.push("No right-to-work documentation on file");
+    if (invalidShareCodeDocs.length > 0) {
+      gaps.push("A share-code screenshot was uploaded without a recorded share code — share-code evidence requires both the code and the gov.uk screenshot");
+    }
     statuses.push({
       requirement: "Proof of Right to Work",
       status: hasRtw ? "met" : "not_met",
-      gaps: hasRtw ? [] : ["No right-to-work documentation on file"],
-      indicators: { rightToWorkDocumentsOnFile: rtwDocs.length },
+      gaps,
+      indicators: {
+        rightToWorkDocumentsOnFile: rtwDocs.length,
+        invalidShareCodeScreenshots: invalidShareCodeDocs.length,
+      },
     });
   }
 
