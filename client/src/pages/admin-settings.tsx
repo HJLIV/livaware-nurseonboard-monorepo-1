@@ -31,10 +31,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History } from "lucide-react";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 import { useAuth } from "@/lib/auth";
+import {
+  SUSPECT_BURST_CHAR_THRESHOLD,
+  SUSPECT_BURST_CHAR_THRESHOLD_MIN,
+  SUSPECT_BURST_CHAR_THRESHOLD_MAX,
+  type PreboardIntegritySettings,
+} from "@shared/schema";
 
 interface TrainingChaseScheduleSettings {
   weeklyChaseEnabled: boolean;
@@ -571,6 +577,144 @@ function ReplyScanRows({ detail }: { detail: Record<string, unknown> }) {
   );
 }
 
+interface PreboardIntegrityResponse {
+  settings: PreboardIntegritySettings;
+  bounds: { min: number; max: number };
+}
+
+function PreboardIntegrityCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<PreboardIntegrityResponse>({
+    queryKey: ["/api/admin/settings/preboard-integrity"],
+  });
+  const [draftValue, setDraftValue] = useState<string>("");
+
+  useEffect(() => {
+    if (data?.settings?.suspectBurstCharThreshold !== undefined) {
+      setDraftValue(String(data.settings.suspectBurstCharThreshold));
+    }
+  }, [data?.settings?.suspectBurstCharThreshold]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (patch: Partial<PreboardIntegritySettings>) => {
+      const res = await apiRequest("PUT", "/api/admin/settings/preboard-integrity", patch);
+      return (await res.json()) as PreboardIntegrityResponse;
+    },
+    onSuccess: (resp) => {
+      queryClient.setQueryData(["/api/admin/settings/preboard-integrity"], resp);
+      toast({
+        title: "Threshold saved",
+        description: `Suspect typing burst threshold is now ${resp.settings.suspectBurstCharThreshold} characters.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Save failed",
+        description: err?.message || "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const min = data?.bounds?.min ?? SUSPECT_BURST_CHAR_THRESHOLD_MIN;
+  const max = data?.bounds?.max ?? SUSPECT_BURST_CHAR_THRESHOLD_MAX;
+  const current = data?.settings?.suspectBurstCharThreshold ?? SUSPECT_BURST_CHAR_THRESHOLD;
+  const parsed = Number(draftValue);
+  const valid =
+    Number.isFinite(parsed) &&
+    Math.round(parsed) === parsed &&
+    parsed >= min &&
+    parsed <= max;
+  const dirty = valid && parsed !== current;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start gap-3">
+          <Activity className="h-5 w-5 text-[#C8A96E] mt-1" />
+          <div>
+            <CardTitle>Preboard suspect-typing sensitivity</CardTitle>
+            <CardDescription className="mt-1">
+              Flags an answer when a single chunk of this many characters appears at once between
+              keystrokes — usually a sign of bypassed paste, voice input, or scripted entry. Lower the
+              threshold to catch more cases (risk: more false positives from fast typists or dictation
+              users); raise it to be more lenient.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !data ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="suspect-burst-threshold"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
+                >
+                  Burst threshold (characters)
+                </Label>
+                <Input
+                  id="suspect-burst-threshold"
+                  type="number"
+                  min={min}
+                  max={max}
+                  step={1}
+                  value={draftValue}
+                  onChange={(e) => setDraftValue(e.target.value)}
+                  data-testid="input-suspect-burst-threshold"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Allowed range: {min}–{max}. Default is {SUSPECT_BURST_CHAR_THRESHOLD}.
+                </p>
+                {!valid && draftValue !== "" && (
+                  <p className="text-xs text-destructive" data-testid="text-suspect-burst-error">
+                    Enter a whole number between {min} and {max}.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Current value</p>
+                <p
+                  className="mt-1 font-mono text-sm"
+                  data-testid="text-suspect-burst-current"
+                >
+                  {current} characters
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              {dirty && <p className="text-xs text-amber-400">Unsaved changes</p>}
+              <SuperAdminGate>
+                <Button
+                  size="sm"
+                  disabled={!dirty || !valid || saveMutation.isPending}
+                  onClick={() =>
+                    saveMutation.mutate({ suspectBurstCharThreshold: parsed })
+                  }
+                  data-testid="button-save-suspect-burst-threshold"
+                >
+                  {saveMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-2" /> Save threshold</>
+                  )}
+                </Button>
+              </SuperAdminGate>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1020,6 +1164,8 @@ export default function AdminSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <PreboardIntegrityCard />
 
       <RunDetailDialog runId={openRunId} onClose={() => setOpenRunId(null)} />
 

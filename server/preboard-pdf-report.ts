@@ -2,6 +2,12 @@ import PDFDocument from "pdfkit";
 import type { Assessment, AssessmentResponse } from "@shared/schema";
 import { SUSPECT_BURST_CHAR_THRESHOLD } from "@shared/schema";
 
+interface PdfReportOptions {
+  // Live, admin-tunable suspect-typing burst threshold. When omitted the
+  // hard-coded default is used so existing callers keep working.
+  suspectBurstCharThreshold?: number;
+}
+
 const COLORS = {
   bg: "#020121",
   surface: "#0a0a2e",
@@ -26,7 +32,15 @@ function drawGoldDivider(doc: PDFKit.PDFDocument, y: number, margin: number, wid
   doc.rect(margin, y, width, 0.75).fill(gradient);
 }
 
-export async function generatePdfReport(assessment: Assessment): Promise<Buffer> {
+export async function generatePdfReport(
+  assessment: Assessment,
+  options: PdfReportOptions = {},
+): Promise<Buffer> {
+  const burstThreshold =
+    typeof options.suspectBurstCharThreshold === "number" &&
+    Number.isFinite(options.suspectBurstCharThreshold)
+      ? options.suspectBurstCharThreshold
+      : SUSPECT_BURST_CHAR_THRESHOLD;
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
@@ -97,7 +111,7 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       (r) => typeof r.pasteAttempts === "number" && r.pasteAttempts > 0
     ).length;
     const burstFlaggedQuestions = responses.filter(
-      (r) => typeof r.maxBurstChars === "number" && r.maxBurstChars >= SUSPECT_BURST_CHAR_THRESHOLD
+      (r) => typeof r.maxBurstChars === "number" && r.maxBurstChars >= burstThreshold
     ).length;
     const maxBurstAcross = responses.reduce(
       (m, r) => Math.max(m, typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0),
@@ -114,7 +128,7 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       if (burstFlaggedQuestions > 0) {
         const qLabel = burstFlaggedQuestions === 1 ? "answer" : "answers";
         lines.push(
-          `Suspect typing pattern in ${burstFlaggedQuestions} ${qLabel}: a single chunk of up to ${maxBurstAcross} characters appeared at once (threshold ${SUSPECT_BURST_CHAR_THRESHOLD}). Possible bypassed paste, voice input, or scripted entry.`
+          `Suspect typing pattern in ${burstFlaggedQuestions} ${qLabel}: a single chunk of up to ${maxBurstAcross} characters appeared at once (threshold ${burstThreshold}). Possible bypassed paste, voice input, or scripted entry.`
         );
       }
       const noticeHeight = 28 + lines.length * 18;
@@ -204,7 +218,7 @@ export async function generatePdfReport(assessment: Assessment): Promise<Buffer>
       const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
       const maxBurst = typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0;
       const keystrokes = typeof r.keystrokeCount === "number" ? r.keystrokeCount : 0;
-      const suspectBurst = maxBurst >= SUSPECT_BURST_CHAR_THRESHOLD;
+      const suspectBurst = maxBurst >= burstThreshold;
 
       doc.font("Helvetica").fontSize(9.5);
       const responseHeight = doc.heightOfString(r.response, {

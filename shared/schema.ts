@@ -106,11 +106,21 @@ export const assessmentResponseSchema = z.object({
   maxBurstChars: z.number().int().nonnegative().optional().default(0),
 });
 
-// Threshold for flagging a response as having a "suspect typing pattern":
-// any single chunk of >= this many characters appearing at once between
-// keystrokes is treated as likely pasted/dictated content that bypassed
-// the textarea paste block.
+// Default threshold for flagging a response as having a "suspect typing
+// pattern": any single chunk of >= this many characters appearing at once
+// between keystrokes is treated as likely pasted/dictated content that
+// bypassed the textarea paste block.
+//
+// This is the *default*. Admins can override the live value from the
+// /settings page (stored under the `preboard_integrity` key in
+// `appSettings`). Server + client both fetch the live value at runtime
+// and fall back to this constant if nothing is configured.
 export const SUSPECT_BURST_CHAR_THRESHOLD = 40;
+
+// Hard bounds applied to the admin-tuned threshold so a typo can't
+// disable the detector entirely (too high) or flag every answer (too low).
+export const SUSPECT_BURST_CHAR_THRESHOLD_MIN = 10;
+export const SUSPECT_BURST_CHAR_THRESHOLD_MAX = 500;
 
 export type AssessmentResponse = z.infer<typeof assessmentResponseSchema>;
 
@@ -695,6 +705,21 @@ export function migrateLegacyTrainingChaseRecipients(
   }
   return out;
 }
+
+// Settings shape for the preboard integrity detector. Stored under
+// key = "preboard_integrity". Admins can tune the suspect-typing burst
+// threshold from /settings without a code change. Other integrity knobs
+// (e.g. paste-block toggle) can be added here later.
+export const PREBOARD_INTEGRITY_SETTING_KEY = "preboard_integrity";
+export interface PreboardIntegritySettings {
+  // Min length (in characters) of a single typing burst that flags a
+  // response as "suspect typing". See SUSPECT_BURST_CHAR_THRESHOLD for the
+  // default. Bounded by SUSPECT_BURST_CHAR_THRESHOLD_MIN/MAX on save.
+  suspectBurstCharThreshold: number;
+}
+export const DEFAULT_PREBOARD_INTEGRITY_SETTINGS: PreboardIntegritySettings = {
+  suspectBurstCharThreshold: SUSPECT_BURST_CHAR_THRESHOLD,
+};
 
 // Reading-behaviour columns (time spent, scrolled-to-end, pdf-opened, the
 // median/skimmed summary) are visible only to the super_admin role —

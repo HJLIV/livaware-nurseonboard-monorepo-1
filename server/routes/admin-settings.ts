@@ -9,6 +9,9 @@ import type { Express, Request } from "express";
 import {
   type TrainingChaseScheduleSettings,
   type ScheduledJobRun,
+  type PreboardIntegritySettings,
+  SUSPECT_BURST_CHAR_THRESHOLD_MIN,
+  SUSPECT_BURST_CHAR_THRESHOLD_MAX,
 } from "@shared/schema";
 import {
   requireAdmin,
@@ -20,6 +23,10 @@ import {
   runWeeklyTrainingChase,
   TrainingChaseSettingsValidationError,
 } from "../training-chase-scheduler";
+import {
+  getPreboardIntegritySettings,
+  savePreboardIntegritySettings,
+} from "../preboard-integrity-settings";
 import { isOutlookConfigured } from "../outlook";
 import { storage } from "../storage";
 
@@ -133,9 +140,56 @@ export function registerAdminSettingsRoutes(app: Express): void {
     }
   });
 
-  // POST — fire the weekly chase manually (regardless of schedule). Same
-  // exact code path the scheduled tick uses, so admins can verify the job
-  // works without waiting for Monday.
+  // GET — current preboard integrity settings (suspect-typing burst
+  // threshold). Available to any admin so the /preboard and candidate
+  // detail pages can render the live threshold in their badges.
+  app.get("/api/admin/settings/preboard-integrity", requireAdmin, async (_req, res) => {
+    try {
+      const settings = await getPreboardIntegritySettings();
+      res.json({
+        settings,
+        bounds: {
+          min: SUSPECT_BURST_CHAR_THRESHOLD_MIN,
+          max: SUSPECT_BURST_CHAR_THRESHOLD_MAX,
+        },
+      });
+    } catch (err: any) {
+      console.error("[admin-settings] get preboard-integrity failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load settings" });
+    }
+  });
+
+  // PUT — super-admin gated: update the preboard integrity threshold.
+  app.put("/api/admin/settings/preboard-integrity", requireSuperAdmin, async (req, res) => {
+    try {
+      const body = (req.body || {}) as Partial<Record<keyof PreboardIntegritySettings, unknown>>;
+      const patch: Partial<PreboardIntegritySettings> = {};
+      if (body.suspectBurstCharThreshold !== undefined) {
+        patch.suspectBurstCharThreshold = body.suspectBurstCharThreshold as number;
+      }
+      const settings = await savePreboardIntegritySettings(patch, agentNameFor(req));
+      await storage.createAuditLog({
+        action: "preboard_integrity_settings_updated",
+        agentName: agentNameFor(req),
+        detail: { patch, resulting: settings },
+      });
+      res.json({
+        settings,
+        bounds: {
+          min: SUSPECT_BURST_CHAR_THRESHOLD_MIN,
+          max: SUSPECT_BURST_CHAR_THRESHOLD_MAX,
+        },
+      });
+    } catch (err: any) {
+      if (err && err.name === "PreboardIntegritySettingsValidationError") {
+        res.status(400).json({ message: err.message });
+        return;
+      }
+      console.error("[admin-settings] put preboard-integrity failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to save settings" });
+    }
+  });
+
   app.post("/api/admin/settings/training-chase-schedule/run-weekly-now", requireSuperAdmin, async (req, res) => {
     try {
       const settings = await getTrainingChaseScheduleSettings();

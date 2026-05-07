@@ -6,6 +6,7 @@ import { analyzeAssessment } from "../preboard-ai";
 import { sendEmail } from "../preboard-outlook";
 import { buildEmailHtml } from "../preboard-email-template";
 import { generatePdfReport } from "../preboard-pdf-report";
+import { getSuspectBurstCharThreshold } from "../preboard-integrity-settings";
 import { logAction } from "../services/audit";
 import { db } from "../db";
 import { eq, and, gt } from "drizzle-orm";
@@ -131,7 +132,10 @@ export async function registerRoutes(
               let attachments: { name: string; contentType: string; contentBytes: string }[] | undefined;
 
               try {
-                const pdfBuffer = await generatePdfReport(updated);
+                const suspectBurstCharThreshold = await getSuspectBurstCharThreshold();
+                const pdfBuffer = await generatePdfReport(updated, {
+                  suspectBurstCharThreshold,
+                });
                 const safeName = updated.nurseName.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_");
                 attachments = [{
                   name: `Livaware_Assessment_${safeName}.pdf`,
