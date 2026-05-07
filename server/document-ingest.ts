@@ -20,6 +20,8 @@ export interface IngestResult {
   cvEntriesSkipped: number;
   cvEducationAdded: number;
   cvEducationSkipped: number;
+  cvAddedEmployment: Array<{ id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
+  cvAddedEducation: Array<{ id: string; institution: string; qualification: string; subject: string | null; startDate: string | null; endDate: string | null }>;
   trainingModulesAdded: string[];
   classificationConfidence: string;
   matchedTrainingModules: string[];
@@ -166,6 +168,8 @@ export async function ingestExistingFile(opts: {
   let cvEducationAdded = 0;
   let cvEducationSkipped = 0;
   let cvDetected = false;
+  const cvAddedEmployment: Array<{ id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }> = [];
+  const cvAddedEducation: Array<{ id: string; institution: string; qualification: string; subject: string | null; startDate: string | null; endDate: string | null }> = [];
 
   const looksLikeCv =
     aiAvailable &&
@@ -197,7 +201,7 @@ export async function ingestExistingFile(opts: {
               cvEntriesSkipped += 1;
               continue;
             }
-            await storage.createEmploymentHistory({
+            const created = await storage.createEmploymentHistory({
               nurseId,
               employer: entry.employer,
               jobTitle: entry.jobTitle,
@@ -207,6 +211,14 @@ export async function ingestExistingFile(opts: {
               isCurrent: entry.isCurrent,
               reasonForLeaving: entry.reasonForLeaving,
               duties: entry.duties,
+            });
+            cvAddedEmployment.push({
+              id: created.id,
+              employer: created.employer,
+              jobTitle: created.jobTitle,
+              startDate: created.startDate ?? null,
+              endDate: created.endDate ?? null,
+              isCurrent: !!created.isCurrent,
             });
             seen.add(key);
             cvEntriesAdded += 1;
@@ -224,7 +236,7 @@ export async function ingestExistingFile(opts: {
               cvEducationSkipped += 1;
               continue;
             }
-            await storage.createEducationHistory({
+            const createdEdu = await storage.createEducationHistory({
               nurseId,
               institution: edu.institution,
               qualification: edu.qualification,
@@ -232,6 +244,14 @@ export async function ingestExistingFile(opts: {
               startDate: edu.startDate,
               endDate: edu.endDate,
               grade: edu.grade,
+            });
+            cvAddedEducation.push({
+              id: createdEdu.id,
+              institution: createdEdu.institution,
+              qualification: createdEdu.qualification,
+              subject: createdEdu.subject ?? null,
+              startDate: createdEdu.startDate ?? null,
+              endDate: createdEdu.endDate ?? null,
             });
             seenEdu.add(key);
             cvEducationAdded += 1;
@@ -266,6 +286,8 @@ export async function ingestExistingFile(opts: {
     type: detectedType,
     aiAvailable,
     cvDetected,
+    cvAddedEmployment,
+    cvAddedEducation,
     cvEntriesAdded,
     cvEntriesSkipped,
     cvEducationAdded,

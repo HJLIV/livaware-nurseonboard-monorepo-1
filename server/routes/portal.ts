@@ -322,8 +322,18 @@ export function registerPortalRoutes(app: Express) {
               skippedAsDuplicate: ingest.cvEntriesSkipped,
               addedEducation: ingest.cvEducationAdded,
               educationSkipped: ingest.cvEducationSkipped,
+              addedEmploymentEntries: ingest.cvAddedEmployment,
+              addedEducationEntries: ingest.cvAddedEducation,
             }
-          : { detected: false, addedEntries: 0, skippedAsDuplicate: 0, addedEducation: 0, educationSkipped: 0 },
+          : {
+              detected: false,
+              addedEntries: 0,
+              skippedAsDuplicate: 0,
+              addedEducation: 0,
+              educationSkipped: 0,
+              addedEmploymentEntries: [],
+              addedEducationEntries: [],
+            },
       });
     } catch (err: any) {
       console.error("[Portal CV Upload] Error:", err.message);

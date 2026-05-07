@@ -27,7 +27,7 @@ import {
   CheckCircle, AlertCircle, Loader2, User, Shield, FileCheck,
   Stethoscope, BookOpen, Heart, Users, FileText, ShieldCheck,
   Award, Upload, Plus, Trash2, Info, ExternalLink, Briefcase, Lightbulb, Equal,
-  Lock as LockIcon, Unlock, X
+  Lock as LockIcon, Unlock, X, Sparkles, Pencil, GraduationCap
 } from "lucide-react";
 import {
   PORTAL_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES,
@@ -1335,36 +1335,114 @@ function EmploymentHistoryForm({ token }: { token: string }) {
   const [reasonForLeaving, setReasonForLeaving] = useState("");
   const [duties, setDuties] = useState("");
   const [cvUploading, setCvUploading] = useState(false);
+  const [cvProgressStage, setCvProgressStage] = useState<"uploading" | "parsing" | null>(null);
+  const [cvPreview, setCvPreview] = useState<{
+    fileName: string;
+    employment: Array<{ id: string; employer: string; jobTitle: string; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
+    education: Array<{ id: string; institution: string; qualification: string; subject: string | null; startDate: string | null; endDate: string | null }>;
+    skippedEmployment: number;
+    skippedEducation: number;
+  } | null>(null);
+
+  const focusEntry = (kind: "employment" | "education", id: string) => {
+    const tryFocus = () => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="${kind}-entry-${id}"]`);
+      if (!el) return false;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-accent", "ring-offset-2", "transition-shadow");
+      window.setTimeout(() => {
+        el.classList.remove("ring-2", "ring-accent", "ring-offset-2");
+      }, 2200);
+      return true;
+    };
+    if (!tryFocus()) {
+      window.setTimeout(tryFocus, 300);
+    }
+  };
 
   const handleCvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setCvUploading(true);
+    setCvProgressStage("uploading");
+    setCvPreview(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`/api/portal/${token}/cv-upload`, {
-        method: "POST",
-        body: formData,
+
+      type CvUploadResponse = {
+        document?: unknown;
+        aiAvailable?: boolean;
+        cv?: {
+          detected: boolean;
+          addedEntries?: number;
+          skippedAsDuplicate?: number;
+          addedEducation?: number;
+          educationSkipped?: number;
+          addedEmploymentEntries?: Array<{
+            id: string;
+            employer: string;
+            jobTitle: string;
+            startDate: string | null;
+            endDate: string | null;
+            isCurrent: boolean;
+          }>;
+          addedEducationEntries?: Array<{
+            id: string;
+            institution: string;
+            qualification: string;
+            subject: string | null;
+            startDate: string | null;
+            endDate: string | null;
+          }>;
+        };
+      };
+
+      const result: CvUploadResponse = await new Promise<CvUploadResponse>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `/api/portal/${token}/cv-upload`);
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable && evt.loaded >= evt.total) {
+            setCvProgressStage("parsing");
+          }
+        };
+        xhr.upload.onload = () => setCvProgressStage("parsing");
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText) as CvUploadResponse); } catch (err) { reject(err); }
+          } else {
+            let msg = "Upload failed";
+            try { msg = (JSON.parse(xhr.responseText) as { message?: string }).message || msg; } catch {}
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(formData);
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Upload failed");
-      }
-      const result = await res.json();
+
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "employment-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "education-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
       if (result.cv?.detected) {
-        const parts: string[] = [];
-        if (result.cv.addedEntries) parts.push(`${result.cv.addedEntries} work ${result.cv.addedEntries === 1 ? "entry" : "entries"} added`);
-        if (result.cv.skippedAsDuplicate) parts.push(`${result.cv.skippedAsDuplicate} skipped as duplicate`);
-        if (result.cv.addedEducation) parts.push(`${result.cv.addedEducation} education ${result.cv.addedEducation === 1 ? "entry" : "entries"} added`);
-        toast({
-          title: "CV processed",
-          description: parts.length > 0 ? parts.join(", ") : "No new entries detected",
-        });
+        const employment = result.cv.addedEmploymentEntries || [];
+        const education = result.cv.addedEducationEntries || [];
+        if (employment.length > 0 || education.length > 0) {
+          setCvPreview({
+            fileName: file.name,
+            employment,
+            education,
+            skippedEmployment: result.cv.skippedAsDuplicate || 0,
+            skippedEducation: result.cv.educationSkipped || 0,
+          });
+        } else {
+          toast({
+            title: "CV processed",
+            description: (result.cv.skippedAsDuplicate || result.cv.educationSkipped)
+              ? "All entries from this CV were already in your history."
+              : "No new entries detected",
+          });
+        }
       } else {
         toast({
           title: "CV uploaded",
@@ -1378,6 +1456,7 @@ function EmploymentHistoryForm({ token }: { token: string }) {
       toast({ title: "Upload failed", description: err.message || "Could not process CV", variant: "destructive" });
     } finally {
       setCvUploading(false);
+      setCvProgressStage(null);
       e.target.value = "";
     }
   };
@@ -1447,11 +1526,151 @@ function EmploymentHistoryForm({ token }: { token: string }) {
           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={cvUploading}>
             <span>
               {cvUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              {cvUploading ? "Reading CV..." : "Upload CV to auto-fill work history"}
+              {cvUploading
+                ? cvProgressStage === "uploading"
+                  ? "Uploading CV..."
+                  : "Reading CV with AI..."
+                : "Upload CV to auto-fill work history"}
             </span>
           </Button>
         </label>
       </div>
+
+      {cvUploading && (
+        <div
+          className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-2"
+          data-testid="cv-upload-progress"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-xs">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+            <span className="font-medium">
+              {cvProgressStage === "uploading" ? "Uploading your CV..." : "AI is reading your CV..."}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-accent/10">
+            <div
+              className={cn(
+                "h-full bg-accent transition-all",
+                cvProgressStage === "uploading" ? "w-1/3" : "w-2/3 animate-pulse",
+              )}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {cvProgressStage === "uploading"
+              ? "Sending the file to our secure portal."
+              : "Extracting your work and education history. This usually takes 10–30 seconds."}
+          </p>
+        </div>
+      )}
+
+      {cvPreview && !cvUploading && (
+        <div
+          className="rounded-lg border border-accent/40 bg-accent/5 p-3 space-y-3"
+          data-testid="cv-preview-panel"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <Sparkles className="h-4 w-4 text-accent mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold">
+                  We added {cvPreview.employment.length + cvPreview.education.length} {cvPreview.employment.length + cvPreview.education.length === 1 ? "entry" : "entries"} from your CV
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  From {cvPreview.fileName} — review the entries below and edit anything that doesn't look right.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => setCvPreview(null)}
+              data-testid="button-cv-preview-dismiss"
+              aria-label="Dismiss CV preview"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {cvPreview.employment.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground/80 flex items-center gap-1">
+                <Briefcase className="h-3 w-3" /> Work history ({cvPreview.employment.length})
+              </p>
+              <ul className="space-y-1.5">
+                {cvPreview.employment.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-card-border bg-background/50 px-2.5 py-1.5"
+                    data-testid={`cv-preview-employment-${entry.id}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{entry.jobTitle || "Untitled role"}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {entry.employer || "Unknown employer"}
+                        {entry.startDate ? ` • ${entry.startDate}${entry.isCurrent ? " — Present" : entry.endDate ? ` — ${entry.endDate}` : ""}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1 shrink-0"
+                      onClick={() => focusEntry("employment", entry.id)}
+                      data-testid={`button-cv-preview-edit-employment-${entry.id}`}
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {cvPreview.education.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground/80 flex items-center gap-1">
+                <GraduationCap className="h-3 w-3" /> Education ({cvPreview.education.length})
+              </p>
+              <ul className="space-y-1.5">
+                {cvPreview.education.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-card-border bg-background/50 px-2.5 py-1.5"
+                    data-testid={`cv-preview-education-${entry.id}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">
+                        {entry.qualification || "Qualification"}{entry.subject ? ` — ${entry.subject}` : ""}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {entry.institution || "Unknown institution"}
+                        {entry.startDate || entry.endDate ? ` • ${entry.startDate || "?"} — ${entry.endDate || "Present"}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1 shrink-0"
+                      onClick={() => focusEntry("education", entry.id)}
+                      data-testid={`button-cv-preview-edit-education-${entry.id}`}
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(cvPreview.skippedEmployment > 0 || cvPreview.skippedEducation > 0) && (
+            <p className="text-[11px] text-muted-foreground">
+              Skipped as duplicates: {cvPreview.skippedEmployment} work, {cvPreview.skippedEducation} education.
+            </p>
+          )}
+        </div>
+      )}
 
       {isLoading && <Skeleton className="h-16 w-full" />}
 
