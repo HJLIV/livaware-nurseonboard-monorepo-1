@@ -245,6 +245,66 @@ export function registerPortalRoutes(app: Express) {
     });
   });
 
+  app.post("/api/portal/:token/cv-upload", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      const nurseId = (req as any).nurseId;
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+      const supportedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
+      if (!supportedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ message: "Only PDF and image files are accepted" });
+      }
+
+      const absolutePath = path.join(uploadsDir, req.file.filename);
+      const { ingestExistingFile } = await import("../document-ingest");
+
+      const ingest = await ingestExistingFile({
+        nurseId,
+        absolutePath,
+        originalFilename: req.file.originalname,
+        mimeType: req.file.mimetype,
+        source: "nurse",
+        uploadedBy: "nurse",
+      });
+
+      const doc = await storage.getDocument(ingest.documentId);
+
+      await storage.createAuditLog({
+        nurseId,
+        action: "portal_cv_uploaded",
+        agentName: "nurse_portal",
+        detail: {
+          detectedCategory: ingest.category,
+          detectedType: ingest.type,
+          documentId: ingest.documentId,
+          aiAvailable: ingest.aiAvailable,
+          cvDetected: ingest.cvDetected,
+          cvEntriesAdded: ingest.cvEntriesAdded,
+          cvEntriesSkipped: ingest.cvEntriesSkipped,
+          cvEducationAdded: ingest.cvEducationAdded,
+          cvEducationSkipped: ingest.cvEducationSkipped,
+        },
+      });
+
+      res.json({
+        document: doc,
+        aiAvailable: ingest.aiAvailable,
+        cv: ingest.cvDetected
+          ? {
+              detected: true,
+              addedEntries: ingest.cvEntriesAdded,
+              skippedAsDuplicate: ingest.cvEntriesSkipped,
+              addedEducation: ingest.cvEducationAdded,
+              educationSkipped: ingest.cvEducationSkipped,
+            }
+          : { detected: false, addedEntries: 0, skippedAsDuplicate: 0, addedEducation: 0, educationSkipped: 0 },
+      });
+    } catch (err: any) {
+      console.error("[Portal CV Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to process CV" });
+    }
+  });
+
   app.post("/api/portal/:token/passport-photo", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });

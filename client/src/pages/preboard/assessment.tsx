@@ -652,7 +652,192 @@ function AudioPlayer() {
   );
 }
 
-function IntroScreen({ onStart }: { onStart: () => void }) {
+function CvUploadCard({ token }: { token: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<
+    | null
+    | {
+        kind: "success";
+        addedEntries: number;
+        addedEducation: number;
+        skipped: number;
+        filename: string;
+      }
+    | { kind: "noCv"; filename: string }
+    | { kind: "error"; message: string }
+  >(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/portal/${token}/cv-upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Upload failed");
+      }
+      const data = await res.json();
+      if (data.cv?.detected) {
+        setResult({
+          kind: "success",
+          addedEntries: data.cv.addedEntries || 0,
+          addedEducation: data.cv.addedEducation || 0,
+          skipped: data.cv.skippedAsDuplicate || 0,
+          filename: file.name,
+        });
+      } else {
+        setResult({ kind: "noCv", filename: file.name });
+      }
+    } catch (err: any) {
+      setResult({ kind: "error", message: err.message || "Could not process CV" });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div
+      style={{
+        background: `linear-gradient(145deg, ${BRAND.card} 0%, ${BRAND.surface} 100%)`,
+        border: `1px dashed ${BRAND.accent}55`,
+        borderRadius: 8,
+        padding: "22px 26px",
+        marginBottom: 28,
+        animation: "fadeUp 0.6s ease-out 0.42s both",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: FONT.mono,
+          color: BRAND.accentDim,
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: "0.2em",
+          textTransform: "uppercase",
+          marginBottom: 10,
+        }}
+      >
+        Optional · before you begin
+      </div>
+      <div
+        style={{
+          fontFamily: FONT.heading,
+          color: BRAND.text,
+          fontSize: 18,
+          fontWeight: 400,
+          marginBottom: 8,
+          letterSpacing: "-0.005em",
+        }}
+      >
+        Attach your CV
+      </div>
+      <p
+        style={{
+          fontFamily: FONT.body,
+          color: BRAND.textSoft,
+          fontSize: 13,
+          lineHeight: 1.7,
+          marginBottom: 16,
+        }}
+      >
+        Sharing your CV helps us read your responses alongside your work history and competencies — so we can make a fair, complete decision. We'll auto-fill your work history from the file; you can edit anything later.
+      </p>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.webp,.gif"
+        style={{ display: "none" }}
+        onChange={handleUpload}
+        disabled={uploading}
+        data-testid="input-assessment-cv-upload"
+      />
+      <button
+        type="button"
+        data-testid="button-assessment-cv-upload"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        style={{
+          padding: "0 28px",
+          minHeight: 40,
+          background: "transparent",
+          border: `1px solid ${BRAND.accent}`,
+          color: BRAND.accent,
+          fontSize: 11,
+          fontFamily: FONT.mono,
+          fontWeight: 500,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          cursor: uploading ? "wait" : "pointer",
+          borderRadius: 4,
+          opacity: uploading ? 0.6 : 1,
+        }}
+      >
+        {uploading ? "Reading CV…" : result?.kind === "success" || result?.kind === "noCv" ? "Replace CV" : "Upload CV (PDF or image)"}
+      </button>
+
+      {result?.kind === "success" && (
+        <div
+          role="status"
+          style={{
+            marginTop: 14,
+            fontFamily: FONT.mono,
+            color: BRAND.accent,
+            fontSize: 11,
+            lineHeight: 1.7,
+          }}
+        >
+          ✓ {result.filename} attached.
+          {" "}
+          {result.addedEntries > 0 && `${result.addedEntries} work ${result.addedEntries === 1 ? "entry" : "entries"} added`}
+          {result.addedEntries > 0 && result.addedEducation > 0 && " · "}
+          {result.addedEducation > 0 && `${result.addedEducation} education ${result.addedEducation === 1 ? "entry" : "entries"} added`}
+          {result.addedEntries === 0 && result.addedEducation === 0 && "No new entries detected — but the file is on file."}
+          {result.skipped > 0 && ` · ${result.skipped} skipped as duplicate`}
+        </div>
+      )}
+      {result?.kind === "noCv" && (
+        <div
+          role="status"
+          style={{
+            marginTop: 14,
+            fontFamily: FONT.mono,
+            color: BRAND.muted,
+            fontSize: 11,
+            lineHeight: 1.7,
+          }}
+        >
+          {result.filename} uploaded, but we couldn't recognise it as a CV. The admin team will still see the file.
+        </div>
+      )}
+      {result?.kind === "error" && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 14,
+            fontFamily: FONT.mono,
+            color: BRAND.danger,
+            fontSize: 11,
+            lineHeight: 1.7,
+          }}
+        >
+          Upload failed: {result.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntroScreen({ onStart, portalToken }: { onStart: () => void; portalToken: string | null }) {
   return (
     <div
       style={{
@@ -736,6 +921,8 @@ function IntroScreen({ onStart }: { onStart: () => void }) {
         </div>
 
         <AudioPlayer />
+
+        {portalToken && <CvUploadCard token={portalToken} />}
 
         <div
           style={{
@@ -1665,7 +1852,6 @@ export default function AssessmentPage() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (token) {
-      setPortalToken(token);
       fetch(`/api/portal/${token}`)
         .then((r) => {
           if (!r.ok) {
@@ -1676,6 +1862,7 @@ export default function AssessmentPage() {
         })
         .then((data) => {
           if (data?.nurse) {
+            setPortalToken(token);
             setNurseInfo({
               name: data.nurse.fullName || "",
               email: data.nurse.email || "",
@@ -1750,7 +1937,7 @@ export default function AssessmentPage() {
   };
 
   if (screen === "info") return <InfoCollectionScreen onSubmit={handleInfoSubmit} />;
-  if (screen === "intro") return <IntroScreen onStart={() => setScreen("question")} />;
+  if (screen === "intro") return <IntroScreen onStart={() => setScreen("question")} portalToken={portalToken} />;
   if (screen === "complete") return <CompletionScreen />;
 
   if (submitting || submitError) {

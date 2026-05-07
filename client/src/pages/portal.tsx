@@ -1334,6 +1334,53 @@ function EmploymentHistoryForm({ token }: { token: string }) {
   const [isCurrent, setIsCurrent] = useState(false);
   const [reasonForLeaving, setReasonForLeaving] = useState("");
   const [duties, setDuties] = useState("");
+  const [cvUploading, setCvUploading] = useState(false);
+
+  const handleCvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCvUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/portal/${token}/cv-upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Upload failed");
+      }
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "employment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "education-history"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      if (result.cv?.detected) {
+        const parts: string[] = [];
+        if (result.cv.addedEntries) parts.push(`${result.cv.addedEntries} work ${result.cv.addedEntries === 1 ? "entry" : "entries"} added`);
+        if (result.cv.skippedAsDuplicate) parts.push(`${result.cv.skippedAsDuplicate} skipped as duplicate`);
+        if (result.cv.addedEducation) parts.push(`${result.cv.addedEducation} education ${result.cv.addedEducation === 1 ? "entry" : "entries"} added`);
+        toast({
+          title: "CV processed",
+          description: parts.length > 0 ? parts.join(", ") : "No new entries detected",
+        });
+      } else {
+        toast({
+          title: "CV uploaded",
+          description: result.aiAvailable
+            ? "We couldn't detect a CV in this file. Please add entries manually."
+            : "AI parsing is unavailable right now. Please add entries manually.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message || "Could not process CV", variant: "destructive" });
+    } finally {
+      setCvUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const { data: entries = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "employment-history"],
@@ -1380,6 +1427,31 @@ function EmploymentHistoryForm({ token }: { token: string }) {
       <p className="text-xs text-muted-foreground">
         List your employment history starting with the most recent. Include all nursing positions and any gaps in employment.
       </p>
+
+      <div className="rounded-lg border border-dashed border-accent/40 bg-accent/5 p-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="text-xs font-medium">Save time — upload your CV</p>
+          <p className="text-[11px] text-muted-foreground">
+            We'll read your CV and pre-fill your work history below. You can edit anything afterwards.
+          </p>
+        </div>
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.gif"
+            className="hidden"
+            onChange={handleCvUpload}
+            disabled={cvUploading}
+            data-testid="input-portal-cv-upload"
+          />
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={cvUploading}>
+            <span>
+              {cvUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {cvUploading ? "Reading CV..." : "Upload CV to auto-fill work history"}
+            </span>
+          </Button>
+        </label>
+      </div>
 
       {isLoading && <Skeleton className="h-16 w-full" />}
 
