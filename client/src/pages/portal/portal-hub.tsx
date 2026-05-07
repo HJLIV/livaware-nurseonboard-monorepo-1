@@ -47,27 +47,27 @@ interface PortalData {
 const onboardingProcessSteps = [
   {
     number: 1,
-    title: "Initial Calls",
+    title: "Initial assessment & clinical competency questionnaire",
     description:
-      "We begin by getting to know you—your qualifications, experience, and aspirations to ensure a fit not just for the role but also for the culture and values of the organisations we serve.",
+      "You'll start with a short timed clinical and situational assessment, followed by a competency self-rating across the core nursing domains. This helps us understand your strengths and tailor the rest of your journey.",
   },
   {
     number: 2,
-    title: "Qualification Verification",
+    title: "CV & qualifications upload",
     description:
-      "We meticulously verify your credentials to maintain the integrity and quality of healthcare professionals going into people's homes.",
+      "Upload your CV along with supporting qualification documents so our team can verify your credentials and education history. The portal walks you through each document we need.",
   },
   {
     number: 3,
-    title: "Background Checks",
+    title: "Identity, right-to-work & background checks",
     description:
-      "Comprehensive background screenings are conducted to ensure the safety and trustworthiness of our workforce, aligning with industry regulations and client expectations.",
+      "Next you'll add your passport or photo ID, verify your NMC PIN, complete your DBS check and confirm your Right to Work. Each step has clear guidance and links to the official services.",
   },
   {
     number: 4,
-    title: "Compliance Training",
+    title: "Mandatory training, references & policies",
     description:
-      "You will undergo specialised training sessions focusing on regulatory standards and best practices in healthcare. These sessions are crucial for upholding our commitment to service excellence and patient care.",
+      "You'll work through your CSTF mandatory training modules and nominate your professional references. Finally, you'll read and sign the policies required to work with us.",
   },
 ];
 
@@ -400,7 +400,7 @@ export default function PortalHub() {
       // just brand-new portal links. We key the "seen" flag by token +
       // copy version so each nurse sees it once and won't see it again
       // after they click Continue.
-      const seenKey = `portal-intro-seen:v2:${token}`;
+      const seenKey = `portal-intro-seen:v3:${token}`;
       let alreadySeen = false;
       try {
         alreadySeen = window.localStorage.getItem(seenKey) === "1";
@@ -413,7 +413,7 @@ export default function PortalHub() {
 
   const dismissIntro = () => {
     try {
-      window.localStorage.setItem(`portal-intro-seen:v2:${token}`, "1");
+      window.localStorage.setItem(`portal-intro-seen:v3:${token}`, "1");
     } catch {
       // ignore — storage may be unavailable (private mode, etc.)
     }
