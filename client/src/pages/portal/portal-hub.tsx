@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRoute } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,18 @@ import {
   Shield,
   Clock,
   Sparkles,
-  Lock,
+  BookOpenCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import {
+  PortalShell,
+  buildPortalGroups,
+  normalizeStatus,
+  ADDITIONAL_ONBOARDING_ITEMS,
+  type PortalSidebarGroup,
+} from "@/components/layout/portal-shell";
 import ChaseUpload, { type ChaseStatusResponse } from "@/pages/portal/chase-upload";
+import { PORTAL_STEPS } from "@shared/schema";
 
 interface PortalData {
   nurse: {
@@ -37,33 +44,6 @@ interface PortalData {
   token: string;
   firstVisit?: boolean;
 }
-
-const journeyConfig = [
-  {
-    key: "preboard" as const,
-    label: "Applicant Assessment",
-    description: "Complete your initial assessment and screening",
-    icon: ClipboardCheck,
-    color: "text-blue-400",
-    bgColor: "bg-blue-500/10",
-  },
-  {
-    key: "onboard" as const,
-    label: "Candidate Onboarding",
-    description: "Complete orientation and compliance training",
-    icon: ShieldCheck,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500/10",
-  },
-  {
-    key: "skillsArcade" as const,
-    label: "Pre-Induction",
-    description: "Demonstrate competency in required clinical skills",
-    icon: Gamepad2,
-    color: "text-amber-400",
-    bgColor: "bg-amber-500/10",
-  },
-];
 
 const introStages = [
   {
@@ -102,18 +82,8 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
   const firstName = nurseName.split(" ")[0];
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="mx-auto max-w-2xl px-4 py-6">
-          <div className="flex items-center gap-3">
-            <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
-            <div className="h-6 w-px bg-border" />
-            <p className="text-xs text-muted-foreground">Clinical Workforce Platform</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-2xl px-4 py-10">
+    <div data-testid="portal-welcome-intro">
+      <div className="mx-auto max-w-2xl py-2">
         <div className="text-center mb-10 animate-fade-in-up">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 ring-1 ring-primary/20 mb-5">
             <Sparkles className="w-8 h-8 text-primary" />
@@ -211,8 +181,158 @@ function WelcomeIntro({ nurseName, onContinue }: { nurseName: string; onContinue
   );
 }
 
+function OverviewPanel({
+  portal,
+  stepStatuses,
+  onJumpToOnboarding,
+}: {
+  portal: PortalData;
+  stepStatuses: Record<string, string>;
+  onJumpToOnboarding: (stepKey?: string) => void;
+}) {
+  const { nurse, journey, token } = portal;
+
+  const onboardCompleted = PORTAL_STEPS.filter(
+    (s) => normalizeStatus(stepStatuses[s.key]) === "completed",
+  ).length;
+  const onboardAwaiting = PORTAL_STEPS.filter(
+    (s) => normalizeStatus(stepStatuses[s.key]) === "awaiting_verification",
+  ).length;
+  const onboardTotal = PORTAL_STEPS.length + ADDITIONAL_ONBOARDING_ITEMS.length;
+
+  const stages = [
+    {
+      key: "assessment",
+      label: "Assessment",
+      description: "Complete your initial clinical and situational assessment.",
+      icon: ClipboardCheck,
+      color: "text-blue-400",
+      bgColor: "bg-blue-500/10",
+      status: journey.preboard.status,
+      actionUrl: journey.preboard.actionUrl,
+      actionLabel: journey.preboard.label,
+      progress: undefined as string | undefined,
+    },
+    {
+      key: "onboard",
+      label: "Onboarding",
+      description: "Identity, documents, training, references and personal declarations.",
+      icon: ShieldCheck,
+      color: "text-emerald-400",
+      bgColor: "bg-emerald-500/10",
+      status: journey.onboard.status,
+      actionUrl: undefined,
+      actionLabel: onboardCompleted > 0 ? "Continue" : "Start onboarding",
+      progress: `${onboardCompleted} of ${onboardTotal} complete${onboardAwaiting > 0 ? ` · ${onboardAwaiting} awaiting verification` : ""}`,
+    },
+    {
+      key: "compliance",
+      label: "Compliance",
+      description: "Policies, training documents, Livaware modules and the Clinical Skills Arcade.",
+      icon: BookOpenCheck,
+      color: "text-amber-400",
+      bgColor: "bg-amber-500/10",
+      status: journey.skillsArcade.status,
+      actionUrl: journey.skillsArcade.actionUrl,
+      actionLabel: "Open Skills Arcade",
+      progress: "Policies, training documents and Livaware modules coming soon",
+    },
+  ];
+
+  return (
+    <div className="space-y-6" data-testid="portal-overview">
+      <div>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">
+          Welcome back
+        </p>
+        <h1 className="font-serif text-3xl font-light tracking-tight" data-testid="text-overview-name">
+          {nurse.fullName}
+        </h1>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Current stage:</span>
+          <StatusBadge status={nurse.currentStage} isStage />
+        </div>
+        <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
+          Use the sidebar on the left to jump to any section. Anything still
+          outstanding is pinned at the top of the menu so you always know where
+          you left off.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {stages.map((stage) => {
+          const norm = normalizeStatus(stage.status);
+          const isCompleted = norm === "completed";
+          const isInProgress = norm === "in_progress" || norm === "awaiting_verification";
+          const Icon = stage.icon;
+
+          const handleAction = () => {
+            if (stage.key === "onboard") {
+              onJumpToOnboarding();
+            } else if (stage.actionUrl) {
+              window.location.href = stage.actionUrl;
+            }
+          };
+
+          return (
+            <Card
+              key={stage.key}
+              className={cn(
+                "transition-all",
+                isInProgress && "ring-1 ring-primary/20 border-primary/15",
+              )}
+              data-testid={`overview-stage-${stage.key}`}
+            >
+              <CardContent className="flex items-center gap-4 py-5">
+                <div
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center rounded-xl shrink-0",
+                    isCompleted ? "bg-emerald-500/10" : stage.bgColor,
+                  )}
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  ) : (
+                    <Icon className={cn("h-5 w-5", stage.color)} />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{stage.label}</p>
+                    <StatusBadge status={stage.status} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {stage.progress || stage.description}
+                  </p>
+                </div>
+
+                {isCompleted ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
+                  >
+                    Done
+                  </Badge>
+                ) : (
+                  <Button size="sm" onClick={handleAction} className="shrink-0">
+                    {stage.actionLabel}
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+      </div>
+    </div>
+  );
+}
+
 export default function PortalHub() {
   const [, params] = useRoute("/portal/:token");
+  const [, navigate] = useLocation();
   const token = params?.token;
   const [showIntro, setShowIntro] = useState<boolean | null>(null);
 
@@ -222,14 +342,15 @@ export default function PortalHub() {
     retry: false,
   });
 
-  // Chase emails put a portal token in the link. If this token corresponds
-  // to a trainingNotifications row, we skip the regular hub and drop the
-  // nurse straight into the focused "upload outstanding certificates" view
-  // pre-populated with exactly the modules from that reminder.
   const { data: chaseStatus, isLoading: chaseLoading } = useQuery<ChaseStatusResponse>({
     queryKey: [`/api/portal/${token}/chase-status`],
     enabled: !!token,
     retry: false,
+  });
+
+  const { data: onboardingState } = useQuery<{ stepStatuses?: Record<string, string> } | null>({
+    queryKey: ["/api/portal", token, "onboarding-state"],
+    enabled: !!token && !!portal && !chaseStatus?.isChase,
   });
 
   useEffect(() => {
@@ -237,6 +358,20 @@ export default function PortalHub() {
       setShowIntro(portal.firstVisit === true);
     }
   }, [portal, showIntro]);
+
+  const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
+
+  const groups = useMemo<PortalSidebarGroup[]>(() => {
+    if (!portal || !token) return [];
+    return buildPortalGroups({
+      token,
+      journey: portal.journey,
+      stepStatuses,
+      selectOverview: () => navigate(`/portal/${token}`),
+      selectOnboardingStep: (stepKey) =>
+        navigate(`/portal/page/${token}?step=${stepKey}`),
+    });
+  }, [portal, token, stepStatuses, navigate]);
 
   if (isLoading || chaseLoading || (portal && showIntro === null)) {
     return (
@@ -273,167 +408,34 @@ export default function PortalHub() {
     );
   }
 
-  // Chase-link short-circuit: skip the welcome intro AND the journey hub.
-  // Nurses arriving from a chase email see only the modules they need to
-  // upload, and "you're up to date" once everything is satisfied.
   if (chaseStatus?.isChase) {
     return <ChaseUpload token={token!} initialData={chaseStatus} />;
   }
 
-  if (showIntro) {
-    return (
-      <WelcomeIntro
-        nurseName={portal.nurse.fullName}
-        onContinue={() => setShowIntro(false)}
-      />
-    );
-  }
-
-  const { nurse, journey } = portal;
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card">
-        <div className="mx-auto max-w-2xl px-4 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
-            <div className="h-6 w-px bg-border" />
-            <div>
-              <p className="text-sm font-medium">Portal</p>
-              <p className="text-xs text-muted-foreground">
-                Onboarding Journey
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        {/* Welcome */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-1">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Welcome back,</span>
-          </div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            {nurse.fullName}
-          </h2>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Current stage:</span>
-            <StatusBadge status={nurse.currentStage} isStage />
-          </div>
-        </div>
-
-        {/* Journey Checklist */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Your Journey
-          </h3>
-
-          {journeyConfig.map((stage) => {
-            const data = journey[stage.key];
-            const isCompleted =
-              data.status === "completed" ||
-              data.status === "cleared" ||
-              data.status === "competent";
-            const isActive = data.status === "in_progress";
-            // Stages are no longer locked behind one another. The candidate
-            // can jump into onboarding or the skills arcade at any point and
-            // come back to the assessment when convenient.
-            const isLocked = data.status === "locked";
-            const Icon = stage.icon;
-            const lockReason: string | null = null;
-
-            return (
-              <Card
-                key={stage.key}
-                className={cn(
-                  "transition-all",
-                  isActive && "ring-1 ring-primary/30 border-primary/20",
-                  isLocked && "opacity-60",
-                )}
-              >
-                <CardContent className="flex items-center gap-4 py-5">
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-lg shrink-0",
-                      isCompleted
-                        ? "bg-emerald-500/10"
-                        : isActive
-                          ? stage.bgColor
-                          : "bg-muted",
-                    )}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                    ) : isLocked ? (
-                      <Lock className="h-5 w-5 text-muted-foreground/50" />
-                    ) : (
-                      <Icon
-                        className={cn(
-                          "h-5 w-5",
-                          isActive ? stage.color : "text-muted-foreground",
-                        )}
-                      />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className={cn("text-sm font-medium", isLocked && "text-muted-foreground")}>{stage.label}</p>
-                      {isLocked ? (
-                        <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wider bg-muted/50 text-muted-foreground/60 border-border/40">
-                          Locked
-                        </Badge>
-                      ) : (
-                        <StatusBadge status={data.status} />
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {lockReason || stage.description}
-                    </p>
-                  </div>
-
-                  {isCompleted && (
-                    <Badge
-                      variant="outline"
-                      className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
-                    >
-                      Done
-                    </Badge>
-                  )}
-
-                  {data.actionUrl && isActive && (
-                    <Link href={data.actionUrl}>
-                      <Button size="sm" className="shrink-0">
-                        {data.label || "Continue"}
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  )}
-
-                  {data.actionUrl && isCompleted && (
-                    <Link href={data.actionUrl}>
-                      <Button size="sm" variant="outline" className="shrink-0">
-                        {data.label || "Update"}
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div className="mt-12 text-center">
-          <p className="text-xs text-muted-foreground">
-            Need help? Contact your administrator or supervisor.
-          </p>
-        </div>
-      </div>
-    </div>
+    <PortalShell
+      token={token!}
+      candidateName={portal.nurse.fullName}
+      groups={groups}
+      activeKey="overview"
+    >
+      {showIntro ? (
+        <WelcomeIntro
+          nurseName={portal.nurse.fullName}
+          onContinue={() => setShowIntro(false)}
+        />
+      ) : (
+        <OverviewPanel
+          portal={portal}
+          stepStatuses={stepStatuses}
+          onJumpToOnboarding={(stepKey) => {
+            const target = stepKey
+              ? `/portal/page/${token}?step=${stepKey}`
+              : `/portal/page/${token}`;
+            navigate(target);
+          }}
+        />
+      )}
+    </PortalShell>
   );
 }

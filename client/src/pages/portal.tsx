@@ -1,7 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useParams } from "wouter";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { PortalLayout } from "@/components/layout/portal-layout";
+import {
+  PortalShell,
+  buildPortalGroups,
+  type PortalSidebarGroup,
+} from "@/components/layout/portal-shell";
 import { FileUpload } from "@/components/shared/file-upload";
 import { SpecialismSelector } from "@/components/specialism-selector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2686,10 +2690,46 @@ function EqualOpportunitiesStep({ token, status }: { token: string; status?: str
   );
 }
 
+interface PortalHubData {
+  nurse: { id: string; fullName: string; email: string; currentStage: string };
+  journey: {
+    preboard: { status: string; actionUrl?: string; label: string };
+    onboard: { status: string; actionUrl?: string; label: string };
+    skillsArcade: { status: string; actionUrl?: string; label: string };
+  };
+  token: string;
+}
+
+function getStepFromQuery(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("step");
+}
+
 export default function PortalPage() {
   const params = useParams<{ token: string }>();
   const token = params.token || "";
-  const [currentStep, setCurrentStep] = useState(1);
+  const [, navigate] = useLocation();
+
+  // Read deep-link ?step= on mount and convert to step index. Falls back to 1.
+  const [currentStep, setCurrentStep] = useState<number>(() => {
+    const stepKey = getStepFromQuery();
+    if (!stepKey) return 1;
+    const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+    return idx >= 0 ? idx + 1 : 1;
+  });
+
+  // Re-sync if the URL changes (e.g. clicking a sidebar item from another step).
+  useEffect(() => {
+    const handler = () => {
+      const stepKey = getStepFromQuery();
+      if (!stepKey) return;
+      const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+      if (idx >= 0) setCurrentStep(idx + 1);
+    };
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+  }, []);
 
   const { data: verifyData, isLoading: verifyLoading, error: verifyError } = useQuery<{
     candidate: Candidate;
@@ -2697,6 +2737,12 @@ export default function PortalPage() {
   }>({
     queryKey: ["/api/portal/verify", token],
     enabled: !!token,
+  });
+
+  const { data: portalHub } = useQuery<PortalHubData>({
+    queryKey: [`/api/portal/${token}`],
+    enabled: !!verifyData,
+    retry: false,
   });
 
   const { data: onboardingState } = useQuery<OnboardingState | null>({
@@ -2718,6 +2764,43 @@ export default function PortalPage() {
     queryKey: ["/api/portal", token, "candidate"],
     enabled: !!verifyData,
   });
+
+  const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
+  const totalSteps = PORTAL_STEPS.length;
+
+  const goToStep = useCallback(
+    (stepIndex: number) => {
+      const clamped = Math.max(1, Math.min(totalSteps, stepIndex));
+      setCurrentStep(clamped);
+      const stepKey = PORTAL_STEPS[clamped - 1]?.key;
+      if (stepKey && typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("step", stepKey);
+        window.history.replaceState({}, "", url.toString());
+      }
+    },
+    [totalSteps],
+  );
+
+  const groups = useMemo<PortalSidebarGroup[]>(() => {
+    if (!token) return [];
+    const fallbackJourney = {
+      preboard: { status: "in_progress", actionUrl: `/preboard/assessment?token=${token}`, label: "Continue" },
+      onboard: { status: "in_progress", actionUrl: `/portal/page/${token}`, label: "Continue" },
+      skillsArcade: { status: "in_progress", actionUrl: `/arcade?token=${token}`, label: "Continue" },
+    };
+    const journey = portalHub?.journey ?? fallbackJourney;
+    return buildPortalGroups({
+      token,
+      journey,
+      stepStatuses,
+      selectOverview: () => navigate(`/portal/${token}`),
+      selectOnboardingStep: (stepKey) => {
+        const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+        if (idx >= 0) goToStep(idx + 1);
+      },
+    });
+  }, [portalHub, token, stepStatuses, navigate, goToStep]);
 
   if (verifyLoading) {
     return (
@@ -2745,7 +2828,6 @@ export default function PortalPage() {
   }
 
   const activeCandidate = candidate || verifyData.candidate;
-  const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
 
   const currentPortalStep = PORTAL_STEPS[currentStep - 1];
 
@@ -2763,14 +2845,14 @@ export default function PortalPage() {
     11: <EqualOpportunitiesStep token={token} status={stepStatuses.equal_opportunities} />,
   };
 
-  const totalSteps = PORTAL_STEPS.length;
+  const activeKey = `onboard:${currentPortalStep?.key ?? "identity"}`;
 
   return (
-    <PortalLayout
+    <PortalShell
+      token={token}
       candidateName={activeCandidate.fullName}
-      stepStatuses={stepStatuses}
-      currentStep={currentStep}
-      onStepClick={setCurrentStep}
+      groups={groups}
+      activeKey={activeKey}
     >
       <div className="space-y-4" data-testid="portal-page">
         {stepComponents[currentStep]}
@@ -2781,20 +2863,18 @@ export default function PortalPage() {
           stepName={currentPortalStep?.name ?? ""}
           status={stepStatuses[currentPortalStep?.key ?? "identity"]}
           onCompleted={() => {
-            // Functional update + clamp keeps us safe if the user has
-            // already navigated to a different step before this fires.
-            setCurrentStep((s) => Math.min(totalSteps, s + 1));
+            goToStep(currentStep + 1);
           }}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
           {currentStep > 1 && (
-            <Button variant="outline" onClick={() => setCurrentStep(currentStep - 1)} data-testid="button-prev-step">
+            <Button variant="outline" onClick={() => goToStep(currentStep - 1)} data-testid="button-prev-step">
               Previous Step
             </Button>
           )}
           {currentStep < totalSteps && (
-            <Button variant="ghost" onClick={() => setCurrentStep(currentStep + 1)} className="ml-auto" data-testid="button-next-step">
+            <Button variant="ghost" onClick={() => goToStep(currentStep + 1)} className="ml-auto" data-testid="button-next-step">
               Skip to next
             </Button>
           )}
@@ -2807,6 +2887,6 @@ export default function PortalPage() {
         stepKey={currentPortalStep?.key || "identity"}
         stepName={currentPortalStep?.name || "Identity & Contact"}
       />
-    </PortalLayout>
+    </PortalShell>
   );
 }
