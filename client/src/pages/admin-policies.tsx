@@ -32,8 +32,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Users, FileText, Loader2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, FileText, Loader2, Upload, ExternalLink } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PolicyBody } from "@/components/policy-body";
 
 interface Policy {
   id: string;
@@ -180,7 +182,7 @@ export default function AdminPoliciesPage() {
         } catch {}
         throw new Error(message);
       }
-      return (await res.json()) as { title: string; body: string };
+      return (await res.json()) as { title: string; body: string; aiCleaned?: boolean; aiCleanupReason?: string };
     },
     onSuccess: (data) => {
       setForm((prev) => ({
@@ -188,7 +190,24 @@ export default function AdminPoliciesPage() {
         title: data.title?.trim() || prev.title,
         body: data.body?.trim() || prev.body,
       }));
-      toast({ title: "Document imported", description: "Title and policy text have been filled in. Review and edit before saving." });
+      if (data.aiCleaned) {
+        toast({
+          title: "Document imported and tidied with AI",
+          description: "Headings, lists and paragraphs were reconstructed by AI — please review the body before saving.",
+        });
+      } else {
+        const reason = data.aiCleanupReason;
+        let suffix = "";
+        if (reason === "no_api_key") {
+          suffix = " (AI cleanup is unavailable — no API key configured.)";
+        } else if (reason === "api_error" || reason === "empty_response") {
+          suffix = " (AI cleanup couldn't run this time — using the raw extracted text.)";
+        }
+        toast({
+          title: "Document imported",
+          description: `Title and policy text have been filled in.${suffix} Review and edit before saving.`,
+        });
+      }
     },
     onError: (err: any) => {
       toast({ title: "Import failed", description: err?.message, variant: "destructive" });
@@ -437,14 +456,77 @@ export default function AdminPoliciesPage() {
 
             <div>
               <Label htmlFor="policy-body">Policy text</Label>
-              <Textarea
-                id="policy-body"
-                value={form.body}
-                onChange={(e) => setForm({ ...form, body: e.target.value })}
-                placeholder="The full text of the policy. Plain text or markdown-ish."
-                rows={10}
-                data-testid="input-policy-body"
-              />
+              <Tabs defaultValue="edit" className="mt-1.5">
+                <TabsList className="h-8">
+                  <TabsTrigger value="edit" className="text-xs" data-testid="tab-policy-edit">Edit</TabsTrigger>
+                  <TabsTrigger value="preview" className="text-xs" data-testid="tab-policy-preview">
+                    Preview as nurse
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="edit" className="mt-2">
+                  <Textarea
+                    id="policy-body"
+                    value={form.body}
+                    onChange={(e) => setForm({ ...form, body: e.target.value })}
+                    placeholder="The full text of the policy. Markdown is supported (headings, **bold**, lists, tables)."
+                    rows={12}
+                    className="font-mono text-xs"
+                    data-testid="input-policy-body"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Markdown is rendered for nurses — use <code>#</code> for headings,
+                    <code> -</code> for bullets, <code>**bold**</code>, etc.
+                  </p>
+                </TabsContent>
+                <TabsContent value="preview" className="mt-2">
+                  <div
+                    className="rounded-md border bg-card p-5 max-h-[28rem] overflow-y-auto"
+                    data-testid="policy-preview-frame"
+                  >
+                    <div className="max-w-2xl mx-auto">
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-semibold">
+                            {form.title || "(untitled policy)"}
+                          </h3>
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                            v{form.version || "1.0"}
+                          </span>
+                        </div>
+                      </div>
+                      {form.body ? (
+                        <PolicyBody body={form.body} data-testid="policy-preview-body" />
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">
+                          Nothing to preview yet — start typing in the Edit tab or import a document.
+                        </p>
+                      )}
+                      {form.pdfUrl && (
+                        <a
+                          href={form.pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary inline-flex items-center gap-1 mt-3 hover:underline"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          Open full PDF
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {form.requireAcknowledgement && (
+                        <div className="flex items-center justify-between gap-3 pt-3 mt-3 border-t">
+                          <p className="text-xs text-muted-foreground">
+                            Confirm you have read and understood this policy.
+                          </p>
+                          <Button size="sm" disabled data-testid="policy-preview-ack-button">
+                            I have read &amp; understood
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
             <div>

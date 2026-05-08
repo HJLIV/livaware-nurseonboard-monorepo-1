@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, FileText, ExternalLink, AlertCircle } from "lucide-react";
+import { PolicyBody } from "@/components/policy-body";
 
 function PolicyCard({
   token,
@@ -87,10 +88,9 @@ function PolicyCard({
         {p.body && (
           <div
             ref={bodyRef}
-            className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mb-3 max-h-64 overflow-y-auto pr-2"
-            data-testid={`policy-body-${p.id}`}
+            className="mb-3 max-h-64 overflow-y-auto pr-2"
           >
-            {p.body}
+            <PolicyBody body={p.body} data-testid={`policy-body-${p.id}`} />
           </div>
         )}
 

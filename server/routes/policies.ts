@@ -26,6 +26,7 @@ import {
 } from "../middleware";
 import { logAction } from "../services/audit";
 import { extractPolicyFromFile, PolicyExtractionError } from "../policy-extractor";
+import { cleanupPolicyMarkdown } from "../policy-ai-cleanup";
 
 const policyImportUpload = multer({
   storage: multer.memoryStorage(),
@@ -130,7 +131,13 @@ export function registerPolicyRoutes(app: Express) {
         }
 
         const result = await extractPolicyFromFile(file.buffer, file.originalname, file.mimetype);
-        res.json(result);
+        const cleanup = await cleanupPolicyMarkdown(result.body);
+        res.json({
+          title: result.title,
+          body: cleanup.body,
+          aiCleaned: cleanup.aiCleaned,
+          aiCleanupReason: cleanup.aiCleaned ? undefined : cleanup.reason,
+        });
       } catch (err: any) {
         if (err instanceof PolicyExtractionError) {
           return res.status(err.status).json({ message: err.message });
