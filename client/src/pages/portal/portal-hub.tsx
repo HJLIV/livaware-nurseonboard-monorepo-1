@@ -40,6 +40,12 @@ interface PortalData {
     onboard: { status: string; actionUrl?: string; label: string };
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
+  gate?: {
+    unlocked: boolean;
+    mode: "auto" | "manual";
+    prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
+    lockedReason?: string | null;
+  };
   token: string;
   firstVisit?: boolean;
 }
@@ -428,9 +434,14 @@ export default function PortalHub() {
       token,
       journey: portal.journey,
       stepStatuses,
+      gate: portal.gate ?? null,
       selectOverview: () => navigate(`/portal/${token}`),
       selectOnboardingStep: (stepKey) =>
         navigate(`/portal/page/${token}?step=${stepKey}`),
+      selectCompetency: () =>
+        navigate(`/portal/page/${token}?step=competency`),
+      selectCvUpload: () =>
+        navigate(`/portal/page/${token}?step=profile`),
       policiesSummary: policiesData
         ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
         : null,

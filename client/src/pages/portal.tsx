@@ -3087,6 +3087,12 @@ interface PortalHubData {
     onboard: { status: string; actionUrl?: string; label: string };
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
+  gate?: {
+    unlocked: boolean;
+    mode: "auto" | "manual";
+    prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
+    lockedReason?: string | null;
+  };
   token: string;
 }
 
@@ -3216,9 +3222,18 @@ export default function PortalPage() {
       token,
       journey,
       stepStatuses,
+      gate: portalHub?.gate ?? null,
       selectOverview: () => navigate(`/portal/${token}`),
       selectOnboardingStep: (stepKey) => {
         const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+        if (idx >= 0) goToStep(idx + 1);
+      },
+      selectCompetency: () => {
+        const idx = PORTAL_STEPS.findIndex((s) => s.key === "competency");
+        if (idx >= 0) goToStep(idx + 1);
+      },
+      selectCvUpload: () => {
+        const idx = PORTAL_STEPS.findIndex((s) => s.key === "profile");
         if (idx >= 0) goToStep(idx + 1);
       },
     });

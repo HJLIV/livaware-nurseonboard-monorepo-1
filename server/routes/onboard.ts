@@ -451,6 +451,10 @@ export function registerAdminRoutes(app: Express) {
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
     await storage.createAuditLog({ nurseId: param(req, "id"), action: "competency_declared", agentName: agentFor(req), detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
+    try {
+      const { maybeAutoUnlock } = await import("../services/onboarding-gate");
+      await maybeAutoUnlock(param(req, "id"), agentFor(req));
+    } catch {}
     res.status(201).json(result);
   });
 

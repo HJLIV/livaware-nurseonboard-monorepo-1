@@ -74,7 +74,14 @@ export async function createTestNurse(agent: supertest.Agent, overrides: Record<
     ...overrides,
   };
   const res = await agent.post("/api/nurses").send(data);
-  if (res.body.id) createdNurseIds.push(res.body.id);
+  if (res.body.id) {
+    createdNurseIds.push(res.body.id);
+    // Pre-unlock the onboarding gate (task 94) so existing portal/onboard
+    // test suites aren't tripped by the new gating middleware. Tests that
+    // specifically exercise the gate locking behaviour set the mode to
+    // "manual" and call relock as needed.
+    try { await agent.post(`/api/nurses/${res.body.id}/onboarding-access/unlock`).send({}); } catch {}
+  }
   return res.body;
 }
 
@@ -88,7 +95,10 @@ export async function createTestCandidate(agent: supertest.Agent, overrides: Rec
     ...overrides,
   };
   const res = await agent.post("/api/candidates").send(data);
-  if (res.body.id) createdCandidateIds.push(res.body.id);
+  if (res.body.id) {
+    createdCandidateIds.push(res.body.id);
+    try { await agent.post(`/api/nurses/${res.body.id}/onboarding-access/unlock`).send({}); } catch {}
+  }
   return res.body;
 }
 

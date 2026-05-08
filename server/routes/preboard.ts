@@ -114,6 +114,13 @@ export async function registerRoutes(
         } catch (advanceErr) {
           console.error("Failed to auto-advance nurse after assessment:", advanceErr);
         }
+
+        try {
+          const { maybeAutoUnlock } = await import("../services/onboarding-gate");
+          await maybeAutoUnlock(nurseId, "assessment_auto");
+        } catch (unlockErr) {
+          console.error("Auto-unlock check after assessment failed:", unlockErr);
+        }
       }
 
       res.json({ id: assessment.id, status: "received" });

@@ -6,6 +6,7 @@ import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
 import { requireAdmin } from "../middleware";
+import { getGateState, maybeAutoUnlock } from "../services/onboarding-gate";
 import crypto from "crypto";
 
 type PortalModule = "preboard" | "onboard" | "skills_arcade" | "hub";
@@ -564,6 +565,8 @@ export function registerNurseRoutes(app: Express) {
         },
       };
 
+      const gate = await getGateState(nurse.id);
+
       res.json({
         nurse: {
           id: nurse.id,
@@ -572,6 +575,7 @@ export function registerNurseRoutes(app: Express) {
           currentStage: nurse.currentStage,
         },
         journey,
+        gate,
         token: link.token,
         firstVisit: isFirstVisit,
       });
@@ -591,6 +595,123 @@ export function registerNurseRoutes(app: Express) {
       console.error("[Orphan Scan] Failed:", err);
       res.status(500).json({ message: err.message || "Failed to scan orphan uploads" });
     }
+  });
+
+  // ─── Onboarding access gate (task 94) ──────────────────────────────
+  app.get("/api/nurses/:id/onboarding-access", requireAdmin, async (req, res) => {
+    const state = await getGateState(req.params.id);
+    if (!state) return res.status(404).json({ message: "Nurse not found" });
+    res.json(state);
+  });
+
+  app.post("/api/nurses/:id/onboarding-access/unlock", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const now = new Date();
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    await db.update(nurses).set({
+      onboardingUnlockedAt: now,
+      onboardingUnlockedBy: agentFor(req),
+      onboardingLockedReason: null,
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "onboarding_unlocked", agentFor(req), {
+      mode: "manual_admin",
+      previouslyUnlocked: !!nurse.onboardingUnlockedAt,
+      note,
+    });
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
+  app.post("/api/nurses/:id/onboarding-access/relock", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!reason) return res.status(400).json({ message: "A reason is required to re-lock onboarding" });
+    if (!nurse.onboardingUnlockedAt) {
+      return res.status(409).json({ message: "Nurse onboarding is not currently unlocked" });
+    }
+    const now = new Date();
+    await db.update(nurses).set({
+      onboardingUnlockedAt: null,
+      onboardingUnlockedBy: null,
+      onboardingLockedReason: reason,
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "onboarding_relocked", agentFor(req), {
+      reason,
+      previouslyUnlockedAt: nurse.onboardingUnlockedAt?.toISOString?.() || null,
+      previouslyUnlockedBy: nurse.onboardingUnlockedBy || null,
+    });
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
+  app.put("/api/nurses/:id/onboarding-access/mode", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const mode = req.body?.mode;
+    if (mode !== "auto" && mode !== "manual") {
+      return res.status(400).json({ message: "mode must be 'auto' or 'manual'" });
+    }
+    const previous = nurse.onboardingUnlockMode || "auto";
+    if (previous === mode) {
+      const state = await getGateState(req.params.id);
+      return res.json(state);
+    }
+    await db.update(nurses).set({
+      onboardingUnlockMode: mode,
+      updatedAt: new Date(),
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "unlock_mode_changed", agentFor(req), {
+      from: previous,
+      to: mode,
+    });
+    if (mode === "auto") {
+      // Switching back to auto-mode may immediately satisfy the gate.
+      await maybeAutoUnlock(req.params.id, agentFor(req));
+    }
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
+  app.post("/api/nurses/:id/cv-review", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const now = new Date();
+    await db.update(nurses).set({
+      cvReviewedAt: now,
+      cvReviewedBy: agentFor(req),
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "cv_marked_reviewed", agentFor(req), {
+      previouslyReviewedAt: nurse.cvReviewedAt?.toISOString?.() || null,
+    });
+    // CV review is one of the auto-unlock prerequisites — try now.
+    await maybeAutoUnlock(req.params.id, agentFor(req));
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
+  app.delete("/api/nurses/:id/cv-review", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    if (!nurse.cvReviewedAt) {
+      const state = await getGateState(req.params.id);
+      return res.json(state);
+    }
+    await db.update(nurses).set({
+      cvReviewedAt: null,
+      cvReviewedBy: null,
+      updatedAt: new Date(),
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "cv_review_reopened", agentFor(req), {
+      previouslyReviewedAt: nurse.cvReviewedAt?.toISOString?.() || null,
+      previouslyReviewedBy: nurse.cvReviewedBy || null,
+    });
+    const state = await getGateState(req.params.id);
+    res.json(state);
   });
 
   app.post("/api/admin/orphan-uploads/link", requireAdmin, async (req, res) => {

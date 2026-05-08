@@ -128,3 +128,31 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
   }
   return res.status(401).json({ message: "Not authenticated" });
 }
+
+// Onboarding access gate (task 94) — refuses portal-side writes that
+// belong to the Onboarding / Compliance / Skills Arcade sections until
+// the gate is open for this nurse. Must run AFTER validatePortalToken
+// (it relies on req.nurseId). The Assessment-group routes (clinical
+// examination submission, competency declarations, CV upload) MUST NOT
+// be wrapped with this — those are how the candidate satisfies the
+// prerequisites in auto-unlock mode.
+export async function requireOnboardingUnlocked(req: Request, res: Response, next: NextFunction) {
+  try {
+    const nurseId = (req as any).nurseId as string | undefined;
+    if (!nurseId) return res.status(401).json({ message: "Not authenticated" });
+    const { getGateState } = await import("./services/onboarding-gate");
+    const state = await getGateState(nurseId);
+    if (!state) return res.status(404).json({ message: "Nurse not found" });
+    if (!state.unlocked) {
+      return res.status(403).json({
+        error: "onboarding_locked",
+        message: "Onboarding access has not been opened for this nurse yet",
+        gate: state,
+      });
+    }
+    next();
+  } catch (err: any) {
+    console.error("[requireOnboardingUnlocked] error:", err.message);
+    return res.status(500).json({ message: "Failed to verify onboarding access" });
+  }
+}

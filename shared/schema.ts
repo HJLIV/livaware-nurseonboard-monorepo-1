@@ -59,6 +59,22 @@ export const nurses = pgTable("nurses", {
   passportPhotoPath: text("passport_photo_path"),
   archivedAt: timestamp("archived_at"),
   archivedBy: text("archived_by"),
+  // ─── Onboarding access gate (task 94) ─────────────────────────────
+  // CV admin review (one of the three Assessment-group prerequisites
+  // alongside the clinical examination and the competency self-rating).
+  cvReviewedAt: timestamp("cv_reviewed_at"),
+  cvReviewedBy: text("cv_reviewed_by"),
+  // 'auto' (default) flips the lock open as soon as the three
+  // prerequisites are satisfied; 'manual' requires an explicit admin
+  // unlock action regardless of prerequisite state.
+  onboardingUnlockMode: text("onboarding_unlock_mode").default("auto").notNull(),
+  // When the gate flipped open. Once set, the nurse stays unlocked
+  // unless an admin explicitly re-locks them (which clears this).
+  onboardingUnlockedAt: timestamp("onboarding_unlocked_at"),
+  onboardingUnlockedBy: text("onboarding_unlocked_by"),
+  // Free-text reason recorded when an admin re-locks a previously
+  // unlocked nurse (surfaced in the audit detail + admin panel).
+  onboardingLockedReason: text("onboarding_locked_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -906,6 +922,56 @@ export const PORTAL_STEPS = [
 ] as const;
 
 export type PortalStepKey = (typeof PORTAL_STEPS)[number]["key"];
+
+// Step keys that have been hoisted out of the Onboarding section into
+// the new Assessment section (task 94). The portal sidebar should not
+// list these under Onboarding even though they still exist in
+// PORTAL_STEPS for internal step-index/render compatibility.
+export const ASSESSMENT_HOISTED_STEP_KEYS: readonly PortalStepKey[] = [
+  "competency",
+];
+
+// Items in the new Assessment sidebar group. These are the three
+// prerequisites that must be satisfied before the candidate can move
+// into Onboarding/Compliance/Skills Arcade.
+export const ASSESSMENT_GROUP_ITEMS = [
+  { key: "examination", name: "Clinical examination" },
+  { key: "competency", name: "Clinical competency" },
+  { key: "cv", name: "CV upload" },
+] as const;
+export type AssessmentItemKey = (typeof ASSESSMENT_GROUP_ITEMS)[number]["key"];
+
+// ── Onboarding access gate helpers ──────────────────────────────────
+// These are intentionally pure / side-effect free so they can be used
+// from both server (gating + auto-unlock check) and client (sidebar
+// render). The server is the authoritative gate; the client read is
+// purely advisory for UX.
+export interface OnboardingGateContext {
+  examinationCompleted: boolean;
+  competencyDeclared: boolean;
+  cvReviewed: boolean;
+}
+
+export interface OnboardingGateNurse {
+  onboardingUnlockMode?: string | null;
+  onboardingUnlockedAt?: Date | string | null;
+  cvReviewedAt?: Date | string | null;
+}
+
+export function isOnboardingUnlocked(
+  nurse: OnboardingGateNurse | null | undefined,
+  ctx: OnboardingGateContext,
+): boolean {
+  if (!nurse) return false;
+  // Once the gate has flipped open it stays open until an admin
+  // explicitly re-locks (which clears onboardingUnlockedAt).
+  if (nurse.onboardingUnlockedAt) return true;
+  // Manual mode: only an admin action can flip the gate.
+  const mode = nurse.onboardingUnlockMode || "auto";
+  if (mode !== "auto") return false;
+  // Auto mode: all three prerequisites satisfied.
+  return ctx.examinationCompleted && ctx.competencyDeclared && ctx.cvReviewed;
+}
 
 // Step keys whose final "completed" state requires an admin to verify the
 // candidate's submission (NMC PIN check, DBS background check). When a

@@ -34,6 +34,16 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 
 ## Modules
 
+### Onboarding access gate (Task #94)
+- Onboarding / Compliance / Skills Arcade are gated behind three Assessment-group items: Clinical examination (preboard assessment submitted), Clinical competency (at least one competency declaration), and CV upload (admin marks the CV as reviewed).
+- Per-nurse mode toggle on `nurses.onboardingUnlockMode`: `auto` (default) flips the gate as soon as all three prerequisites are satisfied; `manual` requires an admin click. Existing nurses were backfilled as already-unlocked in `manual` mode so they aren't retroactively gated.
+- Server gate: `server/services/onboarding-gate.ts` (`getGateState`, `loadGatePrerequisites`, `gateStateFromNurse`, `maybeAutoUnlock`) + `requireOnboardingUnlocked` middleware in `server/middleware.ts`. Auto-unlock is triggered on assessment submit (`server/routes/preboard.ts`), competency declaration (portal + admin), and admin CV-review.
+- Locked portal write routes return `403 { error: "onboarding_locked", gate }`. Reads stay open. The Assessment-group routes (`cv-upload`, `competency-declarations` POST) are intentionally NOT gated — they are how the candidate satisfies the prerequisites.
+- Admin endpoints (admin-auth required) under `/api/nurses/:id/`: `GET onboarding-access`, `POST onboarding-access/unlock`, `POST onboarding-access/relock` (requires `reason`), `PUT onboarding-access/mode`, `POST cv-review`, `DELETE cv-review`. All log audit actions: `onboarding_unlocked`, `onboarding_relocked`, `cv_marked_reviewed`, `cv_review_reopened`, `unlock_mode_changed`.
+- Portal hub response `/api/portal/:token` now includes a `gate` field consumed by the sidebar (`buildPortalGroups` in `client/src/components/layout/portal-shell.tsx`) — when locked, Onboarding/Compliance/Arcade items render disabled with a "Locked — finish Assessment first" hint.
+- Admin UI: `client/src/components/admin/onboarding-access-panel.tsx` is mounted on both `candidate-detail` and `nurse-detail` pages, showing prerequisite checklist, mode toggle, mark-CV-reviewed, unlock and re-lock (with reason dialog).
+- Tests: `tests/23-onboarding-access-gate.test.ts` (7 tests covering gate state, manual unlock/relock, CV review, mode change audit, portal write gating, hub gate field).
+
 ### Nurse-Onboard (AI-powered compliance & onboarding)
 - Full NMC PIN verification (`server/nmc-service.ts`) — step-by-step walkthrough with external link
 - DBS certificate checking (`server/dbs-service.ts`) — step-by-step walkthrough with external links to gov.uk

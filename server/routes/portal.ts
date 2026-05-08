@@ -6,8 +6,9 @@ import { db } from "../db";
 import { arcadeUsers } from "@shared/schema";
 import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { upload, validatePortalToken, uploadLimiter } from "../middleware";
+import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
+import { maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
 import { parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
@@ -165,7 +166,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(candidate);
   });
 
-  app.patch("/api/portal/:token/candidate", validatePortalToken, async (req, res) => {
+  app.patch("/api/portal/:token/candidate", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const candidate = await storage.updateCandidate(nurseId, req.body);
     const updates: Record<string, string> = {};
@@ -188,7 +189,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/employment-history", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/employment-history", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const { employer, jobTitle, startDate } = req.body;
     if (!employer || !jobTitle || !startDate) {
@@ -201,7 +202,7 @@ export function registerPortalRoutes(app: Express) {
     res.status(201).json(result);
   });
 
-  app.delete("/api/portal/:token/employment-history/:id", validatePortalToken, async (req, res) => {
+  app.delete("/api/portal/:token/employment-history/:id", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const deleted = await storage.deleteEmploymentHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
@@ -214,7 +215,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/education-history", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/education-history", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const { institution, qualification } = req.body;
     if (!institution || !qualification) {
@@ -227,7 +228,7 @@ export function registerPortalRoutes(app: Express) {
     res.status(201).json(result);
   });
 
-  app.delete("/api/portal/:token/education-history/:id", validatePortalToken, async (req, res) => {
+  app.delete("/api/portal/:token/education-history/:id", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const deleted = await storage.deleteEducationHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
@@ -342,7 +343,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/passport-photo", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/passport-photo", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
@@ -365,7 +366,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/portal/:token/passport-photo", validatePortalToken, async (req, res) => {
+  app.delete("/api/portal/:token/passport-photo", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
       const updated = await storage.updateCandidate(nurseId, { passportPhotoPath: null });
@@ -378,7 +379,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/proof-of-address", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/proof-of-address", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const nurseId = (req as any).nurseId;
@@ -422,7 +423,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(docs);
   });
 
-  app.post("/api/portal/:token/documents", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/documents", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId, uploadedBy: "nurse" };
     if (
@@ -466,6 +467,8 @@ export function registerPortalRoutes(app: Express) {
     const result = await storage.createCompetencyDeclaration(data);
     await safeWriteStepStatuses(nurseId, { competency: "in_progress" });
     await storage.createAuditLog({ nurseId, action: "portal_competency_declared", agentName: "nurse_portal", detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
+    // Competency declaration is one of the auto-unlock prerequisites.
+    try { await maybeAutoUnlock(nurseId, "nurse_portal"); } catch {}
     res.status(201).json(result);
   });
 
@@ -491,7 +494,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/mandatory-training", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/mandatory-training", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createMandatoryTraining(data);
@@ -500,7 +503,7 @@ export function registerPortalRoutes(app: Express) {
     res.status(201).json(result);
   });
 
-  app.post("/api/portal/:token/training-cert-upload", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/training-cert-upload", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -567,7 +570,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/training-cert-ai", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/training-cert-ai", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -818,7 +821,7 @@ export function registerPortalRoutes(app: Express) {
     },
   );
 
-  app.post("/api/portal/:token/nmc-parse-pdf", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/nmc-parse-pdf", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -864,7 +867,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/passport-parse", validatePortalToken, uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/portal/:token/passport-parse", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -924,7 +927,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result || null);
   });
 
-  app.post("/api/portal/:token/health-declaration", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/health-declaration", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createHealthDeclaration(data);
@@ -940,7 +943,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/references", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/references", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createReference(data);
@@ -980,7 +983,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/induction-policies", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/induction-policies", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createInductionPolicy(data);
@@ -994,7 +997,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result || null);
   });
 
-  app.post("/api/portal/:token/professional-indemnity", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/professional-indemnity", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const data = { ...req.body, nurseId };
     const result = await storage.createProfessionalIndemnity(data);
@@ -1008,7 +1011,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result || null);
   });
 
-  app.post("/api/portal/:token/dbs-verification", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/dbs-verification", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const { certificateNumber, issueDate, certificateType, updateServiceSubscribed } = req.body;
     if (!certificateNumber) {
@@ -1036,7 +1039,7 @@ export function registerPortalRoutes(app: Express) {
     res.json(result || null);
   });
 
-  app.post("/api/portal/:token/equal-opportunities", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/equal-opportunities", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const { gender, ethnicity, disabilityStatus, religionBelief, sexualOrientation, ageBand } = req.body;
     const existing = await storage.getEqualOpportunities(nurseId);
@@ -1080,7 +1083,7 @@ export function registerPortalRoutes(app: Express) {
   // those still require an admin to verify the registration / certificate.
   // We instead flip the step to "awaiting_verification" so the candidate
   // can see they've done their part and the admin has the ball.
-  app.post("/api/portal/:token/steps/:stepKey/complete", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/steps/:stepKey/complete", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const stepKey = String(req.params.stepKey);
     const validKeys = PORTAL_STEPS.map((s) => s.key) as readonly string[];
@@ -1190,7 +1193,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/arcade/attempts/start", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/arcade/attempts/start", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     try {
       const userId = await resolvePortalArcadeUserId(req);
       const assignmentId = String(req.body?.assignmentId ?? "");
@@ -1226,7 +1229,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/arcade/attempts/submit", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/arcade/attempts/submit", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
     try {
       const userId = await resolvePortalArcadeUserId(req);
       const attemptId = String(req.body?.attemptId ?? "");

@@ -28,7 +28,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { STEP_STATUS, PORTAL_STEPS } from "@shared/schema";
+import { STEP_STATUS, PORTAL_STEPS, ASSESSMENT_HOISTED_STEP_KEYS } from "@shared/schema";
 
 export type PortalItemStatus =
   | "completed"
@@ -567,6 +567,17 @@ interface JourneyData {
   skillsArcade: { status: string; actionUrl?: string; label: string };
 }
 
+export interface PortalGateInfo {
+  unlocked: boolean;
+  mode: "auto" | "manual";
+  prerequisites: {
+    examinationCompleted: boolean;
+    competencyDeclared: boolean;
+    cvReviewed: boolean;
+  };
+  lockedReason?: string | null;
+}
+
 interface BuildGroupsArgs {
   token: string;
   journey: JourneyData;
@@ -575,6 +586,14 @@ interface BuildGroupsArgs {
   selectOnboardingStep: (stepKey: string) => void;
   policiesSummary?: { totalRequired: number; outstanding: number } | null;
   selectPolicies?: () => void;
+  // Assessment-group selectors. When omitted the items fall back to
+  // sensible default URLs (preboard assessment / portal page).
+  selectCompetency?: () => void;
+  selectCvUpload?: () => void;
+  // Onboarding access gate state — when present and `unlocked === false`
+  // the Onboarding/Compliance/Skills Arcade groups are rendered as
+  // disabled with a "Locked — finish Assessment first" hint.
+  gate?: PortalGateInfo | null;
 }
 
 // Additional onboarding declarations the candidate must complete alongside
@@ -597,7 +616,26 @@ export function buildPortalGroups({
   selectOnboardingStep,
   policiesSummary,
   selectPolicies,
+  selectCompetency,
+  selectCvUpload,
+  gate,
 }: BuildGroupsArgs): PortalSidebarGroup[] {
+  const isLocked = !!gate && gate.unlocked === false;
+  const lockedHint = "Locked — finish Assessment first";
+
+  // Assessment-group item statuses derive from the gate prerequisites
+  // when we have them, otherwise from the existing journey/stepStatus
+  // signals so the sidebar still works on legacy portal pages.
+  const examStatus: PortalItemStatus = gate?.prerequisites.examinationCompleted
+    ? "completed"
+    : normalizeStatus(journey.preboard.status);
+  const competencyStatus: PortalItemStatus = gate?.prerequisites.competencyDeclared
+    ? "completed"
+    : normalizeStatus(stepStatuses.competency);
+  const cvStatus: PortalItemStatus = gate?.prerequisites.cvReviewed
+    ? "completed"
+    : "in_progress";
+
   // Compute the Policies item status from the live summary. If we don't yet
   // have the data (initial load), fall back to a neutral "in_progress" so
   // the item is at least clickable.
@@ -637,13 +675,38 @@ export function buildPortalGroups({
       defaultOpen: true,
       items: [
         {
-          key: "assessment:clinical",
-          label: "Clinical assessment",
-          status: normalizeStatus(journey.preboard.status),
+          key: "assessment:examination",
+          label: "Clinical examination",
+          status: examStatus,
           onClick: () => {
             const url = journey.preboard.actionUrl || `/preboard/assessment?token=${token}`;
             window.location.href = url;
           },
+        },
+        {
+          key: "assessment:competency",
+          label: "Clinical competency",
+          status: competencyStatus,
+          onClick: selectCompetency
+            ? selectCompetency
+            : () => {
+                window.location.href = `/portal/page/${token}?step=competency`;
+              },
+        },
+        {
+          key: "assessment:cv",
+          label: "CV upload",
+          status: cvStatus,
+          hint: gate?.prerequisites.cvReviewed
+            ? "Reviewed by admin"
+            : gate
+              ? "Awaiting admin review"
+              : undefined,
+          onClick: selectCvUpload
+            ? selectCvUpload
+            : () => {
+                window.location.href = `/portal/cv/${token}`;
+              },
         },
       ],
     },
@@ -651,13 +714,17 @@ export function buildPortalGroups({
       key: "onboarding",
       title: "Onboarding",
       icon: <ShieldCheck className="h-3.5 w-3.5" />,
-      defaultOpen: true,
+      defaultOpen: !isLocked,
       items: [
-        ...PORTAL_STEPS.map((step) => ({
+        ...PORTAL_STEPS.filter(
+          (step) => !ASSESSMENT_HOISTED_STEP_KEYS.includes(step.key),
+        ).map((step) => ({
           key: `onboard:${step.key}`,
           label: step.name,
-          status: normalizeStatus(stepStatuses[step.key]),
-          onClick: () => selectOnboardingStep(step.key),
+          status: isLocked ? ("locked" as PortalItemStatus) : normalizeStatus(stepStatuses[step.key]),
+          disabled: isLocked,
+          hint: isLocked ? lockedHint : undefined,
+          onClick: isLocked ? undefined : () => selectOnboardingStep(step.key),
         })),
         ...ADDITIONAL_ONBOARDING_ITEMS.map((item) => ({
           key: `onboard:${item.key}`,
@@ -672,15 +739,15 @@ export function buildPortalGroups({
       key: "compliance",
       title: "Compliance",
       icon: <BookOpenCheck className="h-3.5 w-3.5" />,
-      defaultOpen: true,
+      defaultOpen: !isLocked,
       items: [
         {
           key: "compliance:policies",
           label: "Policies to read & sign",
-          status: policiesStatus,
-          hint: policiesHint,
-          onClick: selectPolicies,
-          disabled: !selectPolicies,
+          status: isLocked ? ("locked" as PortalItemStatus) : policiesStatus,
+          hint: isLocked ? lockedHint : policiesHint,
+          onClick: isLocked ? undefined : selectPolicies,
+          disabled: isLocked || !selectPolicies,
         },
         {
           key: "compliance:training_docs",
@@ -699,11 +766,15 @@ export function buildPortalGroups({
         {
           key: "compliance:arcade",
           label: "Clinical Skills Arcade",
-          status: normalizeStatus(journey.skillsArcade.status),
-          onClick: () => {
-            const url = journey.skillsArcade.actionUrl || `/arcade?token=${token}`;
-            window.location.href = url;
-          },
+          status: isLocked ? ("locked" as PortalItemStatus) : normalizeStatus(journey.skillsArcade.status),
+          disabled: isLocked,
+          hint: isLocked ? lockedHint : undefined,
+          onClick: isLocked
+            ? undefined
+            : () => {
+                const url = journey.skillsArcade.actionUrl || `/arcade?token=${token}`;
+                window.location.href = url;
+              },
         },
       ],
     },
