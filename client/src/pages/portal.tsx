@@ -3176,24 +3176,26 @@ export default function PortalPage() {
 
   // Required document categories the candidate must upload at least one of.
   // Mirrors the categories used by the per-step uploaders in this file.
-  const REQUIRED_DOC_CATEGORIES = [
-    "identity",
-    "proof_of_address",
-    "nmc",
-    "dbs",
-    "right_to_work",
-    "indemnity",
+  const REQUIRED_DOC_CATEGORIES: { key: string; label: string }[] = [
+    { key: "identity", label: "Identity" },
+    { key: "proof_of_address", label: "Proof of address" },
+    { key: "nmc", label: "NMC" },
+    { key: "dbs", label: "DBS" },
+    { key: "right_to_work", label: "Right to work" },
+    { key: "indemnity", label: "Indemnity" },
   ];
 
   const todoCounts = useMemo<PortalToDoCounts>(() => {
     const docsByCat = new Set(
       (portalDocs || []).map((d: any) => d.category).filter(Boolean),
     );
-    const documents = REQUIRED_DOC_CATEGORIES.filter((c) => !docsByCat.has(c)).length;
+    const missingDocs = REQUIRED_DOC_CATEGORIES.filter((c) => !docsByCat.has(c.key));
+    const documents = missingDocs.length;
+    const missingDocumentLabels = missingDocs.map((c) => c.label);
     const completedTraining = (trainings || []).filter((t) => t.certificateUploaded).length;
     const training = Math.max(0, MANDATORY_TRAINING_MODULES.length - completedTraining);
     const references = Math.max(0, 2 - (refs || []).length);
-    return { documents, training, references };
+    return { documents, training, references, missingDocumentLabels };
   }, [portalDocs, trainings, refs]);
 
   const goToStep = useCallback(

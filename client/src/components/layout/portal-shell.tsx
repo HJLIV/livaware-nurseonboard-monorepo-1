@@ -61,6 +61,7 @@ export interface PortalToDoCounts {
   documents: number;
   training: number;
   references: number;
+  missingDocumentLabels?: string[];
 }
 
 interface PortalShellProps {
@@ -331,13 +332,14 @@ function ToDoSummary({
   const top = outstanding.slice(0, 4);
 
   const countRows = useMemo(() => {
-    if (!counts) return [] as { key: string; label: string; value: number }[];
-    const rows: { key: string; label: string; value: number }[] = [];
+    if (!counts) return [] as { key: string; label: string; value: number; details?: string[] }[];
+    const rows: { key: string; label: string; value: number; details?: string[] }[] = [];
     if (counts.documents > 0) {
       rows.push({
         key: "documents",
         label: counts.documents === 1 ? "document missing" : "documents missing",
         value: counts.documents,
+        details: counts.missingDocumentLabels,
       });
     }
     if (counts.training > 0) {
@@ -378,13 +380,23 @@ function ToDoSummary({
           {countRows.map((row) => (
             <div
               key={row.key}
-              className="flex items-baseline gap-1.5 text-xs text-foreground/85"
+              className="text-xs text-foreground/85"
               data-testid={`portal-shell-todo-count-${row.key}`}
             >
-              <span className="font-serif text-base font-light text-primary tabular-nums">
-                {row.value}
-              </span>
-              <span className="text-muted-foreground">{row.label}</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-serif text-base font-light text-primary tabular-nums">
+                  {row.value}
+                </span>
+                <span className="text-muted-foreground">{row.label}</span>
+              </div>
+              {row.details && row.details.length > 0 && (
+                <p
+                  className="mt-0.5 pl-[1.4rem] text-[11px] leading-snug text-muted-foreground/80"
+                  data-testid={`portal-shell-todo-count-${row.key}-details`}
+                >
+                  {row.details.join(", ")}
+                </p>
+              )}
             </div>
           ))}
         </div>
