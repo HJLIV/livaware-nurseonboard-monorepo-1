@@ -30,6 +30,11 @@ const FREE_TEXT_KEYS = REFERENCE_QUESTIONS.filter(q => !(q as any).type || (q as
 const SICKNESS_OPTIONS = ["Excellent", "Good", "Fair", "Concerns", "Unable to comment"];
 
 export interface ExtractedReference {
+  refereeName: string | null;
+  refereeEmail: string | null;
+  refereeOrg: string | null;
+  refereeRole: string | null;
+  relationshipToCandidate: string | null;
   ratings: Record<string, number>;
   freeTextResponses: Record<string, string>;
   conductFlags: { conduct_concerns?: boolean; reemploy?: boolean };
@@ -62,7 +67,14 @@ export async function extractReferenceFromDocument(
 
   const systemPrompt = `You are extracting structured data from a written employment reference letter for a UK nurse named "${candidateName}".
 
-Map what the reference says into the following structured fields. If the reference does not explicitly cover a field, leave it out (do NOT invent values).
+Map what the reference says into the following structured fields. If the reference does not explicitly cover a field, leave it as null / omit it (do NOT invent values).
+
+REFEREE DETAILS — read these from the letterhead, signature block, or contact line:
+- "refereeName": The person who signed / wrote the reference.
+- "refereeEmail": Their email address (only if printed in the letter).
+- "refereeOrg": Their organisation / employer / hospital / trust name.
+- "refereeRole": Their job title (e.g. "Ward Manager", "Director of Nursing").
+- "relationshipToCandidate": Their professional relationship to the candidate (e.g. "Line Manager", "Clinical Lead", "Colleague").
 
 RATINGS (1-5 scale, where 1=poor, 3=satisfactory, 5=excellent). Infer a rating only when the text clearly supports it:
 ${ratingDescriptions}
@@ -78,6 +90,11 @@ SICKNESS ABSENCE BAND — pick exactly one of: ${SICKNESS_OPTIONS.map(o => `"${o
 
 Respond ONLY with valid JSON in this exact format:
 {
+  "refereeName": "<full name>" | null,
+  "refereeEmail": "<email>" | null,
+  "refereeOrg": "<organisation>" | null,
+  "refereeRole": "<job title>" | null,
+  "relationshipToCandidate": "<relationship>" | null,
   "ratings": { "<key>": <1-5>, ... },
   "freeTextResponses": { "<key>": "<text>", ... },
   "conductFlags": { "conduct_concerns": <bool>, "reemploy": <bool> },
@@ -151,7 +168,18 @@ Respond ONLY with valid JSON in this exact format:
     ? parsed.sicknessAbsenceBand
     : null;
 
+  const cleanStr = (v: any): string | null => {
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return t && t.toLowerCase() !== "null" ? t : null;
+  };
+
   return {
+    refereeName: cleanStr(parsed.refereeName),
+    refereeEmail: cleanStr(parsed.refereeEmail),
+    refereeOrg: cleanStr(parsed.refereeOrg),
+    refereeRole: cleanStr(parsed.refereeRole),
+    relationshipToCandidate: cleanStr(parsed.relationshipToCandidate),
     ratings,
     freeTextResponses,
     conductFlags,

@@ -2802,14 +2802,6 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
   const [resetKey, setResetKey] = useState(0);
 
   async function handleUpload(file: File) {
-    if (!name || !email) {
-      toast({
-        title: "Referee details required",
-        description: "Add the referee's name and email before uploading.",
-        variant: "destructive",
-      });
-      return;
-    }
     setUploading(true);
     try {
       const fd = new FormData();
@@ -2834,11 +2826,19 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
       const ex = data.extraction;
-      const desc = ex && !ex.failed
-        ? `${ex.ratingsCount || 0} ratings + ${ex.freeTextCount || 0} written answers extracted${ex.redFlagTriggered ? " — RED FLAG" : ""} (confidence: ${ex.confidence})`
-        : ex?.failed
-          ? "Saved as attachment — AI couldn't read the answers, please review manually."
-          : `${name}'s reference saved.`;
+      let desc: string;
+      if (ex && !ex.failed) {
+        const refLabel = ex.detectedRefereeName ? `${ex.detectedRefereeName}` : "referee";
+        const partsExtracted: string[] = [];
+        if (ex.detectedRefereeName || ex.detectedRefereeEmail || ex.detectedRefereeOrg) partsExtracted.push("referee details");
+        if (ex.ratingsCount) partsExtracted.push(`${ex.ratingsCount} ratings`);
+        if (ex.freeTextCount) partsExtracted.push(`${ex.freeTextCount} written answers`);
+        desc = partsExtracted.length
+          ? `Picked up ${partsExtracted.join(", ")} for ${refLabel}${ex.redFlagTriggered ? " — RED FLAG" : ""} (confidence: ${ex.confidence})`
+          : `Saved — AI couldn't pull structured fields from this letter, please review.`;
+      } else {
+        desc = "Saved as attachment — AI couldn't read the answers, please review manually.";
+      }
       toast({ title: "Reference uploaded", description: desc, variant: ex?.redFlagTriggered ? "destructive" : "default" });
       setName(""); setEmail(""); setOrg(""); setRole(""); setRelationship("");
       setResetKey((k) => k + 1);
@@ -2856,19 +2856,20 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
           <Upload className="h-4 w-4" /> Upload Existing Reference
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          Have a reference letter from a previous employer? Add the referee's details and attach the file —
-          it'll be saved as a received reference and stored alongside their documents.
+          Have a reference letter from a previous employer? Just attach the file — AI will read the
+          referee's details and answers straight off the letter. The fields below are optional;
+          fill them in only if you want to override what AI detects.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Referee Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Helen Cartwright" data-testid="input-upload-ref-name" />
+            <Label className="text-xs">Referee Name <span className="text-muted-foreground/60">(optional)</span></Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="AI will detect from the letter" data-testid="input-upload-ref-name" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="h.cartwright@nhs.uk" data-testid="input-upload-ref-email" />
+            <Label className="text-xs">Email <span className="text-muted-foreground/60">(optional)</span></Label>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="AI will detect if printed" data-testid="input-upload-ref-email" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Organisation</Label>
@@ -2897,17 +2898,17 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
           />
           <Button
             type="button"
-            disabled={uploading || !name || !email}
+            disabled={uploading}
             onClick={() => document.getElementById(`ref-upload-${candidateId}`)?.click()}
             data-testid="button-upload-existing-reference"
           >
             {uploading ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...</>
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading & reading...</>
             ) : (
               <><Upload className="h-4 w-4 mr-2" /> Choose file & upload</>
             )}
           </Button>
-          <span className="text-[11px] text-muted-foreground">PDF, JPG, PNG, DOC up to 10MB</span>
+          <span className="text-[11px] text-muted-foreground">PDF, JPG, PNG, DOC up to 10MB · AI reads referee details + answers</span>
         </div>
       </CardContent>
     </Card>

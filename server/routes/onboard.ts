@@ -555,13 +555,29 @@ export function registerAdminRoutes(app: Express) {
       const candidate = await storage.getCandidate(param(req, "id"));
       if (!candidate) return res.status(404).json({ message: "Candidate not found" });
 
-      const refereeName = (req.body.refereeName || "").toString().trim();
-      const refereeEmail = (req.body.refereeEmail || "").toString().trim();
-      if (!refereeName || !refereeEmail) {
-        return res.status(400).json({ message: "refereeName and refereeEmail are required" });
+      // Try to AI-extract structured answers AND referee details from the
+      // uploaded letter so admins don't have to retype anything. If extraction
+      // fails we still keep the upload — admins can edit fields after.
+      let extracted: Awaited<ReturnType<typeof extractReferenceFromDocument>> | null = null;
+      let extractionError: string | null = null;
+      try {
+        const absolutePath = path.join(uploadsDir, req.file.filename);
+        extracted = await extractReferenceFromDocument(absolutePath, req.file.mimetype, candidate.fullName);
+      } catch (e: any) {
+        extractionError = e?.message || "AI extraction failed";
+        console.warn("[Reference Upload] AI extraction failed:", extractionError);
       }
 
-      // Save file as a document first so it shows up in the documents list too.
+      // Manual fields override AI; otherwise use AI; otherwise placeholder.
+      const bodyName = (req.body.refereeName || "").toString().trim();
+      const bodyEmail = (req.body.refereeEmail || "").toString().trim();
+      const refereeName = bodyName || extracted?.refereeName || "Referee (name not detected)";
+      const refereeEmail = bodyEmail || extracted?.refereeEmail || "";
+      const refereeOrg = (req.body.refereeOrg || "").toString().trim() || extracted?.refereeOrg || null;
+      const refereeRole = (req.body.refereeRole || "").toString().trim() || extracted?.refereeRole || null;
+      const relationshipToCandidate = (req.body.relationshipToCandidate || "").toString().trim() || extracted?.relationshipToCandidate || null;
+
+      // Save file as a document so it shows up in the documents list too.
       const filePath = `/api/uploads/${req.file.filename}`;
       const doc = await storage.createDocument({
         nurseId: candidate.id,
@@ -576,19 +592,6 @@ export function registerAdminRoutes(app: Express) {
         notes: `Uploaded reference from ${refereeName}`,
       } as any);
 
-      // Try to AI-extract structured answers from the uploaded letter so the
-      // reference looks the same as a digitally-collected one. If extraction
-      // fails we still keep the upload — just without structured fields.
-      let extracted: Awaited<ReturnType<typeof extractReferenceFromDocument>> | null = null;
-      let extractionError: string | null = null;
-      try {
-        const absolutePath = path.join(uploadsDir, req.file.filename);
-        extracted = await extractReferenceFromDocument(absolutePath, req.file.mimetype, candidate.fullName);
-      } catch (e: any) {
-        extractionError = e?.message || "AI extraction failed";
-        console.warn("[Reference Upload] AI extraction failed:", extractionError);
-      }
-
       const redFlagTriggered = !!(
         extracted?.conductFlags?.conduct_concerns === true ||
         extracted?.conductFlags?.reemploy === false ||
@@ -599,9 +602,9 @@ export function registerAdminRoutes(app: Express) {
         nurseId: candidate.id,
         refereeName,
         refereeEmail,
-        refereeOrg: req.body.refereeOrg || null,
-        refereeRole: req.body.refereeRole || null,
-        relationshipToCandidate: req.body.relationshipToCandidate || null,
+        refereeOrg,
+        refereeRole,
+        relationshipToCandidate,
         outcome: redFlagTriggered ? "flagged" : "received",
         formSubmittedAt: new Date(),
         source: "uploaded",
@@ -635,6 +638,8 @@ export function registerAdminRoutes(app: Express) {
           aiExtraction: extracted
             ? {
                 confidence: extracted.confidence,
+                detectedRefereeName: extracted.refereeName,
+                detectedRefereeEmail: extracted.refereeEmail,
                 ratingsCount: Object.keys(extracted.ratings).length,
                 freeTextCount: Object.keys(extracted.freeTextResponses).length,
                 hasConductFlags: Object.keys(extracted.conductFlags).length > 0,
@@ -655,6 +660,10 @@ export function registerAdminRoutes(app: Express) {
         extraction: extracted
           ? {
               confidence: extracted.confidence,
+              detectedRefereeName: extracted.refereeName,
+              detectedRefereeEmail: extracted.refereeEmail,
+              detectedRefereeOrg: extracted.refereeOrg,
+              detectedRefereeRole: extracted.refereeRole,
               ratingsCount: Object.keys(extracted.ratings).length,
               freeTextCount: Object.keys(extracted.freeTextResponses).length,
               sicknessAbsenceBand: extracted.sicknessAbsenceBand,
