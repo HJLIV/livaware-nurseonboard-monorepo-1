@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "system"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system"]);
 
 // Onboard enums
 export const onboardingStatusEnum = pgEnum("onboarding_status", [
@@ -87,11 +87,62 @@ export const portalLinks = pgTable("portal_links", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   usedAt: timestamp("used_at"),
+  // When the link was first redeemed to bootstrap a passwordless portal
+  // session. After this is set the link is considered "consumed" — it
+  // can no longer be used to mint a new session and the user is bounced
+  // to /portal/sign-in to request a 6-digit email code.
+  claimedAt: timestamp("claimed_at"),
   createdBy: text("created_by"),
 }, (table) => [
   index("portal_links_nurse_id_idx").on(table.nurseId),
   index("portal_links_token_idx").on(table.token),
 ]);
+
+// ──────────── Portal passwordless auth (task 107) ────────────
+// Short-lived 6-digit email codes used by nurses to sign back into
+// their portal after the initial bootstrap link is consumed. Codes
+// expire after 10 minutes, are single-use, and have a small attempts
+// counter so brute-forcing one code is bounded.
+export const portalAuthCodes = pgTable("portal_auth_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  // SHA-256 of the 6-digit code. Only the hash is stored.
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attemptsRemaining: integer("attempts_remaining").default(5).notNull(),
+  consumedAt: timestamp("consumed_at"),
+  requestedIp: text("requested_ip"),
+  requestedUserAgent: text("requested_user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("portal_auth_codes_nurse_id_idx").on(table.nurseId),
+  index("portal_auth_codes_expires_at_idx").on(table.expiresAt),
+]);
+
+// Active passwordless portal sessions. The cookie value is the random
+// session token; only its SHA-256 hash is stored here so a DB leak
+// can't be replayed as a live session. Default lifetime is 7 days.
+export const portalSessions = pgTable("portal_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  sessionTokenHash: text("session_token_hash").notNull().unique(),
+  issuedAt: timestamp("issued_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  // How the session came into being — bootstrap link claim vs. email-code login.
+  issuedVia: text("issued_via").default("code").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedReason: text("revoked_reason"),
+}, (table) => [
+  index("portal_sessions_nurse_id_idx").on(table.nurseId),
+  index("portal_sessions_token_hash_idx").on(table.sessionTokenHash),
+  index("portal_sessions_expires_at_idx").on(table.expiresAt),
+]);
+
+export type PortalAuthCode = typeof portalAuthCodes.$inferSelect;
+export type PortalSession = typeof portalSessions.$inferSelect;
 
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

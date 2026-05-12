@@ -159,6 +159,12 @@ export async function registerRoutes(
   const { registerAdminRoutes } = await import("./routes/onboard");
   registerAdminRoutes(app);
 
+  // === PORTAL PASSWORDLESS AUTH (task 107) ===
+  // Must be registered BEFORE the catch-all /api/portal/:token routes so
+  // /api/portal/auth/* doesn't get swallowed by the token middleware.
+  const { registerPortalAuthRoutes } = await import("./routes/portal-auth");
+  registerPortalAuthRoutes(app);
+
   // === PORTAL (nurse-facing self-service) ===
   const { registerPortalRoutes } = await import("./routes/portal");
   registerPortalRoutes(app);

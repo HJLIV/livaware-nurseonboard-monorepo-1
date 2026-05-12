@@ -34,6 +34,7 @@ const CandidateDetail = lazy(() => import("@/pages/candidate-detail"));
 const CandidatesPage = lazy(() => import("@/pages/candidates"));
 const PipelinePage = lazy(() => import("@/pages/pipeline"));
 const PortalPage = lazy(() => import("@/pages/portal"));
+const PortalSignIn = lazy(() => import("@/pages/portal/sign-in"));
 const RefereeForm = lazy(() => import("@/pages/referee-form"));
 
 // Skills Arcade (Clinical Skills)
@@ -127,17 +128,25 @@ function AuthenticatedRouter() {
     <Suspense fallback={<LoadingSpinner />}>
       <Switch>
         {/* Public portal & referee routes - no auth required */}
-        <Route path="/portal/:token" component={PortalHub} />
+        <Route path="/portal/sign-in" component={PortalSignIn} />
+        {/* Tokenless canonical portal routes (cookie-session auth).
+            Order matters with wouter <Switch>: more-specific paths
+            MUST come before the catch-all /portal/:token below, or
+            wouter will match e.g. /portal/arcade as token="arcade". */}
+        <Route path="/portal/arcade" component={PortalArcade} />
+        <Route path="/portal/arcade/scenario/:assignmentId" component={PortalArcadeScenario} />
+        <Route path="/portal/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>
+        <Route path="/portal/page" component={() => <PortalPage />} />
+        <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
+        <Route path="/portal" component={() => <PortalHub />} />
+        {/* Legacy tokenized portal routes — kept for back-compat with
+            existing bootstrap links and external email links. */}
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
-        {/* Portal-token-gated arcade routes — these must come BEFORE the
-            session-auth /arcade routes below so a nurse following a
-            portal link never falls through to the platform admin view
-            (which would happen if a platform admin session were active
-            in the same browser). */}
         <Route path="/portal/:token/arcade" component={PortalArcade} />
         <Route path="/portal/:token/arcade/scenario/:assignmentId" component={PortalArcadeScenario} />
         <Route path="/portal/:token/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>
+        <Route path="/portal/:token" component={PortalHub} />
         <Route path="/referee/:token" component={RefereeForm} />
         <Route path="/preboard/assessment" component={PreboardAssessment} />
 

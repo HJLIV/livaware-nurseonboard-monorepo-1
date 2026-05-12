@@ -145,6 +145,77 @@ export function registerNurseRoutes(app: Express) {
     res.json(links);
   });
 
+  // ─── Portal passwordless auth admin (task 107) ──────────────────────
+  // Read: 10 most recent portal sessions + last sign-in summary.
+  app.get("/api/nurses/:id/portal-sessions", requireAdmin, async (req, res) => {
+    const nurseId = req.params.id;
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const { listRecentSessionsForNurse } = await import("../services/portal-auth");
+    const sessions = await listRecentSessionsForNurse(nurseId, 10);
+    const lastSignIn = sessions.find((s) => !s.revokedAt) ?? sessions[0] ?? null;
+    res.json({
+      nurseId,
+      lastSignIn: lastSignIn
+        ? {
+            issuedAt: lastSignIn.issuedAt,
+            issuedVia: lastSignIn.issuedVia,
+            ip: lastSignIn.ip,
+            userAgent: lastSignIn.userAgent,
+            revokedAt: lastSignIn.revokedAt,
+          }
+        : null,
+      sessions,
+    });
+  });
+
+  // Send a sign-in code now on the nurse's behalf (admin help-desk action).
+  app.post("/api/nurses/:id/portal-auth/send-code", requireAdmin, async (req, res) => {
+    const nurseId = req.params.id;
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    if (!nurse.email) return res.status(400).json({ message: "Nurse has no email on file" });
+
+    const { createPortalAuthCode } = await import("../services/portal-auth");
+    const { code, expiresAt } = await createPortalAuthCode(req, nurse.id);
+
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (isOutlookConfigured()) {
+      try {
+        const { sendPortalSignInCodeEmail } = await import("../outlook");
+        await sendPortalSignInCodeEmail(nurse.email, nurse.fullName, code, expiresAt);
+        emailSent = true;
+      } catch (err: any) {
+        emailError = err?.message || String(err);
+      }
+    }
+    await logAction(nurse.id, "portal_auth", "portal_code_sent_by_admin", agentFor(req), {
+      emailSent,
+      emailError: emailError || null,
+      expiresAt: expiresAt.toISOString(),
+    });
+    const exposeCode = !isOutlookConfigured() || process.env.NODE_ENV !== "production";
+    res.json({
+      ok: true,
+      emailSent,
+      emailError,
+      expiresAt: expiresAt.toISOString(),
+      ...(exposeCode ? { devCode: code } : {}),
+    });
+  });
+
+  // Force sign-out of every active portal session for this nurse.
+  app.post("/api/nurses/:id/portal-auth/revoke-all", requireAdmin, async (req, res) => {
+    const nurseId = req.params.id;
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const reason = String(req.body?.reason || "admin_force_signout");
+    const { revokeAllPortalSessionsForNurse } = await import("../services/portal-auth");
+    const revoked = await revokeAllPortalSessionsForNurse(nurseId, reason, agentFor(req));
+    res.json({ ok: true, revoked });
+  });
+
   // Bulk-generate portal links for every nurse on the system. Designed for the
   // one-shot "open up portals for everyone already loaded" admin operation.
   // - Reuses the most recent active (non-expired) link per nurse if one exists.
@@ -521,20 +592,77 @@ export function registerNurseRoutes(app: Express) {
 
   app.get("/api/portal/:token", async (req, res) => {
     try {
-      const [link] = await db.select().from(portalLinks).where(
-        and(eq(portalLinks.token, req.params.token), gt(portalLinks.expiresAt, new Date()))
-      );
-      if (!link) return res.status(404).json({ message: "Invalid or expired portal link" });
+      // "me" / "session" → resolve via the portal session cookie (task 107).
+      let link: typeof portalLinks.$inferSelect | undefined;
+      let nurse: typeof nurses.$inferSelect | undefined;
+      let bootstrappedSessionId: string | null = null;
 
-      const [nurse] = await db.select().from(nurses).where(eq(nurses.id, link.nurseId));
-      if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+      const tokenParam = req.params.token;
+      const { loadPortalSessionFromRequest, claimBootstrapLink } = await import("../services/portal-auth");
 
-      const isFirstVisit = !link.usedAt;
-      if (isFirstVisit) {
-        await db.update(portalLinks).set({ usedAt: new Date() }).where(eq(portalLinks.id, link.id));
-        await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
+      if (tokenParam === "me" || tokenParam === "session") {
+        const loaded = await loadPortalSessionFromRequest(req);
+        if (!loaded) return res.status(401).json({ message: "Portal sign-in required" });
+        nurse = loaded.nurse;
+      } else {
+        const [foundLink] = await db.select().from(portalLinks).where(eq(portalLinks.token, tokenParam));
+        if (!foundLink) return res.status(404).json({ message: "Invalid or expired portal link" });
+        if (foundLink.expiresAt.getTime() <= Date.now()) {
+          // Try to fall back to an existing session before refusing.
+          const loaded = await loadPortalSessionFromRequest(req);
+          if (loaded) {
+            nurse = loaded.nurse;
+            link = foundLink;
+          } else {
+            const [n] = await db.select().from(nurses).where(eq(nurses.id, foundLink.nurseId));
+            return res.status(410).json({
+              error: "link_expired",
+              message: "This portal link has expired. Please sign in with the code we email you.",
+              redirect: "/portal/sign-in",
+              email: n?.email,
+            });
+          }
+        } else if (foundLink.claimedAt) {
+          // Link was already used to bootstrap a session. If the current
+          // browser still holds a valid cookie we render the hub; if
+          // not, we ask the client to redirect to /portal/sign-in with
+          // the nurse's email pre-filled.
+          const loaded = await loadPortalSessionFromRequest(req);
+          if (loaded) {
+            nurse = loaded.nurse;
+            link = foundLink;
+          } else {
+            const [n] = await db.select().from(nurses).where(eq(nurses.id, foundLink.nurseId));
+            return res.status(410).json({
+              error: "link_consumed",
+              message: "This portal link has already been used. Please sign in with the code we email you.",
+              redirect: "/portal/sign-in",
+              email: n?.email,
+            });
+          }
+        } else {
+          // Fresh link — claim it & issue a 7-day portal session cookie.
+          const claim = await claimBootstrapLink(req, res, tokenParam);
+          if ("error" in claim) {
+            return res.status(claim.error === "expired" ? 410 : 404).json({
+              error: claim.error,
+              message: "Invalid or expired portal link",
+            });
+          }
+          nurse = claim.nurse;
+          bootstrappedSessionId = claim.sessionId;
+          link = foundLink;
+        }
       }
 
+      if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+
+      const isFirstVisit = !!bootstrappedSessionId;
+      if (isFirstVisit && link) {
+        // Mark legacy usedAt (kept for backwards-compat with audit + UI).
+        await db.update(portalLinks).set({ usedAt: link.usedAt ?? new Date() }).where(eq(portalLinks.id, link.id));
+        await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
+      }
       // Completion is based purely on the underlying status fields, not on
       // whether the nurse has been advanced to a later stage. This keeps the
       // assessment visible as still-to-do even after an admin manually
@@ -547,20 +675,21 @@ export function registerNurseRoutes(app: Express) {
       // gates onboarding or the skills arcade behind the assessment — the
       // candidate can work through any of them in parallel and finish the
       // assessment when convenient.
+      // Cookie carries the identity, so action URLs are tokenless.
       const journey = {
         preboard: {
           status: preboardDone ? "completed" : "in_progress",
-          actionUrl: `/preboard/assessment?token=${link.token}`,
+          actionUrl: `/preboard/assessment`,
           label: preboardDone ? "Update Details" : "Start Assessment",
         },
         onboard: {
           status: onboardDone ? "completed" : "in_progress",
-          actionUrl: onboardDone ? `/portal/page/${link.token}` : `/portal/page/${link.token}`,
+          actionUrl: `/portal/page`,
           label: onboardDone ? "Update Documents" : "Continue Onboarding",
         },
         skillsArcade: {
           status: arcadeDone ? "completed" : "in_progress",
-          actionUrl: arcadeDone ? `/portal/${link.token}/arcade` : `/portal/${link.token}/arcade`,
+          actionUrl: `/portal/arcade`,
           label: arcadeDone ? "Review Modules" : "Start Skills Arcade",
         },
       };
@@ -576,8 +705,9 @@ export function registerNurseRoutes(app: Express) {
         },
         journey,
         gate,
-        token: link.token,
+        token: "me",
         firstVisit: isFirstVisit,
+        sessionIssued: !!bootstrappedSessionId,
       });
     } catch (err) {
       console.error("Portal token error:", err);

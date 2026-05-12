@@ -1851,30 +1851,31 @@ export default function AssessmentPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
-    if (token) {
-      fetch(`/api/portal/${token}`)
-        .then((r) => {
-          if (!r.ok) {
-            console.warn("Portal token invalid or expired, falling back to manual entry");
-            return null;
-          }
-          return r.json();
-        })
-        .then((data) => {
-          if (data?.nurse) {
-            setPortalToken(token);
-            setNurseInfo({
-              name: data.nurse.fullName || "",
-              email: data.nurse.email || "",
-              phone: "",
-            });
-            setScreen("intro");
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to fetch portal token:", err);
-        });
-    }
+    // Either a bootstrap token in ?token= OR the cookie-based "me" sentinel
+    // (the nurse arrived via /preboard/assessment from /portal).
+    const tokenToUse = token || "me";
+    fetch(`/api/portal/${tokenToUse}`, { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) {
+          if (token) console.warn("Portal token invalid or expired, falling back to manual entry");
+          return null;
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.nurse) {
+          setPortalToken(tokenToUse);
+          setNurseInfo({
+            name: data.nurse.fullName || "",
+            email: data.nurse.email || "",
+            phone: "",
+          });
+          setScreen("intro");
+        }
+      })
+      .catch((err) => {
+        if (token) console.error("Failed to fetch portal token:", err);
+      });
   }, []);
 
   const handleInfoSubmit = (info: NurseInfo) => {

@@ -503,10 +503,23 @@ export function PortalShell({
           <p className="text-xs font-medium tracking-[0.14em] uppercase text-primary">
             NurseOnboard
           </p>
-          <div className="ml-auto hidden sm:block min-w-0">
-            <p className="text-xs text-muted-foreground/70 truncate" data-testid="portal-shell-candidate-name">
+          <div className="ml-auto flex items-center gap-3 min-w-0">
+            <p className="text-xs text-muted-foreground/70 truncate hidden sm:block" data-testid="portal-shell-candidate-name">
               {candidateName}
             </p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch("/api/portal/auth/sign-out", { method: "POST", credentials: "include" });
+                } catch { /* ignore */ }
+                window.location.href = "/portal/sign-in";
+              }}
+              className="text-xs text-muted-foreground/70 hover:text-foreground underline"
+              data-testid="portal-shell-sign-out"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </header>
@@ -702,7 +715,7 @@ export function buildPortalGroups({
           onClick: selectCompetency
             ? selectCompetency
             : () => {
-                window.location.href = `/portal/page/${token}?step=competency`;
+                window.location.href = `/portal/page?step=competency`;
               },
         },
         {

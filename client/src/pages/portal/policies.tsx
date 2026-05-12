@@ -163,7 +163,8 @@ interface PortalData {
 }
 
 export default function PortalPoliciesPage() {
-  const [, params] = useRoute("/portal/policies/:token");
+  const [, paramsWithToken] = useRoute("/portal/policies/:token");
+  const params = paramsWithToken ?? { token: "me" };
   const [, navigate] = useLocation();
   const token = params?.token;
   const { toast } = useToast();
@@ -192,13 +193,13 @@ export default function PortalPoliciesPage() {
       token,
       journey: portal.journey,
       stepStatuses,
-      selectOverview: () => navigate(`/portal/${token}`),
+      selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) =>
-        navigate(`/portal/page/${token}?step=${stepKey}`),
+        navigate(`/portal/page?step=${stepKey}`),
       policiesSummary: policies
         ? { totalRequired: policies.totalRequired, outstanding: policies.outstanding }
         : null,
-      selectPolicies: () => navigate(`/portal/policies/${token}`),
+      selectPolicies: () => navigate(`/portal/policies`),
     });
   }, [portal, token, stepStatuses, navigate, policies]);
 

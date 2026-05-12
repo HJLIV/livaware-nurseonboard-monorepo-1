@@ -104,7 +104,7 @@ export async function sendPortalInviteEmail(
         </div>
 
         <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          This link is personal to you — please do not share it with anyone else. It will expire on <strong style="color: #C8A96E;">${expiryFormatted}</strong>. You can save your progress at any time and come back to it later.
+          This link is personal to you — please do not share it with anyone else. It's a one-time invite that signs you in on this device. After that, you'll sign in any time using your email and a 6-digit code we send you, so you can come back from any device. (For reference, the invite link itself expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong>.)
         </p>
 
         <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
@@ -143,6 +143,52 @@ export async function sendPortalInviteEmail(
           },
         },
       ],
+    },
+    saveToSentItems: true,
+  });
+}
+
+// ─── Portal passwordless sign-in code email (task 107) ───────────────
+export async function sendPortalSignInCodeEmail(
+  recipientEmail: string,
+  recipientName: string,
+  code: string,
+  expiresAt: Date,
+) {
+  const client = await getGraphClient();
+  const minutesLeft = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px;">NurseOnboard</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Livaware Ltd — Sign-in code</p>
+      </div>
+      <div style="padding: 32px;">
+        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
+          Use the code below to sign back in to your Livaware nurse portal. It is valid for the next <strong style="color:#C8A96E;">${minutesLeft} minutes</strong> and can only be used once.
+        </p>
+        <div style="text-align:center; margin: 28px 0;">
+          <div style="display:inline-block; background:#0d0d38; border:1px solid #1e1e5a; padding:18px 32px; border-radius:8px; font-family:'Courier New', monospace; font-size:32px; letter-spacing:0.32em; color:#C8A96E; font-weight:600;">${code}</div>
+        </div>
+        <p style="font-size:13px; color:#8A8A94; line-height:1.6;">
+          If you did not request this code, you can safely ignore this email — your account stays locked until someone enters the code.
+        </p>
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
+          Kind regards,<br/><strong style="color:#F0ECE4;">Livaware Onboarding Team</strong>
+        </p>
+      </div>
+      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
+        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">This is an automated message. Please do not reply directly to this email.</p>
+      </div>
+    </div>
+  `;
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: "Livaware Ltd — Your portal sign-in code",
+      body: { contentType: "HTML", content: htmlBody },
+      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
     },
     saveToSentItems: true,
   });

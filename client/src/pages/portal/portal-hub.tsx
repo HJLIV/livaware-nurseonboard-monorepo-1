@@ -368,13 +368,31 @@ function OverviewPanel({
 export default function PortalHub() {
   const [, params] = useRoute("/portal/:token");
   const [, navigate] = useLocation();
-  const token = params?.token;
+  // /portal (no token) uses cookie-based session auth via the "me" sentinel.
+  const token = params?.token || "me";
+
   const [showIntro, setShowIntro] = useState<boolean | null>(null);
+  const isBootstrapToken = !!params?.token && params.token !== "me" && params.token !== "session";
 
   const { data: portal, isLoading, error } = useQuery<PortalData>({
     queryKey: [`/api/portal/${token}`],
     enabled: !!token,
     retry: false,
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/${token}`, { credentials: "include" });
+      if (res.status === 410 || res.status === 401) {
+        const body = await res.json().catch(() => ({} as any));
+        const dest = body?.redirect || "/portal/sign-in";
+        const qs = body?.email ? `?email=${encodeURIComponent(body.email)}` : "";
+        navigate(`${dest}${qs}`);
+        throw new Error(body?.message || "Sign-in required");
+      }
+      if (!res.ok) {
+        const text = (await res.text()) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      return res.json();
+    },
   });
 
   const { data: chaseStatus, isLoading: chaseLoading } = useQuery<ChaseStatusResponse>({
@@ -435,19 +453,26 @@ export default function PortalHub() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
-      selectOverview: () => navigate(`/portal/${token}`),
+      // Cookie-based navigation — no token in the URL.
+      selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) =>
-        navigate(`/portal/page/${token}?step=${stepKey}`),
+        navigate(`/portal/page?step=${stepKey}`),
       selectCompetency: () =>
-        navigate(`/portal/page/${token}?step=competency`),
+        navigate(`/portal/page?step=competency`),
       selectCvUpload: () =>
-        navigate(`/portal/page/${token}?step=profile`),
+        navigate(`/portal/page?step=profile`),
       policiesSummary: policiesData
         ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
         : null,
-      selectPolicies: () => navigate(`/portal/policies/${token}`),
+      selectPolicies: () => navigate(`/portal/policies`),
     });
   }, [portal, token, stepStatuses, navigate, policiesData]);
+
+  // After the bootstrap fetch lands (cookie now set), normalize the URL to
+  // /portal so the original token never lingers in the address bar / history.
+  useEffect(() => {
+    if (portal && isBootstrapToken) navigate("/portal", { replace: true });
+  }, [portal, isBootstrapToken, navigate]);
 
   if (isLoading || chaseLoading || (portal && showIntro === null)) {
     return (
@@ -503,14 +528,14 @@ export default function PortalHub() {
           stepStatuses={stepStatuses}
           onJumpToOnboarding={(stepKey) => {
             const target = stepKey
-              ? `/portal/page/${token}?step=${stepKey}`
-              : `/portal/page/${token}`;
+              ? `/portal/page?step=${stepKey}`
+              : `/portal/page`;
             navigate(target);
           }}
           policiesSummary={policiesData
             ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
             : null}
-          onOpenPolicies={() => navigate(`/portal/policies/${token}`)}
+          onOpenPolicies={() => navigate(`/portal/policies`)}
         />
       )}
     </PortalShell>

@@ -8,6 +8,7 @@ import { AIMarkdown } from "@/components/ai-markdown";
 import { renderEmailMarkdown } from "@shared/email-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
+import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -4513,6 +4514,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
   return (
     <div className="space-y-4">
       <OnboardingAccessPanel candidateId={candidateId} />
+      <PortalAccessPanel candidateId={candidateId} />
       <div className="flex gap-2" data-testid="section-toggle">
         <Button
           variant={section === "preboard" ? "default" : "outline"}

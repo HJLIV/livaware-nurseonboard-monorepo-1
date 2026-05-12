@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { auditLogs } from "@shared/schema";
 
-type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "system";
+type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "portal_auth" | "system";
 
 export async function logAction(
   nurseId: string | null,

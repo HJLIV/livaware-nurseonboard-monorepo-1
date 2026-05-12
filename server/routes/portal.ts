@@ -149,9 +149,30 @@ async function resolvePortalArcadeUserId(req: Request): Promise<string> {
 
 export function registerPortalRoutes(app: Express) {
   app.get("/api/portal/verify/:token", async (req, res) => {
-    const link = await storage.getMagicLinkByToken(req.params.token);
-    if (!link) return res.status(404).json({ message: "Invalid portal link" });
-    if (new Date() > link.expiresAt) return res.status(410).json({ message: "Portal link has expired" });
+    const tokenParam = req.params.token;
+    // "me" / "session" → cookie-based auth (task 107).
+    if (tokenParam === "me" || tokenParam === "session") {
+      const { loadPortalSessionFromRequest } = await import("../services/portal-auth");
+      const loaded = await loadPortalSessionFromRequest(req);
+      if (!loaded) return res.status(401).json({ message: "Portal sign-in required" });
+      const candidate = await storage.getCandidate(loaded.nurse.id);
+      if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+      return res.json({ candidate, token: tokenParam });
+    }
+    const link = await storage.getMagicLinkByToken(tokenParam);
+    // Bootstrap link is one-time: if it's been claimed, fall back to the
+    // session cookie (the new canonical auth) and 401 → sign-in otherwise.
+    if (!link || (link as any).claimedAt) {
+      const { loadPortalSessionFromRequest } = await import("../services/portal-auth");
+      const loaded = await loadPortalSessionFromRequest(req);
+      if (loaded) {
+        const candidate = await storage.getCandidate(loaded.nurse.id);
+        if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+        return res.json({ candidate, token: "me" });
+      }
+      return res.status(link ? 410 : 404).json({ message: "Invalid or expired portal link", redirect: "/portal/sign-in" });
+    }
+    if (new Date() > link.expiresAt) return res.status(410).json({ message: "Portal link has expired", redirect: "/portal/sign-in" });
     const candidate = await storage.getCandidate(link.nurseId);
     if (!candidate) return res.status(404).json({ message: "Candidate not found" });
     if (!link.usedAt) {

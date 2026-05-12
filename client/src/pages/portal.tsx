@@ -3104,7 +3104,8 @@ function getStepFromQuery(): string | null {
 
 export default function PortalPage() {
   const params = useParams<{ token: string }>();
-  const token = params.token || "";
+  // /portal/page (no token) → cookie-based session via the "me" sentinel.
+  const token = params.token || "me";
   const [, navigate] = useLocation();
 
   // Read deep-link ?step= on mount and convert to step index. Falls back to 1.
@@ -3216,8 +3217,8 @@ export default function PortalPage() {
     if (!token) return [];
     const fallbackJourney = {
       preboard: { status: "in_progress", actionUrl: `/preboard/assessment?token=${token}`, label: "Continue" },
-      onboard: { status: "in_progress", actionUrl: `/portal/page/${token}`, label: "Continue" },
-      skillsArcade: { status: "in_progress", actionUrl: `/portal/${token}/arcade`, label: "Continue" },
+      onboard: { status: "in_progress", actionUrl: `/portal/page`, label: "Continue" },
+      skillsArcade: { status: "in_progress", actionUrl: `/portal/arcade`, label: "Continue" },
     };
     const journey = portalHub?.journey ?? fallbackJourney;
     return buildPortalGroups({
@@ -3225,7 +3226,7 @@ export default function PortalPage() {
       journey,
       stepStatuses,
       gate: portalHub?.gate ?? null,
-      selectOverview: () => navigate(`/portal/${token}`),
+      selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) => {
         const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
         if (idx >= 0) goToStep(idx + 1);

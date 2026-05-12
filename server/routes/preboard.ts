@@ -63,7 +63,16 @@ export async function registerRoutes(
       }
 
       let nurseId: string | null = null;
-      if (parsed.data.portalToken) {
+      if (parsed.data.portalToken === "me" || parsed.data.portalToken === "session") {
+        // Cookie-authenticated portal session (task 107).
+        try {
+          const { loadPortalSessionFromRequest } = await import("../services/portal-auth");
+          const loaded = await loadPortalSessionFromRequest(req);
+          if (loaded) nurseId = loaded.nurse.id;
+        } catch (sessErr) {
+          console.error("Failed to load portal session:", sessErr);
+        }
+      } else if (parsed.data.portalToken) {
         try {
           const [link] = await db.select().from(portalLinks).where(
             and(eq(portalLinks.token, parsed.data.portalToken), gt(portalLinks.expiresAt, new Date()))
@@ -74,6 +83,14 @@ export async function registerRoutes(
         } catch (linkErr) {
           console.error("Failed to look up portal token:", linkErr);
         }
+      }
+      // Fallback: even without portalToken in body, accept the portal cookie.
+      if (!nurseId) {
+        try {
+          const { loadPortalSessionFromRequest } = await import("../services/portal-auth");
+          const loaded = await loadPortalSessionFromRequest(req);
+          if (loaded) nurseId = loaded.nurse.id;
+        } catch {}
       }
 
       const assessmentData = nurseId

@@ -41,13 +41,39 @@ export const upload = multer({
 
 export async function validatePortalToken(req: Request, res: Response, next: NextFunction) {
   const token = req.params.token as string;
+  // Sentinel "me" / "session" → no URL token, authenticate via the
+  // passwordless portal session cookie (task 107).
+  if (token === "me" || token === "session") {
+    const { loadPortalSessionFromRequest } = await import("./services/portal-auth");
+    const loaded = await loadPortalSessionFromRequest(req);
+    if (!loaded) return res.status(401).json({ message: "Portal sign-in required" });
+    (req as any).nurseId = loaded.nurse.id;
+    (req as any).portalSession = loaded.session;
+    return next();
+  }
   const [link] = await db.select().from(portalLinks).where(
     and(eq(portalLinks.token, token), gt(portalLinks.expiresAt, new Date()))
   );
-  if (!link) return res.status(404).json({ message: "Invalid or expired portal link" });
-  (req as any).nurseId = link.nurseId;
-  (req as any).portalLink = link;
-  next();
+  // Bootstrap links are one-time: once claimed they may NOT continue to
+  // authenticate /api/portal/:token/* requests. The session cookie is the
+  // only valid auth from that point on. Unclaimed, non-expired links
+  // remain valid so the very first hit can bootstrap a session.
+  if (link && !link.claimedAt) {
+    (req as any).nurseId = link.nurseId;
+    (req as any).portalLink = link;
+    return next();
+  }
+  // Token unknown/expired/already-claimed — fall back to a portal-session
+  // cookie if the client is signed in. This is what lets newly issued
+  // sessions keep using /api/portal/:token/* routes after the bootstrap.
+  const { loadPortalSessionFromRequest } = await import("./services/portal-auth");
+  const loaded = await loadPortalSessionFromRequest(req);
+  if (loaded) {
+    (req as any).nurseId = loaded.nurse.id;
+    (req as any).portalSession = loaded.session;
+    return next();
+  }
+  return res.status(404).json({ message: "Invalid or expired portal link" });
 }
 
 export const magicLinkLimiter = rateLimit({

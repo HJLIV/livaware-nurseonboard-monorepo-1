@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
+import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -775,6 +776,7 @@ export default function NurseDetail() {
         </Card>
 
         <OnboardingAccessPanel candidateId={nurseId} />
+        <PortalAccessPanel candidateId={nurseId} />
 
         {/* Tabs */}
         <Tabs defaultValue="overview">

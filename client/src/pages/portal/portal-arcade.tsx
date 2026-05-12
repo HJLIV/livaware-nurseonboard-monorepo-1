@@ -3,5 +3,5 @@ import NurseDashboard from "@/pages/arcade/nurse-dashboard";
 
 export default function PortalArcade() {
   const { token } = useParams<{ token: string }>();
-  return <NurseDashboard portalToken={token} />;
+  return <NurseDashboard portalToken={token || "me"} />;
 }
