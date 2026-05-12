@@ -867,6 +867,16 @@ export async function registerRoutes(
         targetUserIds.add(arcadeUser.id);
       }
 
+      // assignments.assignedBy FKs to arcade_users.id, but the acting admin
+      // is a platform-session user that may not exist in arcade_users.
+      // Resolve to the matching arcade user if there is one; otherwise null.
+      const sessionUserId = req.session.userId;
+      let assignedByArcadeUserId: string | null = null;
+      if (sessionUserId) {
+        const arcadeActor = await storage.getUser(sessionUserId);
+        if (arcadeActor) assignedByArcadeUserId = arcadeActor.id;
+      }
+
       const assigned: string[] = [];
       for (const userId of targetUserIds) {
         const existing = await storage.getAssignmentsByUser(userId);
@@ -877,7 +887,7 @@ export async function registerRoutes(
             moduleVersionId: mv.id,
             moduleId: moduleId,
             status: "not_started",
-            assignedBy: req.session.userId,
+            assignedBy: assignedByArcadeUserId,
           });
           assigned.push(userId);
         }
