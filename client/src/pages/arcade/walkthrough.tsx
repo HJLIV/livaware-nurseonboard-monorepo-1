@@ -48,21 +48,24 @@ export default function WalkthroughPage() {
           </div>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Getting Started</p>
-            <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-walkthrough-title">Welcome to Pre-Induction</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Your guide to clinical competency assessment</p>
+            <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-walkthrough-title">Welcome to the Clinical Skills Arcade</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Your guide to scenario-based clinical competency</p>
           </div>
         </div>
       </div>
 
-      <Section icon={HeartPulse} title="What is Pre-Induction?">
+      <Section icon={HeartPulse} title="What is the Clinical Skills Arcade?">
         <p>
-          Pre-Induction is a clinical competency assessment platform designed for community and home care nurses.
-          It uses realistic, scenario-based assessments to evaluate whether you can safely and effectively carry
-          out the clinical procedures you perform every day with patients.
+          The Clinical Skills Arcade is a scenario-based clinical competency platform for community and home care
+          nurses. It uses realistic patient scenarios to evaluate whether you can safely and effectively carry out
+          the clinical procedures you perform with patients. It is used both for the pre-induction of new joiners
+          and for ongoing competency checks for nurses already working on the platform — so whether this is your
+          first set of modules or a refresher, the experience is the same.
         </p>
         <p>
-          The platform covers 40 clinical skills across areas including medication management, respiratory care,
+          The Arcade covers 40 clinical skills across areas including medication management, respiratory care,
           wound care, diabetes management, palliative care, catheter care, nutrition, clinical assessment, and stoma care.
+          Your administrator decides which modules are assigned to you and when.
         </p>
       </Section>
 
@@ -78,7 +81,7 @@ export default function WalkthroughPage() {
           knowledge is the difference between going through the motions and providing safe, accountable care.
         </p>
         <p>
-          Pre-Induction tests this critical dimension of competency. By asking you to sequence steps, match
+          The Arcade tests this critical dimension of competency. By asking you to sequence steps, match
           clinical concepts, make decisions at key branching points, and perform calculations, it assesses
           whether you understand the <span className="text-foreground font-medium">why</span> and <span className="text-foreground font-medium">when</span>, not just the how.
         </p>
@@ -203,9 +206,10 @@ export default function WalkthroughPage() {
             <div className="space-y-2 text-sm">
               <p className="text-foreground font-medium text-base">Ready to begin?</p>
               <p className="text-muted-foreground leading-relaxed">
-                Head to your dashboard to see your assigned modules. Each one is a chance to demonstrate
-                that you have the knowledge and clinical reasoning to deliver safe, effective care in the
-                community. Good luck.
+                Head to your dashboard to see the modules currently assigned to you. Each one is a chance
+                to demonstrate that you have the knowledge and clinical reasoning to deliver safe, effective
+                care in the community — whether you're joining the platform for the first time or keeping
+                your competencies current. Good luck.
               </p>
             </div>
           </div>
