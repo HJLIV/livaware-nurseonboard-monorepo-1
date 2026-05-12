@@ -6,6 +6,7 @@ import { seedDatabase } from "../arcade-seed";
 import { loginSchema, registerSchema } from "@shared/schema";
 import type { User, ScenarioContent } from "@shared/schema";
 import { z } from "zod";
+import { mintChasePortalLinkForNurse } from "../training-notifications";
 
 declare module "express-session" {
   interface SessionData {
@@ -804,10 +805,15 @@ export async function registerRoutes(
   });
 
   const assignSchema = z.object({
-    moduleId: z.string().min(1),
+    moduleId: z.string().min(1).optional(),
+    moduleIds: z.array(z.string().min(1)).optional(),
     userIds: z.array(z.string().min(1)).optional(),
     nurseIds: z.array(z.string().min(1)).optional(),
+    notify: z.boolean().optional(),
   }).refine(
+    (v) => !!v.moduleId || (v.moduleIds && v.moduleIds.length > 0),
+    { message: "moduleId or moduleIds is required" },
+  ).refine(
     (v) => (v.userIds && v.userIds.length > 0) || (v.nurseIds && v.nurseIds.length > 0),
     { message: "userIds or nurseIds is required" },
   );
@@ -849,20 +855,33 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid request" });
       }
-      const { moduleId } = parsed.data;
-      const mod = await storage.getModule(moduleId);
-      if (!mod) {
-        return res.status(404).json({ message: "Module not found" });
-      }
-      const mv = await storage.getLatestModuleVersion(moduleId);
-      if (!mv) {
-        return res.status(404).json({ message: "No module version found" });
+
+      // Accept either moduleId (legacy) or moduleIds[] (new multi-module path).
+      const moduleIds = parsed.data.moduleIds && parsed.data.moduleIds.length > 0
+        ? parsed.data.moduleIds
+        : parsed.data.moduleId
+          ? [parsed.data.moduleId]
+          : [];
+      const notify = parsed.data.notify !== false; // default: send email
+
+      // Pre-resolve every module + its latest version up-front so we fail
+      // fast if anything is missing.
+      const moduleCtx: Array<{ id: string; name: string; mvId: string }> = [];
+      for (const mid of moduleIds) {
+        const mod = await storage.getModule(mid);
+        if (!mod) return res.status(404).json({ message: `Module ${mid} not found` });
+        const mv = await storage.getLatestModuleVersion(mid);
+        if (!mv) return res.status(404).json({ message: `No version for module ${mod.name}` });
+        moduleCtx.push({ id: mid, name: mod.name, mvId: mv.id });
       }
 
       // Resolve every requested target into an arcade user id, auto-creating
       // arcade users for platform nurses that have never been invited yet.
+      // Track the link back to the originating nurseId (when present) so we
+      // can email the nurse after assigning.
       const targetUserIds = new Set<string>();
       const skippedNurseIds: string[] = [];
+      const nurseByArcadeUserId = new Map<string, string>();
 
       for (const userId of parsed.data.userIds ?? []) {
         targetUserIds.add(userId);
@@ -874,11 +893,11 @@ export async function registerRoutes(
           continue;
         }
         targetUserIds.add(arcadeUser.id);
+        nurseByArcadeUserId.set(arcadeUser.id, nurseId);
       }
 
       // assignments.assignedBy FKs to arcade_users.id, but the acting admin
       // is a platform-session user that may not exist in arcade_users.
-      // Resolve to the matching arcade user if there is one; otherwise null.
       const sessionUserId = req.session.userId;
       let assignedByArcadeUserId: string | null = null;
       if (sessionUserId) {
@@ -886,41 +905,95 @@ export async function registerRoutes(
         if (arcadeActor) assignedByArcadeUserId = arcadeActor.id;
       }
 
-      const assigned: string[] = [];
+      // For each (target user × module) create an assignment unless one
+      // already exists. Track newly-assigned module names per arcade user
+      // so we can send a single per-nurse email at the end.
+      const newModuleNamesByUser = new Map<string, string[]>();
+      let assignedCount = 0;
       for (const userId of targetUserIds) {
         const existing = await storage.getAssignmentsByUser(userId);
-        const alreadyAssigned = existing.find((a) => a.moduleId === moduleId);
-        if (!alreadyAssigned) {
+        for (const m of moduleCtx) {
+          if (existing.find((a) => a.moduleId === m.id)) continue;
           await storage.createAssignment({
             userId,
-            moduleVersionId: mv.id,
-            moduleId: moduleId,
+            moduleVersionId: m.mvId,
+            moduleId: m.id,
             status: "not_started",
             assignedBy: assignedByArcadeUserId,
           });
-          assigned.push(userId);
+          assignedCount += 1;
+          const list = newModuleNamesByUser.get(userId) ?? [];
+          list.push(m.name);
+          newModuleNamesByUser.set(userId, list);
         }
       }
 
       const adminUser = (req as any).user as User | undefined;
+
+      // Send a single notification email per nurse listing all newly-
+      // assigned modules. Best-effort: failures are logged but never
+      // break the assignment itself.
+      const emailResults: Array<{ nurseId: string; emailSent: boolean; error?: string }> = [];
+      if (notify && newModuleNamesByUser.size > 0) {
+        const { isOutlookConfigured, sendArcadeAssignmentEmail } = await import("../outlook");
+        if (isOutlookConfigured()) {
+          const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+          const host = (req.headers["host"] as string) || "localhost:5000";
+          const portalBaseUrl = `${protocol}://${host}`;
+          for (const [arcadeUserId, names] of newModuleNamesByUser) {
+            const nurseId = nurseByArcadeUserId.get(arcadeUserId);
+            if (!nurseId) continue; // legacy userIds path — no nurse to email
+            try {
+              const nurse = await platformStorage.getCandidate(nurseId);
+              if (!nurse?.email) {
+                emailResults.push({ nurseId, emailSent: false, error: "No email on file" });
+                continue;
+              }
+              const minted = await mintChasePortalLinkForNurse({
+                nurseId,
+                sentBy: adminUser?.name ?? "admin",
+                portalBaseUrl,
+              });
+              await sendArcadeAssignmentEmail({
+                recipientEmail: nurse.email,
+                recipientName: nurse.fullName,
+                moduleNames: names,
+                assignedBy: adminUser?.name ?? "Livaware admin",
+                portalUrl: minted.portalUrl,
+                expiryFormatted: minted.expiresAt.toLocaleDateString("en-GB", {
+                  day: "numeric", month: "long", year: "numeric",
+                }),
+              });
+              emailResults.push({ nurseId, emailSent: true });
+            } catch (e: any) {
+              console.warn("[arcade-assign] email send failed:", e?.message || e);
+              emailResults.push({ nurseId, emailSent: false, error: e?.message ?? "send failed" });
+            }
+          }
+        }
+      }
+
       await platformStorage.createAuditLog({
         module: "skills_arcade",
         action: "assign_module",
         agentName: adminUser?.name ?? "super_admin",
         detail: {
-          moduleId,
-          moduleName: mod.name,
+          moduleIds: moduleCtx.map((m) => m.id),
+          moduleNames: moduleCtx.map((m) => m.name),
           userIds: Array.from(targetUserIds),
           nurseIds: parsed.data.nurseIds ?? [],
-          newlyAssigned: assigned,
+          newlyAssignedCount: assignedCount,
           skippedNurseIds,
+          emailResults,
         },
       });
 
       res.json({
         ok: true,
-        assignedCount: assigned.length,
+        assignedCount,
         skippedNurseIds,
+        emailsSent: emailResults.filter((r) => r.emailSent).length,
+        emailFailures: emailResults.filter((r) => !r.emailSent),
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });

@@ -86,28 +86,37 @@ export default function ArcadeAdminOverview() {
 
   const assignMutation = useMutation({
     mutationFn: async (input: { nurseId: string; moduleIds: string[] }) => {
-      // POST /api/admin/assign accepts a single moduleId, so call once per module.
-      const results = await Promise.all(
-        input.moduleIds.map((moduleId) =>
-          apiRequest("POST", "/api/admin/assign", {
-            moduleId,
-            nurseIds: [input.nurseId],
-          }).then((r) => r.json()),
-        ),
-      );
-      const totalAssigned = results.reduce((acc, r: any) => acc + (r.assignedCount ?? 0), 0);
-      return { totalAssigned, totalRequested: input.moduleIds.length };
+      const r = await apiRequest("POST", "/api/admin/assign", {
+        moduleIds: input.moduleIds,
+        nurseIds: [input.nurseId],
+      });
+      const json = (await r.json()) as {
+        assignedCount: number;
+        emailsSent: number;
+        emailFailures: Array<{ error?: string }>;
+      };
+      return { ...json, totalRequested: input.moduleIds.length };
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/assignable-nurses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/modules"] });
-      const skipped = res.totalRequested - res.totalAssigned;
+      const skipped = res.totalRequested - res.assignedCount;
+      const parts: string[] = [];
+      if (res.assignedCount > 0) {
+        parts.push(`${res.assignedCount} module${res.assignedCount === 1 ? "" : "s"} assigned`);
+      } else {
+        parts.push("All selected modules were already assigned");
+      }
+      if (skipped > 0 && res.assignedCount > 0) parts.push(`${skipped} already assigned`);
+      if (res.emailsSent > 0) parts.push(`email sent`);
+      else if (res.assignedCount > 0 && res.emailFailures.length === 0) {
+        parts.push("no email (Outlook not configured)");
+      } else if (res.emailFailures.length > 0) {
+        parts.push(`email failed: ${res.emailFailures[0].error ?? "unknown"}`);
+      }
       toast({
         title: "Modules assigned",
-        description:
-          res.totalAssigned > 0
-            ? `${res.totalAssigned} module${res.totalAssigned === 1 ? "" : "s"} assigned${skipped > 0 ? ` (${skipped} already assigned)` : ""}.`
-            : "All selected modules were already assigned to this nurse.",
+        description: parts.join(" — "),
       });
       setAssignTarget(null);
     },
