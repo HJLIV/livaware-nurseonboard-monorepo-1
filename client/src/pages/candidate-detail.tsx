@@ -2829,10 +2829,17 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.message || `Upload failed (${res.status})`);
       }
+      const data = await res.json().catch(() => ({}));
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "references"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
-      toast({ title: "Reference uploaded", description: `${name}'s reference saved.` });
+      const ex = data.extraction;
+      const desc = ex && !ex.failed
+        ? `${ex.ratingsCount || 0} ratings + ${ex.freeTextCount || 0} written answers extracted${ex.redFlagTriggered ? " — RED FLAG" : ""} (confidence: ${ex.confidence})`
+        : ex?.failed
+          ? "Saved as attachment — AI couldn't read the answers, please review manually."
+          : `${name}'s reference saved.`;
+      toast({ title: "Reference uploaded", description: desc, variant: ex?.redFlagTriggered ? "destructive" : "default" });
       setName(""); setEmail(""); setOrg(""); setRole(""); setRelationship("");
       setResetKey((k) => k + 1);
     } catch (err: any) {

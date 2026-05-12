@@ -4,6 +4,7 @@ import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } fro
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
+import { extractReferenceFromDocument } from "../reference-extract-ai";
 import { checkDbsCertificate, isDbsConfigured, DbsUpdateServiceError } from "../dbs-service";
 import { isNmcAgentAvailable, validatePin, parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
@@ -575,6 +576,25 @@ export function registerAdminRoutes(app: Express) {
         notes: `Uploaded reference from ${refereeName}`,
       } as any);
 
+      // Try to AI-extract structured answers from the uploaded letter so the
+      // reference looks the same as a digitally-collected one. If extraction
+      // fails we still keep the upload — just without structured fields.
+      let extracted: Awaited<ReturnType<typeof extractReferenceFromDocument>> | null = null;
+      let extractionError: string | null = null;
+      try {
+        const absolutePath = path.join(uploadsDir, req.file.filename);
+        extracted = await extractReferenceFromDocument(absolutePath, req.file.mimetype, candidate.fullName);
+      } catch (e: any) {
+        extractionError = e?.message || "AI extraction failed";
+        console.warn("[Reference Upload] AI extraction failed:", extractionError);
+      }
+
+      const redFlagTriggered = !!(
+        extracted?.conductFlags?.conduct_concerns === true ||
+        extracted?.conductFlags?.reemploy === false ||
+        extracted?.sicknessAbsenceBand === "Concerns"
+      );
+
       const reference = await storage.createReference({
         nurseId: candidate.id,
         refereeName,
@@ -582,10 +602,15 @@ export function registerAdminRoutes(app: Express) {
         refereeOrg: req.body.refereeOrg || null,
         refereeRole: req.body.refereeRole || null,
         relationshipToCandidate: req.body.relationshipToCandidate || null,
-        outcome: "received",
+        outcome: redFlagTriggered ? "flagged" : "received",
         formSubmittedAt: new Date(),
         source: "uploaded",
         documentId: doc.id,
+        ratings: extracted?.ratings && Object.keys(extracted.ratings).length ? extracted.ratings : null,
+        freeTextResponses: extracted?.freeTextResponses && Object.keys(extracted.freeTextResponses).length ? extracted.freeTextResponses : null,
+        conductFlags: extracted?.conductFlags && Object.keys(extracted.conductFlags).length ? extracted.conductFlags : null,
+        sicknessAbsenceBand: extracted?.sicknessAbsenceBand || null,
+        redFlagTriggered,
       } as any);
 
       // Bump the references step to in_progress so the journey reflects it.
@@ -602,14 +627,41 @@ export function registerAdminRoutes(app: Express) {
         nurseId: candidate.id,
         action: "reference_uploaded",
         agentName: agentFor(req),
-        detail: { referenceId: reference.id, documentId: doc.id, refereeName, filename: req.file.originalname },
+        detail: {
+          referenceId: reference.id,
+          documentId: doc.id,
+          refereeName,
+          filename: req.file.originalname,
+          aiExtraction: extracted
+            ? {
+                confidence: extracted.confidence,
+                ratingsCount: Object.keys(extracted.ratings).length,
+                freeTextCount: Object.keys(extracted.freeTextResponses).length,
+                hasConductFlags: Object.keys(extracted.conductFlags).length > 0,
+                sicknessAbsenceBand: extracted.sicknessAbsenceBand,
+                redFlagTriggered,
+              }
+            : { failed: true, error: extractionError },
+        },
       });
 
       if (doc.filePath) {
         triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || "reference");
       }
 
-      res.status(201).json({ reference, document: doc });
+      res.status(201).json({
+        reference,
+        document: doc,
+        extraction: extracted
+          ? {
+              confidence: extracted.confidence,
+              ratingsCount: Object.keys(extracted.ratings).length,
+              freeTextCount: Object.keys(extracted.freeTextResponses).length,
+              sicknessAbsenceBand: extracted.sicknessAbsenceBand,
+              redFlagTriggered,
+            }
+          : { failed: true, message: extractionError },
+      });
     } catch (err: any) {
       console.error("[Reference Upload] Error:", err.message);
       res.status(500).json({ message: "Failed to upload reference" });
