@@ -548,6 +548,74 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  app.post("/api/candidates/:id/references/upload", requireAdmin, uploadLimiter, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const candidate = await storage.getCandidate(param(req, "id"));
+      if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+
+      const refereeName = (req.body.refereeName || "").toString().trim();
+      const refereeEmail = (req.body.refereeEmail || "").toString().trim();
+      if (!refereeName || !refereeEmail) {
+        return res.status(400).json({ message: "refereeName and refereeEmail are required" });
+      }
+
+      // Save file as a document first so it shows up in the documents list too.
+      const filePath = `/api/uploads/${req.file.filename}`;
+      const doc = await storage.createDocument({
+        nurseId: candidate.id,
+        type: "Reference Letter",
+        filename: req.file.filename,
+        originalFilename: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: "reference",
+        uploadedBy: agentFor(req),
+        notes: `Uploaded reference from ${refereeName}`,
+      } as any);
+
+      const reference = await storage.createReference({
+        nurseId: candidate.id,
+        refereeName,
+        refereeEmail,
+        refereeOrg: req.body.refereeOrg || null,
+        refereeRole: req.body.refereeRole || null,
+        relationshipToCandidate: req.body.relationshipToCandidate || null,
+        outcome: "received",
+        formSubmittedAt: new Date(),
+        source: "uploaded",
+        documentId: doc.id,
+      } as any);
+
+      // Bump the references step to in_progress so the journey reflects it.
+      const state = await storage.getOnboardingState(candidate.id);
+      if (state) {
+        const statuses = (state.stepStatuses as Record<string, string>) || {};
+        if (statuses.references !== "completed") {
+          statuses.references = "in_progress";
+          await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
+        }
+      }
+
+      await storage.createAuditLog({
+        nurseId: candidate.id,
+        action: "reference_uploaded",
+        agentName: agentFor(req),
+        detail: { referenceId: reference.id, documentId: doc.id, refereeName, filename: req.file.originalname },
+      });
+
+      if (doc.filePath) {
+        triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, doc.category || "reference");
+      }
+
+      res.status(201).json({ reference, document: doc });
+    } catch (err: any) {
+      console.error("[Reference Upload] Error:", err.message);
+      res.status(500).json({ message: "Failed to upload reference" });
+    }
+  });
+
   app.get("/api/candidates/:id/employment-history", async (req, res) => {
     const result = await storage.getEmploymentHistory(param(req, "id"));
     res.json(result);
@@ -560,7 +628,23 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/candidates/:id/references", async (req, res) => {
     const result = await storage.getReferences(param(req, "id"));
-    res.json(result);
+    // Enrich each reference that has an attached document (uploaded ref) with
+    // its filePath so the UI can render a working link.
+    const nurseId = param(req, "id");
+    const enriched = await Promise.all(
+      result.map(async (r: any) => {
+        if (!r.documentId) return r;
+        try {
+          const doc = await storage.getDocument(r.documentId);
+          // Only expose the file path if the document actually belongs to this nurse.
+          if (!doc || doc.nurseId !== nurseId) return r;
+          return { ...r, documentFilePath: doc.filePath ?? null, documentOriginalFilename: doc.originalFilename ?? null };
+        } catch {
+          return r;
+        }
+      }),
+    );
+    res.json(enriched);
   });
 
   app.post("/api/candidates/:id/references/draft-email", async (req, res) => {

@@ -2548,8 +2548,22 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
                     )}
                     {ref.formSubmittedAt && (
                       <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3" /> Form submitted {new Date(ref.formSubmittedAt).toLocaleDateString("en-GB")}
+                        <CheckCircle className="h-3 w-3" />
+                        {(ref as any).source === "uploaded" ? "Uploaded" : "Form submitted"}{" "}
+                        {new Date(ref.formSubmittedAt).toLocaleDateString("en-GB")}
                       </p>
+                    )}
+                    {(ref as any).documentFilePath && (
+                      <a
+                        href={(ref as any).documentFilePath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-primary hover:underline mt-0.5 inline-flex items-center gap-1"
+                        data-testid={`ref-doc-link-${ref.id}`}
+                      >
+                        <FileDown className="h-3 w-3" />
+                        View {(ref as any).documentOriginalFilename || "attached reference document"}
+                      </a>
                     )}
                   </div>
                   <Badge variant="outline" className={outcomeConfig[ref.outcome]?.color || ""}>
@@ -2669,6 +2683,8 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
         </div>
       )}
 
+      <UploadExistingReferenceCard candidateId={candidateId} />
+
       <Card className="border border-card-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">Add Reference Request</CardTitle>
@@ -2772,6 +2788,122 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [org, setOrg] = useState("");
+  const [role, setRole] = useState("");
+  const [relationship, setRelationship] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
+
+  async function handleUpload(file: File) {
+    if (!name || !email) {
+      toast({
+        title: "Referee details required",
+        description: "Add the referee's name and email before uploading.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("refereeName", name);
+      fd.append("refereeEmail", email);
+      if (org) fd.append("refereeOrg", org);
+      if (role) fd.append("refereeRole", role);
+      if (relationship) fd.append("relationshipToCandidate", relationship);
+
+      const res = await fetch(`/api/candidates/${candidateId}/references/upload`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || `Upload failed (${res.status})`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "references"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
+      toast({ title: "Reference uploaded", description: `${name}'s reference saved.` });
+      setName(""); setEmail(""); setOrg(""); setRole(""); setRelationship("");
+      setResetKey((k) => k + 1);
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message ?? "Try again.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <Card className="border border-card-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Upload className="h-4 w-4" /> Upload Existing Reference
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Have a reference letter from a previous employer? Add the referee's details and attach the file —
+          it'll be saved as a received reference and stored alongside their documents.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Referee Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Helen Cartwright" data-testid="input-upload-ref-name" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Email</Label>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="h.cartwright@nhs.uk" data-testid="input-upload-ref-email" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Organisation</Label>
+            <Input value={org} onChange={(e) => setOrg(e.target.value)} placeholder="NHS Trust" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Role</Label>
+            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Clinical Lead" />
+          </div>
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-xs">Relationship to Candidate</Label>
+            <Input value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Line Manager" />
+          </div>
+        </div>
+        <div key={resetKey} className="flex items-center gap-3">
+          <input
+            type="file"
+            id={`ref-upload-${candidateId}`}
+            className="hidden"
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.currentTarget.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            disabled={uploading || !name || !email}
+            onClick={() => document.getElementById(`ref-upload-${candidateId}`)?.click()}
+            data-testid="button-upload-existing-reference"
+          >
+            {uploading ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading...</>
+            ) : (
+              <><Upload className="h-4 w-4 mr-2" /> Choose file & upload</>
+            )}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">PDF, JPG, PNG, DOC up to 10MB</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

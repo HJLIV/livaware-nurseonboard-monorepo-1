@@ -244,6 +244,8 @@ export const references = pgTable("references", {
   conductFlags: jsonb("conduct_flags"),
   sicknessAbsenceBand: text("sickness_absence_band"),
   redFlagTriggered: boolean("red_flag_triggered").default(false),
+  source: text("source").default("digital"),
+  documentId: varchar("document_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("references_nurse_id_idx").on(table.nurseId),
