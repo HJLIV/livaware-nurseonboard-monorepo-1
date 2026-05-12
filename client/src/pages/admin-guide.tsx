@@ -72,7 +72,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Check the pipeline funnel",
         detail:
-          "The funnel chart visualises how many people are at each stage: Applicant, Candidate, Onboarding, Pre-Induction, and Nurse. This helps identify bottlenecks.",
+          "The funnel chart visualises how many people are at each stage: Applicant, Candidate, Onboarding, Skills Arcade, and Nurse. This helps identify bottlenecks.",
       },
       {
         action: "Review recent activity",
@@ -149,7 +149,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Click on a person to view their profile",
         detail:
-          "The detail page shows five tabs: Overview, Applicant, Candidate, Pre-Induction, and Audit Trail. Each tab gives you deep visibility into that stage.",
+          "The detail page shows five tabs: Overview, Applicant, Candidate, Skills Arcade, and Audit Trail. Each tab gives you deep visibility into that stage.",
       },
       {
         action: "Review the Overview tab",
@@ -252,7 +252,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Understanding the portal experience",
         detail:
-          'When someone clicks their portal link, they see a journey hub with three stages: Applicant Assessment, Candidate Onboarding, and Pre-Induction. They must complete each stage in order.',
+          'When someone clicks their portal link, they see a journey hub with three stages: Applicant Assessment, Candidate Onboarding, and Skills Arcade. They must complete each stage in order.',
       },
       {
         action: "First visit vs return visit",
@@ -288,16 +288,16 @@ const SOP_SECTIONS: SOPSection[] = [
   },
   {
     id: "arcade",
-    title: "Pre-Induction Administration",
+    title: "Skills Arcade Administration",
     icon: Gamepad2,
     color: "text-orange-400",
     overview:
-      "The Pre-Induction area contains 40 competency modules covering essential clinical scenarios. As an admin, you can manage modules, view reports, and manage user assignments.",
+      "The Skills Arcade area contains 40 competency modules covering essential clinical scenarios. As an admin, you can manage modules, view reports, and manage user assignments.",
     steps: [
       {
-        action: "Access the Pre-Induction dashboard",
+        action: "Access the Skills Arcade dashboard",
         detail:
-          'Navigate to Pre-Induction in the sidebar. As an admin, you\'ll see the "Clinical Module Library" showing all 40 modules with search functionality.',
+          'Navigate to Skills Arcade in the sidebar. As an admin, you\'ll see the "Clinical Module Library" showing all 40 modules with search functionality.',
       },
       {
         action: "Search and browse modules",
@@ -322,7 +322,7 @@ const SOP_SECTIONS: SOPSection[] = [
       },
     ],
     quickLink: "/arcade",
-    quickLinkLabel: "Go to Pre-Induction",
+    quickLinkLabel: "Go to Skills Arcade",
     tips: [
       "The arcade has 40 modules spanning medication, wound care, infection control, mental health, palliative care, and more.",
       "Nurses access scenarios through their portal journey or direct assignment.",
@@ -378,7 +378,7 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Filter by module",
         detail:
-          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Applicant, or Pre-Induction.',
+          'Use the Module filter dropdown to view only entries from a specific area: Admin, Portal, System, Applicant, or Skills Arcade.',
       },
       {
         action: "Search for specific actions",
@@ -419,7 +419,7 @@ const QUICK_REFERENCE = [
     title: "Weekly Tasks",
     icon: Target,
     items: [
-      "Review Pre-Induction reports for completion trends",
+      "Review Skills Arcade reports for completion trends",
       "Check audit trail for any unusual activity",
       "Follow up with nurses who have stalled onboarding",
       "Export reports for management review",
@@ -434,7 +434,7 @@ const QUICK_REFERENCE = [
       "Monitor preboard assessment completion",
       "Review preboard results and advance to onboard",
       "Monitor document uploads and compliance checks",
-      "Assign Pre-Induction modules when onboarding complete",
+      "Assign Skills Arcade modules when onboarding complete",
     ],
   },
 ];

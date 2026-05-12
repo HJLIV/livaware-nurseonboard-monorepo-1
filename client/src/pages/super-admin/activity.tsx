@@ -60,7 +60,7 @@ const MODULE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "preboard", label: "Applicant" },
   { value: "onboard", label: "Candidate" },
-  { value: "skills_arcade", label: "Pre-Induction" },
+  { value: "skills_arcade", label: "Skills Arcade" },
   { value: "portal", label: "Portal" },
   { value: "system", label: "System" },
 ];
