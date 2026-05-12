@@ -50,6 +50,24 @@ export default function ArcadeAdminOverview() {
     enabled: !!assignTarget,
   });
 
+  const { data: nurseAssignments } = useQuery<{
+    moduleIds: string[];
+    assignments: Array<{ moduleId: string; status: string }>;
+  }>({
+    queryKey: ["/api/admin/nurse-assignments", assignTarget?.nurseId],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/nurse-assignments/${assignTarget!.nurseId}`);
+      return r.json();
+    },
+    enabled: !!assignTarget,
+  });
+
+  const assignedStatusByModuleId = useMemo(() => {
+    const map = new Map<string, string>();
+    nurseAssignments?.assignments.forEach((a) => map.set(a.moduleId, a.status));
+    return map;
+  }, [nurseAssignments]);
+
   useEffect(() => {
     if (!assignTarget) {
       setSelectedModuleIds(new Set());
@@ -100,6 +118,7 @@ export default function ArcadeAdminOverview() {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/assignable-nurses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/modules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/nurse-assignments"] });
       const skipped = res.totalRequested - res.assignedCount;
       const parts: string[] = [];
       if (res.assignedCount > 0) {
@@ -141,14 +160,29 @@ export default function ArcadeAdminOverview() {
   function selectAllShown() {
     setSelectedModuleIds((prev) => {
       const next = new Set(prev);
-      const allSelected = filteredModules.every((m) => next.has(m.id));
+      const selectable = filteredModules.filter((m) => !assignedStatusByModuleId.has(m.id));
+      const allSelected = selectable.length > 0 && selectable.every((m) => next.has(m.id));
       if (allSelected) {
-        filteredModules.forEach((m) => next.delete(m.id));
+        selectable.forEach((m) => next.delete(m.id));
       } else {
-        filteredModules.forEach((m) => next.add(m.id));
+        selectable.forEach((m) => next.add(m.id));
       }
       return next;
     });
+  }
+
+  function statusLabel(status: string) {
+    switch (status) {
+      case "passed":
+      case "completed":
+        return "Completed";
+      case "in_progress":
+        return "In progress";
+      case "failed":
+        return "Failed";
+      default:
+        return "Assigned";
+    }
   }
 
   return (
@@ -292,11 +326,21 @@ export default function ArcadeAdminOverview() {
                   onClick={selectAllShown}
                   data-testid="button-toggle-all-modules"
                 >
-                  {filteredModules.every((m) => selectedModuleIds.has(m.id)) && filteredModules.length > 0
-                    ? "Clear selection"
-                    : `Select all (${filteredModules.length})`}
+                  {(() => {
+                    const selectable = filteredModules.filter(
+                      (m) => !assignedStatusByModuleId.has(m.id),
+                    );
+                    return selectable.length > 0 && selectable.every((m) => selectedModuleIds.has(m.id))
+                      ? "Clear selection"
+                      : `Select all new (${selectable.length})`;
+                  })()}
                 </button>
-                <span className="text-muted-foreground">{selectedModuleIds.size} selected</span>
+                <span className="text-muted-foreground">
+                  {selectedModuleIds.size} selected
+                  {assignedStatusByModuleId.size > 0 && (
+                    <> · {assignedStatusByModuleId.size} already assigned</>
+                  )}
+                </span>
               </div>
             )}
 
@@ -311,30 +355,54 @@ export default function ArcadeAdminOverview() {
                   No modules match your search.
                 </p>
               ) : (
-                filteredModules.map((m) => {
-                  const checked = selectedModuleIds.has(m.id);
-                  return (
-                    <label
-                      key={m.id}
-                      className="flex items-start gap-3 p-3 cursor-pointer hover-elevate"
-                      data-testid={`module-option-${m.id}`}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => toggleModule(m.id)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{m.name}</div>
-                        {m.description && (
-                          <div className="text-xs text-muted-foreground line-clamp-2">
-                            {m.description}
+                [...filteredModules]
+                  .sort((a, b) => {
+                    const aAssigned = assignedStatusByModuleId.has(a.id) ? 1 : 0;
+                    const bAssigned = assignedStatusByModuleId.has(b.id) ? 1 : 0;
+                    if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+                    return a.name.localeCompare(b.name);
+                  })
+                  .map((m) => {
+                    const existingStatus = assignedStatusByModuleId.get(m.id);
+                    const isAssigned = !!existingStatus;
+                    const checked = selectedModuleIds.has(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className={`flex items-start gap-3 p-3 ${
+                          isAssigned
+                            ? "opacity-60 cursor-not-allowed bg-muted/30"
+                            : "cursor-pointer hover-elevate"
+                        }`}
+                        data-testid={`module-option-${m.id}`}
+                      >
+                        <Checkbox
+                          checked={isAssigned ? true : checked}
+                          disabled={isAssigned}
+                          onCheckedChange={() => !isAssigned && toggleModule(m.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-sm font-medium">{m.name}</div>
+                            {isAssigned && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] uppercase tracking-wider shrink-0"
+                              >
+                                {statusLabel(existingStatus!)}
+                              </Badge>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })
+                          {m.description && (
+                            <div className="text-xs text-muted-foreground line-clamp-2">
+                              {m.description}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })
               )}
             </div>
           </div>

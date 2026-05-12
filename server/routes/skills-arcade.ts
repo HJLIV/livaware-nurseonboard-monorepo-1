@@ -804,6 +804,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/nurse-assignments/:nurseId", requireArcadeSuperAdmin, async (req, res) => {
+    try {
+      const arcadeUser = await storage.getUserByNurseId(req.params.nurseId);
+      if (!arcadeUser) return res.json({ moduleIds: [], assignments: [] });
+      const userAssignments = await storage.getAssignmentsByUser(arcadeUser.id);
+      res.json({
+        moduleIds: userAssignments.map((a: any) => a.moduleId),
+        assignments: userAssignments.map((a: any) => ({
+          moduleId: a.moduleId,
+          status: a.status,
+        })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   const assignSchema = z.object({
     moduleId: z.string().min(1).optional(),
     moduleIds: z.array(z.string().min(1)).optional(),
