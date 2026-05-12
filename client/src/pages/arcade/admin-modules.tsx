@@ -268,6 +268,8 @@ export default function AdminModules() {
   const [importJson, setImportJson] = useState("");
   const [showAssign, setShowAssign] = useState(false);
   const [assignModuleId, setAssignModuleId] = useState<string | null>(null);
+  const [selectedNurseIds, setSelectedNurseIds] = useState<Set<string>>(new Set());
+  const [nurseSearch, setNurseSearch] = useState("");
   const [expandedModuleId, setExpandedModuleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -275,8 +277,16 @@ export default function AdminModules() {
     queryKey: ["/api/admin/modules"],
   });
 
-  const { data: users } = useQuery<Array<{ id: string; name: string; role: string }>>({
-    queryKey: ["/api/admin/users"],
+  type AssignableNurse = {
+    nurseId: string;
+    name: string;
+    email: string;
+    arcadeUserId: string | null;
+    currentStage: string;
+  };
+  const { data: assignableNurses } = useQuery<AssignableNurse[]>({
+    queryKey: ["/api/admin/assignable-nurses"],
+    enabled: showAssign,
   });
 
   const importMutation = useMutation({
@@ -296,20 +306,53 @@ export default function AdminModules() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: async ({ moduleId, userIds }: { moduleId: string; userIds: string[] }) => {
-      await apiRequest("POST", "/api/admin/assign", { moduleId, userIds });
+    mutationFn: async ({ moduleId, nurseIds }: { moduleId: string; nurseIds: string[] }) => {
+      const res = await apiRequest("POST", "/api/admin/assign", { moduleId, nurseIds });
+      return res.json() as Promise<{ ok: boolean; assignedCount: number; skippedNurseIds: string[] }>;
     },
-    onSuccess: () => {
-      toast({ title: "Module assigned" });
+    onSuccess: (data) => {
+      const skipped = data.skippedNurseIds?.length ?? 0;
+      toast({
+        title: "Module assigned",
+        description: skipped > 0
+          ? `${data.assignedCount} new ${data.assignedCount === 1 ? "assignment" : "assignments"} created. ${skipped} could not be matched.`
+          : `${data.assignedCount} new ${data.assignedCount === 1 ? "assignment" : "assignments"} created.`,
+      });
       setShowAssign(false);
+      setSelectedNurseIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["/api/admin/modules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/assignable-nurses"] });
     },
     onError: (e: Error) => {
       toast({ title: "Assignment failed", description: e.message, variant: "destructive" });
     },
   });
 
-  const nurses = users?.filter((u) => u.role === "nurse") ?? [];
+  const filteredNurses = (assignableNurses ?? []).filter((n) => {
+    if (!nurseSearch.trim()) return true;
+    const q = nurseSearch.toLowerCase();
+    return n.name.toLowerCase().includes(q) || n.email.toLowerCase().includes(q);
+  });
+  const allFilteredSelected = filteredNurses.length > 0 && filteredNurses.every((n) => selectedNurseIds.has(n.nurseId));
+  const toggleNurse = (id: string) => {
+    setSelectedNurseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllFiltered = () => {
+    setSelectedNurseIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const n of filteredNurses) next.delete(n.nurseId);
+      } else {
+        for (const n of filteredNurses) next.add(n.nurseId);
+      }
+      return next;
+    });
+  };
 
   const filteredModules = (modules ?? []).filter((mod) => {
     if (!searchQuery) return true;
@@ -455,31 +498,86 @@ export default function AdminModules() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showAssign} onOpenChange={setShowAssign}>
-        <DialogContent>
+      <Dialog
+        open={showAssign}
+        onOpenChange={(open) => {
+          setShowAssign(open);
+          if (!open) {
+            setSelectedNurseIds(new Set());
+            setNurseSearch("");
+          }
+        }}
+      >
+        <DialogContent aria-describedby="assign-dialog-desc">
           <DialogHeader>
             <DialogTitle>Assign Module to Nurses</DialogTitle>
+            <p id="assign-dialog-desc" className="text-sm text-muted-foreground">
+              Pick the nurses who should see this module in their Skills Arcade. Nurses who have never logged into the arcade will be set up automatically — no separate invite step needed.
+            </p>
           </DialogHeader>
           <div className="space-y-3">
-            {nurses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No nurses found.</p>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {nurses.map((nurse) => (
-                  <label
-                    key={nurse.id}
-                    className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="rounded"
-                      data-testid={`checkbox-nurse-${nurse.id}`}
-                      data-nurse-id={nurse.id}
-                    />
-                    <span className="text-sm">{nurse.name}</span>
-                  </label>
-                ))}
+            {assignableNurses === undefined ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
               </div>
+            ) : assignableNurses.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No nurses found on the platform yet.</p>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search nurses by name or email..."
+                    value={nurseSearch}
+                    onChange={(e) => setNurseSearch(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search-nurses"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <button
+                    type="button"
+                    className="hover:underline disabled:opacity-50"
+                    onClick={toggleAllFiltered}
+                    disabled={filteredNurses.length === 0}
+                    data-testid="button-toggle-all-nurses"
+                  >
+                    {allFilteredSelected ? "Clear selection" : `Select all ${filteredNurses.length === assignableNurses.length ? "" : "shown "}(${filteredNurses.length})`}
+                  </button>
+                  <span>{selectedNurseIds.size} selected</span>
+                </div>
+                <div className="space-y-1 max-h-72 overflow-y-auto border rounded-md p-1">
+                  {filteredNurses.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-3 text-center">No nurses match your search.</p>
+                  ) : (
+                    filteredNurses.map((nurse) => {
+                      const checked = selectedNurseIds.has(nurse.nurseId);
+                      return (
+                        <label
+                          key={nurse.nurseId}
+                          className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded"
+                            checked={checked}
+                            onChange={() => toggleNurse(nurse.nurseId)}
+                            data-testid={`checkbox-nurse-${nurse.nurseId}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{nurse.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{nurse.email}</p>
+                          </div>
+                          {nurse.arcadeUserId === null && (
+                            <Badge variant="secondary" className="text-[10px]">New to arcade</Badge>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
@@ -487,17 +585,18 @@ export default function AdminModules() {
             <SuperAdminGate>
               <Button
                 onClick={() => {
-                  const checked = document.querySelectorAll<HTMLInputElement>('[data-nurse-id]:checked');
-                  const ids = Array.from(checked).map((el) => el.dataset.nurseId!);
-                  if (assignModuleId && ids.length > 0) {
-                    assignMutation.mutate({ moduleId: assignModuleId, userIds: ids });
+                  if (assignModuleId && selectedNurseIds.size > 0) {
+                    assignMutation.mutate({
+                      moduleId: assignModuleId,
+                      nurseIds: Array.from(selectedNurseIds),
+                    });
                   }
                 }}
-                disabled={assignMutation.isPending}
+                disabled={assignMutation.isPending || selectedNurseIds.size === 0}
                 data-testid="button-confirm-assign"
               >
                 {assignMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-                Assign
+                Assign{selectedNurseIds.size > 0 ? ` (${selectedNurseIds.size})` : ""}
               </Button>
             </SuperAdminGate>
           </DialogFooter>

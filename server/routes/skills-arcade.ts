@@ -769,15 +769,78 @@ export async function registerRoutes(
     }
   });
 
-  const assignSchema = z.object({ moduleId: z.string().min(1), userIds: z.array(z.string().min(1)).min(1) });
+  // List every platform nurse so the admin assign dialog can show them
+  // even before they've been individually invited to the arcade.
+  // For each nurse we return whether a matching arcade user exists yet.
+  app.get("/api/admin/assignable-nurses", requireArcadeSuperAdmin, async (_req, res) => {
+    try {
+      const nurses = await platformStorage.getCandidates();
+      const result = await Promise.all(
+        nurses.map(async (n) => {
+          const arcadeUser = await storage.getUserByNurseId(n.id);
+          return {
+            nurseId: n.id,
+            name: n.fullName,
+            email: n.email,
+            arcadeUserId: arcadeUser?.id ?? null,
+            currentStage: n.currentStage,
+          };
+        })
+      );
+      result.sort((a, b) => a.name.localeCompare(b.name));
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  const assignSchema = z.object({
+    moduleId: z.string().min(1),
+    userIds: z.array(z.string().min(1)).optional(),
+    nurseIds: z.array(z.string().min(1)).optional(),
+  }).refine(
+    (v) => (v.userIds && v.userIds.length > 0) || (v.nurseIds && v.nurseIds.length > 0),
+    { message: "userIds or nurseIds is required" },
+  );
+
+  // Bridge a platform nurse into the arcade users table on demand. Returns
+  // the existing arcade user if one is already linked (by nurseId or email),
+  // otherwise creates a fresh nurse-role arcade user with a random password
+  // (no invite email is sent — the admin can use the existing
+  // /api/admin/invite-nurse endpoint when they want to email credentials).
+  async function ensureArcadeUserForNurse(nurseId: string): Promise<User | null> {
+    const existingByNurse = await storage.getUserByNurseId(nurseId);
+    if (existingByNurse) return existingByNurse;
+
+    const nurse = await platformStorage.getCandidate(nurseId);
+    if (!nurse) return null;
+
+    const email = nurse.email.toLowerCase();
+    const existingByEmail = await storage.getUserByEmail(email);
+    if (existingByEmail) return existingByEmail;
+
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+    const tempPassword = Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    return storage.createUser({
+      username: email,
+      password: hashedPassword,
+      name: nurse.fullName,
+      email,
+      role: "nurse",
+      active: true,
+      nurseId: nurse.id,
+    } as any);
+  }
 
   app.post("/api/admin/assign", requireArcadeSuperAdmin, async (req, res) => {
     try {
       const parsed = assignSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "moduleId and userIds are required" });
+        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid request" });
       }
-      const { moduleId, userIds } = parsed.data;
+      const { moduleId } = parsed.data;
       const mod = await storage.getModule(moduleId);
       if (!mod) {
         return res.status(404).json({ message: "Module not found" });
@@ -787,8 +850,25 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No module version found" });
       }
 
+      // Resolve every requested target into an arcade user id, auto-creating
+      // arcade users for platform nurses that have never been invited yet.
+      const targetUserIds = new Set<string>();
+      const skippedNurseIds: string[] = [];
+
+      for (const userId of parsed.data.userIds ?? []) {
+        targetUserIds.add(userId);
+      }
+      for (const nurseId of parsed.data.nurseIds ?? []) {
+        const arcadeUser = await ensureArcadeUserForNurse(nurseId);
+        if (!arcadeUser) {
+          skippedNurseIds.push(nurseId);
+          continue;
+        }
+        targetUserIds.add(arcadeUser.id);
+      }
+
       const assigned: string[] = [];
-      for (const userId of userIds) {
+      for (const userId of targetUserIds) {
         const existing = await storage.getAssignmentsByUser(userId);
         const alreadyAssigned = existing.find((a) => a.moduleId === moduleId);
         if (!alreadyAssigned) {
@@ -808,10 +888,21 @@ export async function registerRoutes(
         module: "skills_arcade",
         action: "assign_module",
         agentName: adminUser?.name ?? "super_admin",
-        detail: { moduleId, moduleName: mod.name, userIds, newlyAssigned: assigned },
+        detail: {
+          moduleId,
+          moduleName: mod.name,
+          userIds: Array.from(targetUserIds),
+          nurseIds: parsed.data.nurseIds ?? [],
+          newlyAssigned: assigned,
+          skippedNurseIds,
+        },
       });
 
-      res.json({ ok: true });
+      res.json({
+        ok: true,
+        assignedCount: assigned.length,
+        skippedNurseIds,
+      });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
