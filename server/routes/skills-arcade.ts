@@ -778,12 +778,21 @@ export async function registerRoutes(
       const result = await Promise.all(
         nurses.map(async (n) => {
           const arcadeUser = await storage.getUserByNurseId(n.id);
+          let assignmentCount = 0;
+          let completedCount = 0;
+          if (arcadeUser) {
+            const userAssignments = await storage.getAssignmentsByUser(arcadeUser.id);
+            assignmentCount = userAssignments.length;
+            completedCount = userAssignments.filter((a: any) => a.status === "passed" || a.status === "completed").length;
+          }
           return {
             nurseId: n.id,
             name: n.fullName,
             email: n.email,
             arcadeUserId: arcadeUser?.id ?? null,
             currentStage: n.currentStage,
+            assignmentCount,
+            completedCount,
           };
         })
       );

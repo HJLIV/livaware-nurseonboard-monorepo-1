@@ -21,6 +21,13 @@ import PortalHub from "@/pages/portal/portal-hub";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout/app-layout";
+import { useAuthRole } from "@/lib/use-auth-role";
+
+function ArcadeRouteSwitch() {
+  const { isAdmin, isLoading } = useAuthRole();
+  if (isLoading) return null;
+  return isAdmin ? <ArcadeAdminOverview /> : <ArcadeNurseDashboard />;
+}
 
 // Lazy-load heavier pages for better initial load
 const CandidateDetail = lazy(() => import("@/pages/candidate-detail"));
@@ -37,6 +44,7 @@ const ArcadeWalkthrough = lazy(() => import("@/pages/arcade/walkthrough"));
 const PortalArcade = lazy(() => import("@/pages/portal/portal-arcade"));
 const PortalArcadeScenario = lazy(() => import("@/pages/portal/portal-arcade-scenario"));
 const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
+const ArcadeAdminOverview = lazy(() => import("@/pages/arcade/admin-overview"));
 const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
 const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
 const DocumentsPage = lazy(() => import("@/pages/documents"));
@@ -151,7 +159,7 @@ function AuthenticatedRouter() {
               <Route path="/preboard/assessment" component={PreboardAssessment} />
 
               {/* Pre-Induction (Clinical Skills) */}
-              <Route path="/arcade">{() => <AppLayout><ArcadeNurseDashboard /></AppLayout>}</Route>
+              <Route path="/arcade">{() => <AppLayout><ArcadeRouteSwitch /></AppLayout>}</Route>
               <Route path="/arcade/scenario/:id">{() => <AppLayout><ArcadeScenarioPlayer /></AppLayout>}</Route>
               <Route path="/arcade/walkthrough/:id">{() => <AppLayout><ArcadeWalkthrough /></AppLayout>}</Route>
               <Route path="/arcade/trainer">{() => <AppLayout><ArcadeTrainerRemediation /></AppLayout>}</Route>
