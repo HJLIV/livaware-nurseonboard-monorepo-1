@@ -63,7 +63,7 @@ const sections: NavSectionDef[] = [
       { label: "Applicants", href: "/preboard", icon: ClipboardCheck, badgeKey: "applicants" },
       { label: "Candidates", href: "/candidates", icon: Users },
       { label: "Onboarding", href: "/nurses", icon: ShieldCheck },
-      { label: "Pre-Induction", href: "/arcade", icon: Gamepad2 },
+      { label: "Skills Arcade", href: "/arcade", icon: Gamepad2 },
     ],
   },
   {
