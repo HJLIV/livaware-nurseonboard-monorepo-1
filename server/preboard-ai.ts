@@ -1,15 +1,10 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import type { AssessmentResponse } from "@shared/schema";
 
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "placeholder",
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-  }
-  return _openai;
+function getAnthropicClient(): Anthropic {
+  const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Anthropic API key not configured");
+  return new Anthropic({ apiKey, baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL });
 }
 
 export async function analyzeAssessment(
@@ -63,17 +58,24 @@ For each question/domain, provide:
 
 Keep the tone measured, professional, and honest. This is not a pass/fail — it's a portrait of a nurse.`;
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-5.2",
+  const anthropic = getAnthropicClient();
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    system: systemPrompt,
     messages: [
-      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: `Please analyse the following pre-onboarding assessment from ${nurseName}:\n\n${responseSummary}`,
       },
     ],
-    max_completion_tokens: 4096,
   });
 
-  return response.choices[0]?.message?.content || "Analysis could not be generated.";
+  const text = message.content
+    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  return text || "Analysis could not be generated.";
 }
