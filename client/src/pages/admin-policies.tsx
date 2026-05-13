@@ -117,10 +117,22 @@ export default function AdminPoliciesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [viewingAcks, setViewingAcks] = useState<Policy | null>(null);
+  // Task 114: induction items live in the same `policies` table but with
+  // category="induction". They're hidden by default so this page keeps
+  // its original "company policies" focus; flip the toggle to surface
+  // (and edit) the 21 handbook sections without leaving the page.
+  const [includeInduction, setIncludeInduction] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const { data: policies, isLoading } = useQuery<Policy[]>({
-    queryKey: ["/api/admin/policies"],
+    queryKey: ["/api/admin/policies", { includeInduction }],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/admin/policies${includeInduction ? "?includeInduction=1" : ""}`,
+      );
+      return await res.json();
+    },
   });
 
   const { data: acknowledgements } = useQuery<Acknowledgement[]>({
@@ -278,10 +290,22 @@ export default function AdminPoliciesPage() {
             re-acknowledge the new version.
           </p>
         </div>
-        <SuperAdminGate><Button onClick={openCreate} data-testid="button-new-policy">
-          <Plus className="h-4 w-4 mr-1.5" />
-          New Policy
-        </Button></SuperAdminGate>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={includeInduction ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIncludeInduction((v) => !v)}
+            data-testid="button-toggle-induction"
+            title="Show or hide the 21 induction handbook sections in this list"
+          >
+            {includeInduction ? "Hide induction items" : "Show induction items"}
+          </Button>
+          <SuperAdminGate><Button onClick={openCreate} data-testid="button-new-policy">
+            <Plus className="h-4 w-4 mr-1.5" />
+            New Policy
+          </Button></SuperAdminGate>
+        </div>
       </div>
 
       <SuperAdminViewOnlyBanner />

@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
+import { InductionProgressPanel } from "@/components/admin/induction-progress-panel";
+import { SopComprehensionPanel } from "@/components/admin/sop-comprehension-panel";
 import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
 import { useAuthRole } from "@/lib/use-auth-role";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -788,6 +790,7 @@ export default function NurseDetail() {
             <TabsTrigger value="onboard">Candidate</TabsTrigger>
             <TabsTrigger value="arcade">Skills Arcade</TabsTrigger>
             <TabsTrigger value="policies">Policies</TabsTrigger>
+            <TabsTrigger value="induction">Induction</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 
@@ -809,6 +812,11 @@ export default function NurseDetail() {
 
           <TabsContent value="policies" className="mt-6">
             <PoliciesTab nurseId={nurseId} />
+          </TabsContent>
+
+          <TabsContent value="induction" className="mt-6 space-y-4">
+            <InductionProgressPanel candidateId={nurseId} />
+            <SopComprehensionPanel candidateId={nurseId} />
           </TabsContent>
 
           <TabsContent value="audit" className="mt-6">

@@ -63,6 +63,8 @@ const CompetencyMatrixPage = lazy(() => import("@/pages/reports/competency-matri
 const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
 const AdminPoliciesPage = lazy(() => import("@/pages/admin-policies"));
 const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
+const PortalInductionPage = lazy(() => import("@/pages/portal/induction"));
+const PortalSopComprehensionPage = lazy(() => import("@/pages/portal/sop-comprehension"));
 
 // Super admin
 const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity"));
@@ -138,11 +140,15 @@ function AuthenticatedRouter() {
         <Route path="/portal/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>
         <Route path="/portal/page" component={() => <PortalPage />} />
         <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
+        <Route path="/portal/induction" component={() => <PortalInductionPage />} />
+        <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
         <Route path="/portal" component={() => <PortalHub />} />
         {/* Legacy tokenized portal routes — kept for back-compat with
             existing bootstrap links and external email links. */}
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
+        <Route path="/portal/induction/:token" component={PortalInductionPage} />
+        <Route path="/portal/sop-comprehension/:token" component={PortalSopComprehensionPage} />
         <Route path="/portal/:token/arcade" component={PortalArcade} />
         <Route path="/portal/:token/arcade/scenario/:assignmentId" component={PortalArcadeScenario} />
         <Route path="/portal/:token/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>

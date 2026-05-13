@@ -14,10 +14,11 @@ import {
   policyAcknowledgements,
   policyReadEvents,
   insertPolicySchema,
+  nurses,
   type Policy,
   type PolicyAcknowledgement,
 } from "@shared/schema";
-import { eq, and, desc, asc, sql } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql, isNull, ne, inArray } from "drizzle-orm";
 import {
   requireAdmin,
   requireSuperAdmin,
@@ -49,17 +50,34 @@ interface PolicyForNurse {
   acknowledgedAt: string | null;
   acknowledgedVersion: string | null;
   needsReacknowledgement: boolean;
+  // Stable identifiers used by the portal to group induction items
+  // (Handbook Part / SOP / Appendix). Slug-based grouping survives
+  // admin edits to the title, unlike text matching.
+  slug: string | null;
+  category: string | null;
 }
 
-async function buildPolicyListForNurse(nurseId: string): Promise<{
+async function buildPolicyListForNurse(
+  nurseId: string,
+  options: { category?: string | null } = {},
+): Promise<{
   policies: PolicyForNurse[];
   totalRequired: number;
   outstanding: number;
 }> {
+  // When category is omitted (default) we exclude induction-tagged rows
+  // so the legacy /portal/policies surface keeps only admin-managed
+  // policies. Pass `category: "induction"` to fetch the induction set.
+  const categoryFilter = options.category === undefined
+    ? or(isNull(policies.category), ne(policies.category, "induction"))
+    : options.category === null
+      ? isNull(policies.category)
+      : eq(policies.category, options.category);
+
   const active = await db
     .select()
     .from(policies)
-    .where(eq(policies.isActive, true))
+    .where(and(eq(policies.isActive, true), categoryFilter))
     .orderBy(asc(policies.sortOrder), asc(policies.title));
 
   const acks = await db
@@ -91,6 +109,8 @@ async function buildPolicyListForNurse(nurseId: string): Promise<{
       acknowledgedAt: ack?.acknowledgedAt?.toISOString() ?? null,
       acknowledgedVersion: ack?.policyVersion ?? null,
       needsReacknowledgement: !!ack && !versionMatches,
+      slug: p.slug ?? null,
+      category: p.category ?? null,
     };
   });
 
@@ -149,11 +169,17 @@ export function registerPolicyRoutes(app: Express) {
   );
 
   // ─── Admin: list all policies (active + inactive) ────────────────
-  app.get("/api/admin/policies", requireAdmin, async (_req, res) => {
+  // Hides category="induction" rows by default — those are managed by
+  // the induction seeder and surfaced on a separate admin view.
+  app.get("/api/admin/policies", requireAdmin, async (req, res) => {
     try {
+      const includeInduction = req.query.includeInduction === "1";
       const rows = await db
         .select()
         .from(policies)
+        .where(includeInduction
+          ? sql`true`
+          : or(isNull(policies.category), ne(policies.category, "induction")))
         .orderBy(asc(policies.sortOrder), asc(policies.title));
       res.json(rows);
     } catch (err: any) {
@@ -332,6 +358,218 @@ export function registerPolicyRoutes(app: Express) {
     }
   });
 
+  // ─── Portal: list induction items + per-nurse status (task 114) ──
+  // Same shape as /policies, but only returns the 21 Staff-Handbook
+  // items. Nurses use this to read & acknowledge each section before
+  // the Skills Arcade unlocks for them.
+  app.get("/api/portal/:token/induction", validatePortalToken, async (req, res) => {
+    try {
+      const nurseId = (req as any).nurseId as string;
+      const summary = await buildPolicyListForNurse(nurseId, { category: "induction" });
+      // Attach a `group` tag (part / sop / appendix) so the portal can
+      // render the items grouped without an extra round-trip. We match
+      // on the stable `slug` column rather than the human-editable
+      // title so renaming an induction section in the admin UI never
+      // breaks the grouping or the gating semantics.
+      const { getInductionItems } = await import("../induction-content");
+      const items = getInductionItems();
+      const groupBySlug = new Map(items.map((i) => [i.slug, i.group]));
+      const enriched = summary.policies.map((p) => {
+        const itemGroup = p.slug ? groupBySlug.get(p.slug) ?? null : null;
+        return { ...p, group: itemGroup };
+      });
+      res.json({ ...summary, policies: enriched });
+    } catch (err: any) {
+      console.error("[policies] portal induction list failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load induction items" });
+    }
+  });
+
+  // ─── Admin: induction items + per-nurse acknowledgement matrix ───
+  // Used by the per-nurse admin panel to show the 21-row checklist
+  // with time-tracking columns (super-admin only for the read-
+  // behaviour fields, mirroring the policies endpoint).
+  app.get("/api/admin/induction/items", requireAdmin, async (_req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(policies)
+        .where(eq(policies.category, "induction"))
+        .orderBy(asc(policies.sortOrder), asc(policies.title));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Failed to load induction items" });
+    }
+  });
+
+  app.get("/api/nurses/:id/induction-progress", requireAdmin, async (req, res) => {
+    // Per task #114: admins AND super-admins both need full visibility
+    // of induction engagement (active time, sessions, scrolled, last
+    // read). Nurses never see these — the portal endpoints already omit
+    // them. We keep the `canViewReadBehaviour` flag in the response for
+    // backward compatibility with the panel, but always set it true on
+    // this admin-only route.
+    try {
+      const nurseId = String(req.params.id);
+      const summary = await buildPolicyListForNurse(nurseId, { category: "induction" });
+      const acks = await db
+        .select()
+        .from(policyAcknowledgements)
+        .where(eq(policyAcknowledgements.nurseId, nurseId));
+      const latestAck = new Map<string, typeof acks[number]>();
+      for (const a of acks) {
+        const prev = latestAck.get(a.policyId);
+        if (!prev || a.acknowledgedAt > prev.acknowledgedAt) latestAck.set(a.policyId, a);
+      }
+      // Admins + super-admins both get the metrics on this admin-only
+      // route. The flag is kept in the response purely for the panel's
+      // existing rendering branch.
+      const canViewBehaviour = true;
+
+      // Pull the longest single-session duration + most-recent read
+      // timestamp from the raw events table for each policy. Cheap
+      // single round-trip (one row per policy).
+      const inductionPolicyIds = summary.policies.map((p) => p.id);
+      let perPolicyExtras: Record<string, { longestSessionSeconds: number; lastReadAt: string | null }> = {};
+      if (canViewBehaviour && inductionPolicyIds.length > 0) {
+        const rows = await db
+          .select({
+            policyId: policyReadEvents.policyId,
+            longestMs: sql<number>`coalesce(max(${policyReadEvents.durationMs}), 0)`,
+            lastAt: sql<Date | null>`max(${policyReadEvents.occurredAt})`,
+          })
+          .from(policyReadEvents)
+          .where(and(
+            eq(policyReadEvents.nurseId, nurseId),
+            inArray(policyReadEvents.policyId, inductionPolicyIds),
+          ))
+          .groupBy(policyReadEvents.policyId);
+        for (const r of rows) {
+          perPolicyExtras[r.policyId] = {
+            longestSessionSeconds: Math.floor(Number(r.longestMs ?? 0) / 1000),
+            lastReadAt: r.lastAt ? new Date(r.lastAt as any).toISOString() : null,
+          };
+        }
+      }
+
+      const enriched = summary.policies.map((p) => {
+        const a = latestAck.get(p.id);
+        const extras = perPolicyExtras[p.id];
+        return canViewBehaviour
+          ? {
+              ...p,
+              totalActiveSeconds: a?.totalActiveSeconds ?? null,
+              sessionCount: a?.sessionCount ?? null,
+              scrolledToEnd: a?.scrolledToEnd ?? null,
+              openedPdf: a?.openedPdf ?? null,
+              longestSessionSeconds: extras?.longestSessionSeconds ?? null,
+              lastReadAt: extras?.lastReadAt ?? a?.acknowledgedAt?.toISOString() ?? null,
+            }
+          : p;
+      });
+      res.json({ ...summary, policies: enriched, canViewReadBehaviour: canViewBehaviour });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message || "Failed to load induction progress" });
+    }
+  });
+
+  // ─── Super-admin: aggregate induction engagement (task 114) ──────
+  // Returns one row per nurse: total active seconds across all 21
+  // induction items, last-read timestamp, % acknowledged, and a
+  // "short-ack" flag (acknowledged with < 30s active time on the
+  // section, used by the dashboard to flag potentially rushed reads).
+  app.get("/api/super-admin/induction/engagement", requireSuperAdmin, async (_req, res) => {
+    try {
+      const SHORT_ACK_THRESHOLD_SECONDS = 30;
+      const inductionRows = await db
+        .select({ id: policies.id, version: policies.version })
+        .from(policies)
+        .where(and(eq(policies.category, "induction"), eq(policies.isActive, true)));
+      const totalRequired = inductionRows.length;
+      const policyIds = inductionRows.map((p) => p.id);
+
+      const allNurses = await db.select({ id: nurses.id, fullName: nurses.fullName, email: nurses.email }).from(nurses);
+
+      if (policyIds.length === 0 || allNurses.length === 0) {
+        return res.json({ totalRequired, shortAckThresholdSeconds: SHORT_ACK_THRESHOLD_SECONDS, nurses: [] });
+      }
+
+      const acks = await db
+        .select()
+        .from(policyAcknowledgements)
+        .where(inArray(policyAcknowledgements.policyId, policyIds));
+      // Latest ack per (nurse, policy)
+      const latestAckByNurse = new Map<string, Map<string, typeof acks[number]>>();
+      for (const a of acks) {
+        const m = latestAckByNurse.get(a.nurseId) ?? new Map();
+        const prev = m.get(a.policyId);
+        if (!prev || a.acknowledgedAt > prev.acknowledgedAt) m.set(a.policyId, a);
+        latestAckByNurse.set(a.nurseId, m);
+      }
+
+      const summaryRows = allNurses.map((n) => {
+        const m = latestAckByNurse.get(n.id) ?? new Map();
+        let totalActiveSeconds = 0;
+        let acknowledgedCount = 0;
+        let shortAckCount = 0;
+        let lastReadAt: Date | null = null;
+        for (const policy of inductionRows) {
+          const a = m.get(policy.id);
+          if (!a) continue;
+          if (a.policyVersion === policy.version) {
+            acknowledgedCount += 1;
+            if ((a.totalActiveSeconds ?? 0) < SHORT_ACK_THRESHOLD_SECONDS && a.userAgent !== "induction_seed:legacy_induction_policies") {
+              shortAckCount += 1;
+            }
+          }
+          totalActiveSeconds += a.totalActiveSeconds ?? 0;
+          if (!lastReadAt || a.acknowledgedAt > lastReadAt) lastReadAt = a.acknowledgedAt;
+        }
+        return {
+          nurseId: n.id,
+          fullName: n.fullName,
+          email: n.email,
+          acknowledgedCount,
+          totalRequired,
+          completionPct: totalRequired === 0 ? 0 : Math.round((acknowledgedCount / totalRequired) * 100),
+          totalActiveSeconds,
+          shortAckCount,
+          lastReadAt: lastReadAt ? (lastReadAt as Date).toISOString() : null,
+        };
+      });
+
+      // Sort: in-progress (least complete) first, then by last activity.
+      summaryRows.sort((a, b) => {
+        if (a.completionPct !== b.completionPct) return a.completionPct - b.completionPct;
+        const at = a.lastReadAt ? Date.parse(a.lastReadAt) : 0;
+        const bt = b.lastReadAt ? Date.parse(b.lastReadAt) : 0;
+        return bt - at;
+      });
+
+      res.json({ totalRequired, shortAckThresholdSeconds: SHORT_ACK_THRESHOLD_SECONDS, nurses: summaryRows });
+    } catch (err: any) {
+      console.error("[policies] super-admin induction engagement failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to load induction engagement" });
+    }
+  });
+
+  // ─── Super-admin: force-reseed induction items from bundled MD ───
+  // Default seeder is insert-only (preserves admin edits). This
+  // endpoint opts in to overwriting drifted rows back to the bundled
+  // handbook content + bumping HANDBOOK_VERSION when it advanced.
+  app.post("/api/admin/induction/reseed", requireSuperAdmin, async (req, res) => {
+    try {
+      const { seedInductionItems } = await import("../induction-seed");
+      const result = await seedInductionItems({ force: true });
+      // No nurseId for this audit — it's a system-wide event.
+      res.json({ ok: true, ...result });
+      void req;
+    } catch (err: any) {
+      console.error("[induction] force reseed failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to reseed induction" });
+    }
+  });
+
   // ─── Portal: ingest read-events (invisible tracking) ─────────────
   // Body: { events: [{ type: "session"|"pdf_open"|"scroll_end", durationMs?, sessionId?, occurredAt? }] }
   // Used by the portal page to record visible-time, scroll-to-end, and
@@ -497,12 +735,19 @@ export function registerPolicyRoutes(app: Express) {
           eq(policyAcknowledgements.policyVersion, policy.version),
         ));
       if (existing) {
-        const [refreshed] = await db
+        await db
           .update(policyAcknowledgements)
           .set({ totalActiveSeconds, sessionCount, scrolledToEnd, openedPdf })
-          .where(eq(policyAcknowledgements.id, existing.id))
-          .returning();
-        return res.json({ ok: true, acknowledgement: refreshed, alreadyAcknowledged: true });
+          .where(eq(policyAcknowledgements.id, existing.id));
+        // Strict admin-only telemetry: never echo read-behaviour
+        // counters (totalActiveSeconds / sessionCount / scrolledToEnd /
+        // openedPdf) back on the nurse-facing response.
+        return res.json({
+          ok: true,
+          alreadyAcknowledged: true,
+          policyId,
+          policyVersion: policy.version,
+        });
       }
 
       const ipAddress = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
@@ -510,7 +755,7 @@ export function registerPolicyRoutes(app: Express) {
         || null;
       const userAgent = (req.headers["user-agent"] as string) || null;
 
-      const [created] = await db
+      await db
         .insert(policyAcknowledgements)
         .values({
           nurseId,
@@ -522,8 +767,7 @@ export function registerPolicyRoutes(app: Express) {
           sessionCount,
           scrolledToEnd,
           openedPdf,
-        })
-        .returning();
+        });
 
       await logAction(nurseId, "portal", "policy_acknowledged", "nurse_portal", {
         policyId,
@@ -531,7 +775,14 @@ export function registerPolicyRoutes(app: Express) {
         version: policy.version,
       });
 
-      res.status(201).json({ ok: true, acknowledgement: created });
+      // Strict admin-only telemetry: never echo read-behaviour counters
+      // back on the nurse-facing response.
+      res.status(201).json({
+        ok: true,
+        alreadyAcknowledged: false,
+        policyId,
+        policyVersion: policy.version,
+      });
     } catch (err: any) {
       console.error("[policies] acknowledge failed:", err);
       res.status(500).json({ message: err?.message || "Failed to acknowledge policy" });

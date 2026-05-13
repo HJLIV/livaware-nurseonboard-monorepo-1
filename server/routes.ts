@@ -143,6 +143,10 @@ export async function registerRoutes(
   const { registerAdminReportsRoutes } = await import("./routes/admin-reports");
   registerAdminReportsRoutes(app);
 
+  // === SOP COMPREHENSION MCQ (task 114 follow-up) ===
+  const { registerSopComprehensionRoutes } = await import("./routes/sop-comprehension");
+  registerSopComprehensionRoutes(app);
+
   // === ADMIN PLATFORM SETTINGS (toggles for scheduled jobs etc.) ===
   const { registerAdminSettingsRoutes } = await import("./routes/admin-settings");
   registerAdminSettingsRoutes(app);

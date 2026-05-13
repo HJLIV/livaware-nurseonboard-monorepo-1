@@ -466,6 +466,12 @@ export const arcadeModules = pgTable("arcade_modules", {
   isActive: boolean("is_active").notNull().default(true),
   icon: text("icon").notNull().default("Syringe"),
   color: text("color").notNull().default("blue"),
+  // Task 114: Optional list of Staff-Handbook SOP slugs this module
+  // aligns with (e.g. ["sop-04-medication-management",
+  // "sop-08-infection-prevention"]). Used by the trainer/admin UI to
+  // surface "this scenario tests SOP X" alongside arcade modules so
+  // procedures + rationales stay anchored to the handbook.
+  sopRefs: jsonb("sop_refs").$type<string[]>().default(sql`'[]'::jsonb`),
 });
 
 export const moduleVersions = pgTable("module_versions", {
@@ -844,6 +850,15 @@ export const policies = pgTable("policies", {
   isActive: boolean("is_active").default(true).notNull(),
   requireAcknowledgement: boolean("require_acknowledgement").default(true).notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
+  // Stable identifier used by the seeder so it can re-find a row across
+  // restarts without depending on title text. NULL for ad-hoc admin-
+  // created policies. Unique when present.
+  slug: text("slug").unique(),
+  // Tag used to group seeded items together (e.g. "induction" for the
+  // 21 Staff-Handbook items). NULL for the standard admin-managed
+  // master-list policies, which keeps the legacy /portal/policies UI
+  // unchanged.
+  category: text("category"),
   createdBy: text("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -890,6 +905,27 @@ export const policyReadEvents = pgTable("policy_read_events", {
 }, (table) => [
   index("policy_read_events_nurse_policy_idx").on(table.nurseId, table.policyId, table.policyVersion),
 ]);
+
+// SOP comprehension MCQ attempts (task 114 follow-up). One row per
+// (nurse, sopSlug, questionVersion, attemptCount). The latest row per
+// (nurse, sopSlug) at the *current* questionVersion drives the
+// "passed" / "needs retry" status. Earlier rows are kept for audit.
+export const sopComprehensionAttempts = pgTable("sop_comprehension_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  sopSlug: text("sop_slug").notNull(),
+  questionVersion: text("question_version").notNull(),
+  chosenOptionId: text("chosen_option_id").notNull(),
+  isCorrect: boolean("is_correct").notNull(),
+  attemptedAt: timestamp("attempted_at").defaultNow().notNull(),
+  attemptCount: integer("attempt_count").default(1).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+}, (table) => [
+  index("sop_comp_attempts_nurse_idx").on(table.nurseId),
+  index("sop_comp_attempts_nurse_slug_idx").on(table.nurseId, table.sopSlug),
+]);
+export type SopComprehensionAttempt = typeof sopComprehensionAttempts.$inferSelect;
 
 export const insertPolicySchema = createInsertSchema(policies).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPolicyAcknowledgementSchema = createInsertSchema(policyAcknowledgements).omit({ id: true, acknowledgedAt: true });

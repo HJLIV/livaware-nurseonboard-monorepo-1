@@ -57,6 +57,51 @@ interface SOPSection {
 
 const SOP_SECTIONS: SOPSection[] = [
   {
+    id: "induction-policies",
+    title: "Induction & Policies (21 sections)",
+    icon: LayoutDashboard,
+    color: "text-amber-400",
+    overview:
+      "The Staff Handbook is split into 21 separate read-and-acknowledge items (6 Handbook Parts + 14 SOPs + 1 Appendices bundle) sourced from the bundled Staff-Handbook markdown. Candidates must acknowledge ALL 21 before the Skills Arcade unlocks. Reading time is silently tracked per section for admin review — nothing is shown to the candidate.",
+    steps: [
+      {
+        action: "How candidates progress",
+        detail:
+          "On the portal, each section opens to its own card with the full body text. The 'I have read & understood' button stays disabled until the candidate visibly scrolls to the end. Their scroll position is saved per section so they can resume later. Acknowledgements are versioned — bumping a section's version forces re-acknowledgement.",
+      },
+      {
+        action: "Review a single nurse's reading record",
+        detail:
+          "Open the nurse detail page → Induction Progress panel. Super-admins see Active time, Longest single session, Session count, Scrolled-to-end, and Last-read timestamp per section, all sourced from silent client-side activity tracking.",
+      },
+      {
+        action: "Cross-roster engagement view",
+        detail:
+          "Super-admins: Activity Dashboard now ends with an Induction & policies engagement table — one row per nurse with completion %, total active time, last-read, and a 'Short acks' badge flagging acknowledgements logged with under 30s of active time (potentially rushed).",
+      },
+      {
+        action: "Edit handbook content",
+        detail:
+          "Use Admin → Policies. Edits to induction items are preserved across restarts — the boot seeder is insert-only. Bump the section's version field to force every nurse to re-acknowledge after a content change.",
+      },
+      {
+        action: "Force-reseed back to the bundled handbook",
+        detail:
+          "Super-admin only: POST /api/admin/induction/reseed overwrites all 21 sections back to the bundled markdown. Use this to discard drifted edits or after pulling a new handbook revision.",
+      },
+      {
+        action: "Legacy 'Induction & Policies' completers",
+        detail:
+          "Nurses who completed the legacy single induction policy were automatically credited with all 21 new sections on first deploy — they will not be retroactively gated.",
+      },
+      {
+        action: "How this links to Skills Arcade",
+        detail:
+          "Each arcade module now carries a sopRefs list pointing to the handbook SOP slugs it teaches (e.g. medication modules → induction:sop-12-medicines, IV modules → induction:sop-03-peripheral-iv / induction:sop-04-picc). The boot reconciler only patches modules whose sopRefs is empty, so trainer/admin curation is preserved.",
+      },
+    ],
+  },
+  {
     id: "dashboard",
     title: "Dashboard Overview",
     icon: LayoutDashboard,

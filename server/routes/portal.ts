@@ -6,7 +6,7 @@ import { db } from "../db";
 import { arcadeUsers } from "@shared/schema";
 import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked } from "../middleware";
+import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
@@ -1007,13 +1007,17 @@ export function registerPortalRoutes(app: Express) {
     res.json(result);
   });
 
-  app.post("/api/portal/:token/induction-policies", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
-    const nurseId = (req as any).nurseId;
-    const data = { ...req.body, nurseId };
-    const result = await storage.createInductionPolicy(data);
-    await safeWriteStepStatuses(nurseId, { induction: "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_policy_acknowledged", agentName: "nurse_portal", detail: { policy: result.policyName } });
-    res.status(201).json(result);
+  // Legacy single-induction acknowledgement endpoint. Task 114 split
+  // induction into 21 versioned items handled through
+  // /api/portal/:token/induction + /policies/:id/acknowledge. The
+  // legacy `inductionPolicies` table is now read-only (kept for audit
+  // history). Writes are rejected to prevent drift.
+  app.post("/api/portal/:token/induction-policies", validatePortalToken, async (_req, res) => {
+    res.status(410).json({
+      error: "deprecated",
+      message:
+        "Induction policies have moved to per-section read-and-acknowledge. Use the new induction page in the portal.",
+    });
   });
 
   app.get("/api/portal/:token/professional-indemnity", validatePortalToken, async (req, res) => {
@@ -1217,7 +1221,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/arcade/attempts/start", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
+  app.post("/api/portal/:token/arcade/attempts/start", validatePortalToken, requireOnboardingUnlocked, requireInductionAcknowledged, async (req, res) => {
     try {
       const userId = await resolvePortalArcadeUserId(req);
       const assignmentId = String(req.body?.assignmentId ?? "");
@@ -1253,7 +1257,7 @@ export function registerPortalRoutes(app: Express) {
     }
   });
 
-  app.post("/api/portal/:token/arcade/attempts/submit", validatePortalToken, requireOnboardingUnlocked, async (req, res) => {
+  app.post("/api/portal/:token/arcade/attempts/submit", validatePortalToken, requireOnboardingUnlocked, requireInductionAcknowledged, async (req, res) => {
     try {
       const userId = await resolvePortalArcadeUserId(req);
       const attemptId = String(req.body?.attemptId ?? "");

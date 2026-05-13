@@ -159,6 +159,10 @@ interface PortalData {
     onboard: { status: string; actionUrl?: string; label: string };
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
+  // Task 114: induction-summary block, present once the 21-section
+  // gate has been provisioned for this nurse. Optional so older
+  // server payloads still type-check.
+  induction?: { unlocked: boolean; total: number; outstanding: number };
   token: string;
 }
 
@@ -185,6 +189,11 @@ export default function PortalPoliciesPage() {
     enabled: !!token,
   });
 
+  const { data: sopComprehension } = useQuery<{ totalRequired: number; outstanding: number }>({
+    queryKey: [`/api/portal/${token}/sop-comprehension`],
+    enabled: !!token,
+  });
+
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
 
   const groups = useMemo<PortalSidebarGroup[]>(() => {
@@ -200,8 +209,20 @@ export default function PortalPoliciesPage() {
         ? { totalRequired: policies.totalRequired, outstanding: policies.outstanding }
         : null,
       selectPolicies: () => navigate(`/portal/policies`),
+      inductionSummary: portal.induction
+        ? {
+            total: portal.induction.total,
+            outstanding: portal.induction.outstanding,
+            unlocked: portal.induction.unlocked,
+          }
+        : null,
+      selectInduction: () => navigate(`/portal/induction`),
+      sopComprehensionSummary: sopComprehension
+        ? { totalRequired: sopComprehension.totalRequired, outstanding: sopComprehension.outstanding }
+        : null,
+      selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
     });
-  }, [portal, token, stepStatuses, navigate, policies]);
+  }, [portal, token, stepStatuses, navigate, policies, sopComprehension]);
 
   const acknowledgeMutation = useMutation({
     mutationFn: async ({ policyId, events }: { policyId: string; events: PolicyReadEventPayload[] }) => {

@@ -46,6 +46,8 @@ interface PortalData {
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
     lockedReason?: string | null;
   };
+  // Task 114: induction-summary block (21 read-and-acknowledge items).
+  induction?: { unlocked: boolean; total: number; outstanding: number };
   token: string;
   firstVisit?: boolean;
 }
@@ -446,6 +448,11 @@ export default function PortalHub() {
 
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
 
+  const { data: sopComprehensionData } = useQuery<{ totalRequired: number; outstanding: number }>({
+    queryKey: [`/api/portal/${token}/sop-comprehension`],
+    enabled: !!token,
+  });
+
   const groups = useMemo<PortalSidebarGroup[]>(() => {
     if (!portal || !token) return [];
     return buildPortalGroups({
@@ -465,8 +472,20 @@ export default function PortalHub() {
         ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
         : null,
       selectPolicies: () => navigate(`/portal/policies`),
+      inductionSummary: portal.induction
+        ? {
+            total: portal.induction.total,
+            outstanding: portal.induction.outstanding,
+            unlocked: portal.induction.unlocked,
+          }
+        : null,
+      selectInduction: () => navigate(`/portal/induction`),
+      sopComprehensionSummary: sopComprehensionData
+        ? { totalRequired: sopComprehensionData.totalRequired, outstanding: sopComprehensionData.outstanding }
+        : null,
+      selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
     });
-  }, [portal, token, stepStatuses, navigate, policiesData]);
+  }, [portal, token, stepStatuses, navigate, policiesData, sopComprehensionData]);
 
   // After the bootstrap fetch lands (cookie now set), normalize the URL to
   // /portal so the original token never lingers in the address bar / history.

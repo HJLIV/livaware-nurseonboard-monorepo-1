@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   ChevronRight,
   X,
+  BookOpen,
 } from "lucide-react";
 
 interface AuditRow {
@@ -457,7 +458,113 @@ export default function SuperAdminActivityPage() {
             </CardContent>
           </Card>
         )}
+        <InductionEngagementPanel />
       </div>
     </AppLayout>
+  );
+}
+
+interface InductionEngagementRow {
+  nurseId: string;
+  fullName: string;
+  email: string | null;
+  acknowledgedCount: number;
+  totalRequired: number;
+  completionPct: number;
+  totalActiveSeconds: number;
+  shortAckCount: number;
+  lastReadAt: string | null;
+}
+interface InductionEngagementResp {
+  totalRequired: number;
+  shortAckThresholdSeconds: number;
+  nurses: InductionEngagementRow[];
+}
+
+function fmtDuration(totalSeconds: number) {
+  if (!totalSeconds) return "—";
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function InductionEngagementPanel() {
+  const { data, isLoading } = useQuery<InductionEngagementResp>({
+    queryKey: ["/api/super-admin/induction/engagement"],
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin/induction/engagement");
+      if (!res.ok) throw new Error("Failed to load induction engagement");
+      return res.json();
+    },
+    refetchInterval: 60000,
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="px-4 py-3 border-b border-border/40 flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">Induction & policies — engagement</h2>
+          {data && (
+            <span className="text-[11px] text-muted-foreground/60">
+              {data.totalRequired} required sections · short-ack threshold {data.shortAckThresholdSeconds}s
+            </span>
+          )}
+        </div>
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : data && data.nurses.length > 0 ? (
+          <div className="overflow-x-auto max-h-[60vh]">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/30 sticky top-0">
+                <tr className="text-left text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Nurse</th>
+                  <th className="px-3 py-2 font-medium">Progress</th>
+                  <th className="px-3 py-2 font-medium">Active time</th>
+                  <th className="px-3 py-2 font-medium">Short acks</th>
+                  <th className="px-3 py-2 font-medium">Last read</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.nurses.map((n) => (
+                  <tr key={n.nurseId} className="border-t border-border/20 hover:bg-muted/10">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{n.fullName || "—"}</div>
+                      {n.email && <div className="text-[10px] text-muted-foreground/60">{n.email}</div>}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {n.acknowledgedCount}/{n.totalRequired}{" "}
+                      <span className="text-muted-foreground/60">({n.completionPct}%)</span>
+                    </td>
+                    <td className="px-3 py-2 tabular-nums">{fmtDuration(n.totalActiveSeconds)}</td>
+                    <td className="px-3 py-2 tabular-nums">
+                      {n.shortAckCount > 0 ? (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/15">
+                          {n.shortAckCount}
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {n.lastReadAt ? timeAgo(n.lastReadAt) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-xs text-muted-foreground">No induction reads recorded yet.</div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -3093,6 +3093,9 @@ interface PortalHubData {
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
     lockedReason?: string | null;
   };
+  // Task 114: induction-summary block (21 read-and-acknowledge items),
+  // optional so older payloads still type-check.
+  induction?: { unlocked: boolean; total: number; outstanding: number };
   token: string;
 }
 
@@ -3140,6 +3143,11 @@ export default function PortalPage() {
     queryKey: [`/api/portal/${token}`],
     enabled: !!verifyData,
     retry: false,
+  });
+
+  const { data: sopComprehensionData } = useQuery<{ totalRequired: number; outstanding: number }>({
+    queryKey: [`/api/portal/${token}/sop-comprehension`],
+    enabled: !!verifyData,
   });
 
   const { data: onboardingState } = useQuery<OnboardingState | null>({
@@ -3239,8 +3247,20 @@ export default function PortalPage() {
         const idx = PORTAL_STEPS.findIndex((s) => s.key === "profile");
         if (idx >= 0) goToStep(idx + 1);
       },
+      inductionSummary: portalHub?.induction
+        ? {
+            total: portalHub.induction.total,
+            outstanding: portalHub.induction.outstanding,
+            unlocked: portalHub.induction.unlocked,
+          }
+        : null,
+      selectInduction: () => navigate(`/portal/induction`),
+      sopComprehensionSummary: sopComprehensionData
+        ? { totalRequired: sopComprehensionData.totalRequired, outstanding: sopComprehensionData.outstanding }
+        : null,
+      selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
     });
-  }, [portalHub, token, stepStatuses, navigate, goToStep]);
+  }, [portalHub, token, stepStatuses, navigate, goToStep, sopComprehensionData]);
 
   if (verifyLoading) {
     return (

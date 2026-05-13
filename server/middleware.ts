@@ -162,6 +162,56 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
 // examination submission, competency declarations, CV upload) MUST NOT
 // be wrapped with this — those are how the candidate satisfies the
 // prerequisites in auto-unlock mode.
+// Induction acknowledgement gate (task 114) — refuses Skills Arcade
+// writes (start attempt, submit attempt, etc.) until every active
+// induction item has been acknowledged at its current version. The
+// portal is unaffected — this only wraps the arcade write paths.
+//
+// For session-authenticated arcade users (`/api/nurse/...`) the nurse
+// is identified via `req.session.nurseId`; for portal-authenticated
+// arcade routes the gate uses `req.nurseId` populated by
+// validatePortalToken.
+export async function requireInductionAcknowledged(req: Request, res: Response, next: NextFunction) {
+  try {
+    let nurseId =
+      ((req as any).nurseId as string | undefined)
+      || (req.session as any)?.nurseId
+      || undefined;
+    // Session-authenticated arcade users (`/api/nurse/*`) carry an
+    // arcade userId on the session; resolve back to the nurse record
+    // via arcadeUsers.nurseId. Trainers/admins logging into the arcade
+    // are not gated (they don't have a nurseId on their arcade user).
+    if (!nurseId) {
+      const arcadeUserId = (req.session as any)?.userId as string | undefined;
+      if (arcadeUserId) {
+        const { arcadeUsers } = await import("@shared/schema");
+        const [u] = await db
+          .select({ nurseId: arcadeUsers.nurseId })
+          .from(arcadeUsers)
+          .where(eq(arcadeUsers.id, arcadeUserId));
+        if (u?.nurseId) nurseId = u.nurseId;
+      }
+    }
+    if (!nurseId) {
+      // No nurse context (e.g. arcade trainer/admin). Don't gate.
+      return next();
+    }
+    const { getInductionGateState } = await import("./services/induction-gate");
+    const state = await getInductionGateState(nurseId);
+    if (!state.unlocked) {
+      return res.status(403).json({
+        error: "induction_incomplete",
+        message: `Skills Arcade is locked until you have read and acknowledged all ${state.total} induction items (${state.outstanding} outstanding).`,
+        induction: state,
+      });
+    }
+    next();
+  } catch (err: any) {
+    console.error("[requireInductionAcknowledged] error:", err.message);
+    return res.status(500).json({ message: "Failed to verify induction status" });
+  }
+}
+
 export async function requireOnboardingUnlocked(req: Request, res: Response, next: NextFunction) {
   try {
     const nurseId = (req as any).nurseId as string | undefined;

@@ -8,6 +8,8 @@ import { AIMarkdown } from "@/components/ai-markdown";
 import { renderEmailMarkdown } from "@shared/email-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
+import { InductionProgressPanel } from "@/components/admin/induction-progress-panel";
+import { SopComprehensionPanel } from "@/components/admin/sop-comprehension-panel";
 import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -3065,55 +3067,16 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
 }
 
 function InductionTab({ candidateId }: { candidateId: string }) {
-  const { data: policies, isLoading } = useQuery<InductionPolicy[]>({
-    queryKey: ["/api/candidates", candidateId, "induction-policies"],
-  });
-  const { toast } = useToast();
-
-  const acknowledgeMutation = useMutation({
-    mutationFn: async (policyName: string) => {
-      const res = await apiRequest("POST", `/api/candidates/${candidateId}/induction-policies`, {
-        policyName,
-        acknowledged: true,
-        acknowledgedAt: new Date().toISOString(),
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "induction-policies"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
-      toast({ title: "Policy acknowledged" });
-    },
-  });
-
-  if (isLoading) return <Skeleton className="h-40" />;
-
-  const acknowledgedNames = new Set((policies || []).filter(p => p.acknowledged).map(p => p.policyName));
-
+  // Task 114: the legacy single-policy checklist was retired in favour
+  // of the 21 versioned read-and-acknowledge sections. The
+  // InductionProgressPanel renders the full breakdown (status,
+  // active-time, longest session, scrolled-to-end, last-read) for
+  // admins / super-admins, sourced from the same data the candidate
+  // uses on the portal.
   return (
     <div className="space-y-4" data-testid="tab-induction">
-      <p className="text-sm text-muted-foreground">
-        {acknowledgedNames.size} of {INDUCTION_POLICIES.length} policies acknowledged
-      </p>
-      <div className="space-y-2">
-        {INDUCTION_POLICIES.map(policy => (
-          <div key={policy} className="flex items-center justify-between rounded-lg border border-card-border p-3">
-            <div className="flex items-center gap-3">
-              {acknowledgedNames.has(policy) ? (
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-              ) : (
-                <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-              )}
-              <span className="text-sm font-medium text-foreground">{policy}</span>
-            </div>
-            {!acknowledgedNames.has(policy) && (
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => acknowledgeMutation.mutate(policy)} disabled={acknowledgeMutation.isPending}>
-                Acknowledge
-              </Button>
-            )}
-          </div>
-        ))}
-      </div>
+      <InductionProgressPanel candidateId={candidateId} />
+      <SopComprehensionPanel candidateId={candidateId} />
     </div>
   );
 }

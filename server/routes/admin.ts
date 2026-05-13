@@ -696,6 +696,12 @@ export function registerNurseRoutes(app: Express) {
 
       const gate = await getGateState(nurse.id);
 
+      // Induction gate (task 114) — surfaced on the hub so the sidebar
+      // can render the Induction group + lock the Skills Arcade item
+      // until every induction item has been acknowledged.
+      const { getInductionGateState } = await import("../services/induction-gate");
+      const inductionGate = await getInductionGateState(nurse.id);
+
       res.json({
         nurse: {
           id: nurse.id,
@@ -705,6 +711,7 @@ export function registerNurseRoutes(app: Express) {
         },
         journey,
         gate,
+        induction: inductionGate,
         token: "me",
         firstVisit: isFirstVisit,
         sessionIssued: !!bootstrappedSessionId,

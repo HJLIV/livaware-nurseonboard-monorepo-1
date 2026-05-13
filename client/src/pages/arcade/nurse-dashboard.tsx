@@ -83,6 +83,16 @@ export default function NurseDashboard({ portalToken }: NurseDashboardProps = {}
   const linkBase = isPortalMode ? `/portal/${portalToken}/arcade` : "/arcade";
   const { data, isLoading } = useQuery<DashboardData>({ queryKey: [`${apiBase}/dashboard`] });
 
+  // Task 114: pull the induction summary so the arcade landing page can
+  // present its own "Finish Induction first" lock UX, mirroring the
+  // sidebar lock hint and the server-side write gate. Only fetched in
+  // portal mode — admins keep the unrestricted module library view.
+  const { data: induction } = useQuery<{ totalRequired: number; outstanding: number }>({
+    queryKey: [`/api/portal/${portalToken}/induction`],
+    enabled: isPortalMode,
+  });
+  const inductionLocked = isPortalMode && !!induction && induction.outstanding > 0;
+
   // Portal-mode visitors are always nurses — the admin variant of this
   // page (module library + admin stat cards) must never render here even
   // if a platform admin happens to be signed in in the same browser.
@@ -241,7 +251,44 @@ export default function NurseDashboard({ portalToken }: NurseDashboardProps = {}
         </div>
       )}
 
-      {!isAdmin && lockedAssignments.length > 0 && activeFilter !== "completed" && (
+      {inductionLocked && (
+        <Card
+          className="border-amber-500/30 bg-amber-500/5 animate-fade-in-up animate-delay-100"
+          data-testid="arcade-induction-locked"
+        >
+          <CardContent className="p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-amber-500/10 ring-1 ring-amber-500/25 shrink-0">
+                <Lock className="w-5 h-5 text-amber-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-serif text-lg text-amber-700 dark:text-amber-400">
+                  Finish Induction first
+                </p>
+                <p className="text-sm text-amber-700/80 dark:text-amber-400/80 mt-1">
+                  The Clinical Skills Arcade unlocks once you've read and
+                  acknowledged all {induction!.totalRequired} sections of the
+                  Livaware Staff Handbook. You still have{" "}
+                  <strong>{induction!.outstanding}</strong> to go — your
+                  progress is saved as you read.
+                </p>
+              </div>
+              <Link href={`/portal/induction/${portalToken}`}>
+                <Button
+                  size="sm"
+                  className="shrink-0 bg-amber-500 hover:bg-amber-500/90 text-white"
+                  data-testid="button-go-to-induction"
+                >
+                  Open Induction
+                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isAdmin && !inductionLocked && lockedAssignments.length > 0 && activeFilter !== "completed" && (
         <Card className="border-amber-500/25 bg-amber-500/5 animate-fade-in-up animate-delay-150">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">

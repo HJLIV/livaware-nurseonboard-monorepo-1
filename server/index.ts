@@ -123,6 +123,35 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  // Idempotent seed for the 21 induction items (task 114). Best-effort:
+  // if the seeder fails (e.g. schema migration not yet run) we log and
+  // continue rather than blocking startup.
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      const { seedInductionItems } = await import("./induction-seed");
+      // Default boot mode: insert-only. Existing rows are NEVER
+      // overwritten — admin edits are authoritative. Use
+      // POST /api/admin/induction/reseed (super-admin) to force a
+      // reconciliation back to the bundled handbook content.
+      const result = await seedInductionItems();
+      if (result.inserted || result.updated || result.backfilled) {
+        log(
+          `induction items seeded: ${result.inserted} inserted, ${result.updated} updated, ${result.backfilled} legacy acks back-filled`,
+          "induction",
+        );
+      }
+    } catch (err: any) {
+      console.error("[induction] seed failed:", err?.message || err);
+    }
+    try {
+      const { reconcileArcadeSopRefs } = await import("./arcade-sop-refs");
+      const r = await reconcileArcadeSopRefs();
+      if (r.patched) log(`arcade SOP refs patched on ${r.patched} modules`, "induction");
+    } catch (err: any) {
+      console.error("[induction] arcade SOP refs reconcile failed:", err?.message || err);
+    }
+  }
+
   // Background scheduler for the two automated chase jobs:
   //   - Weekly bulk chase email (toggleable, default off)
   //   - Mailbox reply scan       (toggleable, default on, default 30 min)

@@ -611,6 +611,14 @@ interface BuildGroupsArgs {
   selectOnboardingStep: (stepKey: string) => void;
   policiesSummary?: { totalRequired: number; outstanding: number } | null;
   selectPolicies?: () => void;
+  // Induction summary (task 114) — drives the new Induction sidebar
+  // group and gates the Skills Arcade item until everything is acked.
+  inductionSummary?: { total: number; outstanding: number; unlocked: boolean } | null;
+  selectInduction?: () => void;
+  // SOP comprehension MCQ summary (task 114 follow-up). Standalone
+  // sidebar item; does NOT gate the Skills Arcade by design.
+  sopComprehensionSummary?: { totalRequired: number; outstanding: number } | null;
+  selectSopComprehension?: () => void;
   // Assessment-group selectors. When omitted the items fall back to
   // sensible default URLs (preboard assessment / portal page).
   selectCompetency?: () => void;
@@ -641,6 +649,10 @@ export function buildPortalGroups({
   selectOnboardingStep,
   policiesSummary,
   selectPolicies,
+  inductionSummary,
+  selectInduction,
+  sopComprehensionSummary,
+  selectSopComprehension,
   selectCompetency,
   selectCvUpload,
   gate,
@@ -789,17 +801,50 @@ export function buildPortalGroups({
           hint: "Coming soon",
         },
         {
+          key: "compliance:induction",
+          label: "Induction (Staff Handbook)",
+          status: isLocked
+            ? ("locked" as PortalItemStatus)
+            : inductionSummary
+              ? inductionSummary.unlocked
+                ? "completed"
+                : "in_progress"
+              : "in_progress",
+          hint: isLocked
+            ? lockedHint
+            : inductionSummary
+              ? inductionSummary.unlocked
+                ? `All ${inductionSummary.total} acknowledged`
+                : `${inductionSummary.outstanding} of ${inductionSummary.total} outstanding`
+              : undefined,
+          disabled: isLocked || !selectInduction,
+          onClick: isLocked ? undefined : selectInduction,
+        },
+        // Task 114 follow-up: SOP comprehension MCQ is no longer a
+        // standalone sidebar item. It pops up inline immediately after
+        // the candidate acknowledges each SOP induction section, so
+        // the read + check stay together in one flow.
+        {
           key: "compliance:arcade",
           label: "Clinical Skills Arcade",
-          status: isLocked ? ("locked" as PortalItemStatus) : normalizeStatus(journey.skillsArcade.status),
-          disabled: isLocked,
-          hint: isLocked ? lockedHint : undefined,
-          onClick: isLocked
-            ? undefined
-            : () => {
-                const url = journey.skillsArcade.actionUrl || `/arcade?token=${token}`;
-                window.location.href = url;
-              },
+          status: isLocked
+            ? ("locked" as PortalItemStatus)
+            : inductionSummary && !inductionSummary.unlocked
+              ? "locked"
+              : normalizeStatus(journey.skillsArcade.status),
+          disabled: isLocked || (!!inductionSummary && !inductionSummary.unlocked),
+          hint: isLocked
+            ? lockedHint
+            : inductionSummary && !inductionSummary.unlocked
+              ? `Locked — finish all ${inductionSummary.total} induction items first`
+              : undefined,
+          onClick:
+            isLocked || (inductionSummary && !inductionSummary.unlocked)
+              ? undefined
+              : () => {
+                  const url = journey.skillsArcade.actionUrl || `/arcade?token=${token}`;
+                  window.location.href = url;
+                },
         },
       ],
     },

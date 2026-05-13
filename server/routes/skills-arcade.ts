@@ -7,6 +7,7 @@ import { loginSchema, registerSchema } from "@shared/schema";
 import type { User, ScenarioContent } from "@shared/schema";
 import { z } from "zod";
 import { mintChasePortalLinkForNurse } from "../training-notifications";
+import { requireInductionAcknowledged } from "../middleware";
 
 declare module "express-session" {
   interface SessionData {
@@ -285,7 +286,7 @@ export async function registerRoutes(
 
   const startAttemptSchema = z.object({ assignmentId: z.string().min(1) });
 
-  app.post("/api/nurse/attempts/start", requireAuth, async (req, res) => {
+  app.post("/api/nurse/attempts/start", requireAuth, requireInductionAcknowledged, async (req, res) => {
     try {
       const parsed = startAttemptSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -344,7 +345,7 @@ export async function registerRoutes(
     })),
   });
 
-  app.post("/api/nurse/attempts/submit", requireAuth, async (req, res) => {
+  app.post("/api/nurse/attempts/submit", requireAuth, requireInductionAcknowledged, async (req, res) => {
     try {
       const parsed = submitAttemptSchema.safeParse(req.body);
       if (!parsed.success) {
