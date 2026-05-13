@@ -4805,6 +4805,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
       ? initialParams.section
       : "onboarding";
   const [section, setSection] = useState<"preboard" | "onboarding" | "compliance">(initialSection);
+  const { isSuperAdmin } = useAuthRole();
   const initialOnboardingTab = initialParams.tab && VALID_ONBOARDING_TABS.has(initialParams.tab) ? initialParams.tab : "identity";
   const initialComplianceTab = initialParams.tab && VALID_COMPLIANCE_TABS.has(initialParams.tab) ? initialParams.tab : "induction";
 
@@ -4817,7 +4818,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
   return (
     <div className="space-y-4">
       <OnboardingAccessPanel candidateId={candidateId} />
-      <PortalAccessPanel candidateId={candidateId} />
+      {isSuperAdmin && <PortalAccessPanel candidateId={candidateId} />}
       <div className="flex gap-2" data-testid="section-toggle">
         <Button
           variant={section === "preboard" ? "default" : "outline"}

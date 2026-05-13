@@ -5,7 +5,7 @@ import { eq, desc, and, gt, isNull, isNotNull } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
-import { requireAdmin } from "../middleware";
+import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { getGateState, maybeAutoUnlock } from "../services/onboarding-gate";
 import crypto from "crypto";
 
@@ -147,7 +147,7 @@ export function registerNurseRoutes(app: Express) {
 
   // ─── Portal passwordless auth admin (task 107) ──────────────────────
   // Read: 10 most recent portal sessions + last sign-in summary.
-  app.get("/api/nurses/:id/portal-sessions", requireAdmin, async (req, res) => {
+  app.get("/api/nurses/:id/portal-sessions", requireSuperAdmin, async (req, res) => {
     const nurseId = req.params.id;
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
@@ -170,7 +170,7 @@ export function registerNurseRoutes(app: Express) {
   });
 
   // Send a sign-in code now on the nurse's behalf (admin help-desk action).
-  app.post("/api/nurses/:id/portal-auth/send-code", requireAdmin, async (req, res) => {
+  app.post("/api/nurses/:id/portal-auth/send-code", requireSuperAdmin, async (req, res) => {
     const nurseId = req.params.id;
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
@@ -206,7 +206,7 @@ export function registerNurseRoutes(app: Express) {
   });
 
   // Force sign-out of every active portal session for this nurse.
-  app.post("/api/nurses/:id/portal-auth/revoke-all", requireAdmin, async (req, res) => {
+  app.post("/api/nurses/:id/portal-auth/revoke-all", requireSuperAdmin, async (req, res) => {
     const nurseId = req.params.id;
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
 import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
+import { useAuthRole } from "@/lib/use-auth-role";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -711,6 +712,7 @@ function AuditTab({ nurseId }: { nurseId: string }) {
 export default function NurseDetail() {
   const [, params] = useRoute("/nurses/:id");
   const nurseId = params?.id || "";
+  const { isSuperAdmin } = useAuthRole();
 
   const { data: nurse, isLoading } = useQuery<NurseDetail>({
     queryKey: [`/api/nurses/${nurseId}`],
@@ -776,7 +778,7 @@ export default function NurseDetail() {
         </Card>
 
         <OnboardingAccessPanel candidateId={nurseId} />
-        <PortalAccessPanel candidateId={nurseId} />
+        {isSuperAdmin && <PortalAccessPanel candidateId={nurseId} />}
 
         {/* Tabs */}
         <Tabs defaultValue="overview">
