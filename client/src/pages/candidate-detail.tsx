@@ -2595,6 +2595,27 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
     },
   });
 
+  const remindMutation = useMutation({
+    mutationFn: async (referenceId: string) => {
+      const res = await apiRequest("POST", `/api/candidates/${candidateId}/references/${referenceId}/remind`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "references"] });
+      toast({
+        title: "Reminder sent",
+        description: `Reminder email sent to referee (${data?.reminderCount || 1}× sent so far).`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not send reminder",
+        description: err?.message || "Please try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const addMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/candidates/${candidateId}/references`, {
@@ -2651,6 +2672,11 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
                         <Mail className="h-3 w-3" /> Email sent {new Date(ref.emailSentAt).toLocaleDateString("en-GB")}
                       </p>
                     )}
+                    {(ref.reminderCount || 0) > 0 && ref.emailSentAt && (
+                      <p className="text-[10px] text-amber-500 mt-0.5 flex items-center gap-1" data-testid={`ref-reminder-info-${ref.id}`}>
+                        <Send className="h-3 w-3" /> Reminder sent {new Date(ref.emailSentAt).toLocaleDateString("en-GB")} • {ref.reminderCount}×
+                      </p>
+                    )}
                     {ref.formSubmittedAt && (
                       <p className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
                         <CheckCircle className="h-3 w-3" />
@@ -2671,9 +2697,27 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
                       </a>
                     )}
                   </div>
-                  <Badge variant="outline" className={outcomeConfig[ref.outcome]?.color || ""}>
-                    {outcomeConfig[ref.outcome]?.label || ref.outcome}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <Badge variant="outline" className={outcomeConfig[ref.outcome]?.color || ""}>
+                      {outcomeConfig[ref.outcome]?.label || ref.outcome}
+                    </Badge>
+                    {!ref.formSubmittedAt && (ref.outcome === "pending" || ref.outcome === "sent" || ref.outcome === "escalated") && ref.refereeEmail && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2.5"
+                        onClick={() => remindMutation.mutate(ref.id)}
+                        disabled={remindMutation.isPending && remindMutation.variables === ref.id}
+                        data-testid={`button-resend-reminder-${ref.id}`}
+                      >
+                        {remindMutation.isPending && remindMutation.variables === ref.id ? (
+                          <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Sending...</>
+                        ) : (
+                          <><Send className="h-3 w-3 mr-1.5" /> Resend reminder</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {ref.redFlagTriggered && (
                   <div className="mt-3 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-2.5 text-xs text-red-700 dark:text-red-300 flex items-center gap-1.5" data-testid={`ref-red-flag-${ref.id}`}>

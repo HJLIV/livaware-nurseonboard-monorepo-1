@@ -97,6 +97,8 @@ export interface IStorage {
 
   createRefereeToken(data: InsertRefereeToken): Promise<RefereeToken>;
   getRefereeTokenByToken(token: string): Promise<RefereeToken | undefined>;
+  getLatestRefereeTokenForReference(referenceId: string): Promise<RefereeToken | undefined>;
+  updateRefereeTokenExpiry(id: string, expiresAt: Date): Promise<void>;
   markRefereeTokenCompleted(id: string): Promise<void>;
   getReference(id: string): Promise<Reference | undefined>;
 
@@ -458,6 +460,20 @@ export class DatabaseStorage implements IStorage {
 
   async markRefereeTokenCompleted(id: string): Promise<void> {
     await db.update(refereeTokens).set({ completedAt: new Date() }).where(eq(refereeTokens.id, id));
+  }
+
+  async getLatestRefereeTokenForReference(referenceId: string): Promise<RefereeToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(refereeTokens)
+      .where(eq(refereeTokens.referenceId, referenceId))
+      .orderBy(desc(refereeTokens.createdAt))
+      .limit(1);
+    return result;
+  }
+
+  async updateRefereeTokenExpiry(id: string, expiresAt: Date): Promise<void> {
+    await db.update(refereeTokens).set({ expiresAt }).where(eq(refereeTokens.id, id));
   }
 
   async getReference(id: string): Promise<Reference | undefined> {

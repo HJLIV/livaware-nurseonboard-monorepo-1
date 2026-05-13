@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
-import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody } from "../outlook";
+import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
 import {
@@ -788,6 +788,163 @@ export function registerAdminRoutes(app: Express) {
 
     await storage.createAuditLog({ nurseId: param(req, "id"), action: "reference_requested", agentName: agentFor(req), detail: { refereeName: result.refereeName, refereeEmail: result.refereeEmail, emailSent } });
     res.status(201).json({ ...result, emailSent });
+  });
+
+  app.post("/api/candidates/:id/references/:referenceId/remind", async (req, res) => {
+    const candidateId = param(req, "id");
+    const referenceId = param(req, "referenceId");
+    let currentReminderCount = 0;
+    let currentRefereeEmail: string | null = null;
+    let currentRefereeName: string | null = null;
+    try {
+      const candidate = await storage.getCandidate(candidateId);
+      if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+
+      const reference = await storage.getReference(referenceId);
+      if (!reference || reference.nurseId !== candidateId) {
+        return res.status(404).json({ message: "Reference not found" });
+      }
+
+      currentReminderCount = reference.reminderCount || 0;
+      currentRefereeEmail = reference.refereeEmail || null;
+      currentRefereeName = reference.refereeName || null;
+
+      if (reference.outcome === "received" || reference.formSubmittedAt) {
+        return res.status(400).json({ message: "Reference already received — no reminder needed." });
+      }
+
+      const allowedOutcomes = new Set(["pending", "sent", "escalated"]);
+      if (!allowedOutcomes.has(reference.outcome)) {
+        return res.status(400).json({ message: `Cannot send a reminder for a reference in '${reference.outcome}' state.` });
+      }
+
+      if (!reference.refereeEmail) {
+        return res.status(400).json({ message: "Referee has no email on file" });
+      }
+
+      const lastReminderAt = reference.emailSentAt ? new Date(reference.emailSentAt).getTime() : 0;
+      if (lastReminderAt && Date.now() - lastReminderAt < 60 * 1000) {
+        return res.status(429).json({ message: "Please wait a moment before sending another reminder." });
+      }
+
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers["host"] || "localhost:5000";
+
+      let token = await storage.getLatestRefereeTokenForReference(referenceId);
+      const now = Date.now();
+      const refreshThresholdMs = 7 * 24 * 60 * 60 * 1000;
+      const newExpiresAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
+
+      if (!token) {
+        const tokenStr = crypto.randomBytes(32).toString("hex");
+        token = await storage.createRefereeToken({
+          referenceId,
+          nurseId: candidateId,
+          token: tokenStr,
+          expiresAt: newExpiresAt,
+        } as any);
+      } else {
+        const expiresAtMs = new Date(token.expiresAt).getTime();
+        if (expiresAtMs - now < refreshThresholdMs) {
+          await storage.updateRefereeTokenExpiry(token.id, newExpiresAt);
+          token = { ...token, expiresAt: newExpiresAt };
+        }
+      }
+
+      const refereeFormUrl = `${protocol}://${host}/referee/${token.token}`;
+      const candidateName = candidate.fullName || "the candidate";
+      // Find the original send date from the audit log so the reminder copy
+      // always references the *initial* send date, not the date of the most
+      // recent reminder (emailSentAt is overwritten on every reminder).
+      let originalSentAt: Date | null = reference.emailSentAt ? new Date(reference.emailSentAt) : null;
+      try {
+        const logs = await storage.getAuditLogs(candidateId);
+        const initial = logs
+          .filter((l: any) => l.action === "reference_email_sent" && (l.detail as any)?.refereeEmail === reference.refereeEmail)
+          .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())[0];
+        if (initial?.timestamp) originalSentAt = new Date(initial.timestamp);
+      } catch {
+        // fall through with the emailSentAt-based fallback
+      }
+      const expiresAt = new Date(token.expiresAt);
+      const reminderBody = getReminderReferenceEmailBody(
+        reference.refereeName,
+        candidateName,
+        originalSentAt,
+        refereeFormUrl,
+        expiresAt,
+      );
+      const reminderSubject = `Reminder: Reference Request for ${candidateName}`;
+
+      try {
+        await sendReferenceRequestEmail(
+          reference.refereeEmail,
+          reference.refereeName,
+          candidateName,
+          refereeFormUrl,
+          expiresAt,
+          reminderSubject,
+          reminderBody,
+        );
+      } catch (err: any) {
+        console.error("[Reference Reminder] Failed to send:", err?.message || err);
+        await storage.createAuditLog({
+          nurseId: candidateId,
+          action: "reference_reminder_failed",
+          agentName: agentFor(req),
+          detail: {
+            referenceId,
+            refereeEmail: reference.refereeEmail,
+            refereeName: reference.refereeName,
+            reminderCount: currentReminderCount,
+            error: err?.message || "Unknown error",
+          },
+        });
+        return res.status(502).json({ message: "Failed to send reminder email" });
+      }
+
+      const newReminderCount = (reference.reminderCount || 0) + 1;
+      const updated = await storage.updateReference(referenceId, {
+        reminderCount: newReminderCount,
+        emailSentAt: new Date(),
+        outcome: reference.outcome === "pending" ? "sent" : reference.outcome,
+      } as any);
+
+      await storage.createAuditLog({
+        nurseId: candidateId,
+        action: "reference_reminder_sent",
+        agentName: agentFor(req),
+        detail: {
+          referenceId,
+          refereeEmail: reference.refereeEmail,
+          refereeName: reference.refereeName,
+          reminderCount: newReminderCount,
+          expiresAt: expiresAt.toISOString(),
+        },
+      });
+
+      res.json({ ...updated, reminderCount: newReminderCount });
+    } catch (err: any) {
+      console.error("[Reference Reminder] Error:", err?.message || err);
+      try {
+        await storage.createAuditLog({
+          nurseId: candidateId,
+          action: "reference_reminder_failed",
+          agentName: agentFor(req),
+          detail: {
+            referenceId,
+            refereeEmail: currentRefereeEmail,
+            refereeName: currentRefereeName,
+            reminderCount: currentReminderCount,
+            error: err?.message || "Unknown error",
+            stage: "unexpected",
+          },
+        });
+      } catch (auditErr: any) {
+        console.error("[Reference Reminder] Audit log write failed:", auditErr?.message || auditErr);
+      }
+      res.status(500).json({ message: "Failed to send reminder" });
+    }
   });
 
   app.patch("/api/references/:id", async (req, res) => {

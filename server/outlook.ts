@@ -335,6 +335,37 @@ Kind regards,
 Livaware Onboarding Team`;
 }
 
+export function getReminderReferenceEmailBody(
+  refereeName: string,
+  candidateName: string,
+  originalSentAt: Date | null | undefined,
+  formUrl: string,
+  expiresAt: Date,
+): string {
+  const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const sentLine = originalSentAt
+    ? `We initially wrote to you on ${originalSentAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} to request a professional reference for ${candidateName}.`
+    : `We previously wrote to you to request a professional reference for ${candidateName}.`;
+  return `Dear ${refereeName},
+
+Just a gentle reminder that we are still awaiting your reference for ${candidateName}.
+
+${sentLine} If you have already responded, please accept our thanks and ignore this message.
+
+We would be very grateful if you could complete our short, secure online reference form at your earliest convenience — it usually takes 10–15 minutes. Your responses help us meet our CQC Regulation 19 (Schedule 3) duties before ${candidateName} can begin work.
+
+You can complete the form here: ${formUrl}
+
+This secure link will remain valid until ${expiryFormatted}. If you have any questions or need the link resent, please reply to our onboarding team.
+
+With thanks for your time,
+Livaware Onboarding Team`;
+}
+
 export async function sendReferenceRequestEmail(
   refereeEmail: string,
   refereeName: string,
