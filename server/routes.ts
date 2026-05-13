@@ -207,5 +207,9 @@ export async function registerRoutes(
   const { registerSuperAdminRoutes } = await import("./routes/super-admin");
   registerSuperAdminRoutes(app);
 
+  // === ONBOARDING DECLARATIONS (task 121) ===
+  const { registerDeclarationRoutes } = await import("./routes/declarations");
+  registerDeclarationRoutes(app);
+
   return httpServer;
 }

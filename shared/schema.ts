@@ -1273,6 +1273,55 @@ export const session = pgTable(
   }),
 );
 
+// ==================== ONBOARDING DECLARATIONS (task 121) ====================
+// Six structured declarations a nurse completes during onboarding (EPP,
+// Working Time Directive, Rehabilitation of Offenders, Occupational Health,
+// Data Protection, Age & Eligibility). Each declaration is keyed by a stable
+// declarationKey (defined in server/declarations/) and stored as a versioned
+// row so admins can re-issue and see the history.
+export const declarationStatusValueEnum = pgEnum("declaration_status_value", [
+  "draft",
+  "submitted",
+  "reopened",
+]);
+
+export const nurseDeclarations = pgTable("nurse_declarations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  declarationKey: text("declaration_key").notNull(),
+  version: integer("version").notNull().default(1),
+  status: declarationStatusValueEnum("status").notNull().default("draft"),
+  // Structured answers keyed by question id. Validated against the registry
+  // for the declarationKey before submission.
+  answers: jsonb("answers").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  signatureName: text("signature_name"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  submittedAt: timestamp("submitted_at"),
+  reopenedAt: timestamp("reopened_at"),
+  reopenedBy: text("reopened_by"),
+  reopenReason: text("reopen_reason"),
+  pdfDocumentId: varchar("pdf_document_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("nurse_declarations_nurse_id_idx").on(table.nurseId),
+  index("nurse_declarations_key_idx").on(table.declarationKey),
+  uniqueIndex("nurse_declarations_nurse_key_version_unique").on(
+    table.nurseId,
+    table.declarationKey,
+    table.version,
+  ),
+]);
+
+export const insertNurseDeclarationSchema = createInsertSchema(nurseDeclarations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type NurseDeclaration = typeof nurseDeclarations.$inferSelect;
+export type InsertNurseDeclaration = z.infer<typeof insertNurseDeclarationSchema>;
+
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;
 export const insertAssessmentSchema = createInsertSchema(preboardAssessments).omit({

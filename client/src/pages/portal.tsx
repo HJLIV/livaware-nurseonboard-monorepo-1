@@ -3150,6 +3150,14 @@ export default function PortalPage() {
     enabled: !!verifyData,
   });
 
+  const { data: declarationsData } = useQuery<{
+    items: { key: string; title: string; status: "not_started" | "draft" | "submitted" | "reopened" }[];
+    total: number; completed: number; outstanding: number;
+  }>({
+    queryKey: [`/api/portal/${token}/declarations`],
+    enabled: !!verifyData,
+  });
+
   const { data: onboardingState } = useQuery<OnboardingState | null>({
     queryKey: ["/api/portal", token, "onboarding-state"],
     enabled: !!verifyData,
@@ -3259,8 +3267,10 @@ export default function PortalPage() {
         ? { totalRequired: sopComprehensionData.totalRequired, outstanding: sopComprehensionData.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      declarationsSummary: declarationsData ?? null,
+      selectDeclaration: (key) => navigate(`/portal/declaration/${key}`),
     });
-  }, [portalHub, token, stepStatuses, navigate, goToStep, sopComprehensionData]);
+  }, [portalHub, token, stepStatuses, navigate, goToStep, sopComprehensionData, declarationsData]);
 
   if (verifyLoading) {
     return (

@@ -36,7 +36,8 @@ export type PortalItemStatus =
   | "in_progress"
   | "pending"
   | "locked"
-  | "coming_soon";
+  | "coming_soon"
+  | "not_started";
 
 export interface PortalSidebarItem {
   key: string;
@@ -623,6 +624,13 @@ interface BuildGroupsArgs {
   // sensible default URLs (preboard assessment / portal page).
   selectCompetency?: () => void;
   selectCvUpload?: () => void;
+  // Onboarding declarations summary (task 121). When present, the six
+  // additional declaration items render with real submission status and
+  // an onClick navigation; when absent they remain disabled.
+  declarationsSummary?: {
+    items: { key: string; title: string; status: "not_started" | "draft" | "submitted" | "reopened" }[];
+  } | null;
+  selectDeclaration?: (key: string) => void;
   // Onboarding access gate state — when present and `unlocked === false`
   // the Onboarding/Compliance/Skills Arcade groups are rendered as
   // disabled with a "Locked — finish Assessment first" hint.
@@ -655,6 +663,8 @@ export function buildPortalGroups({
   selectSopComprehension,
   selectCompetency,
   selectCvUpload,
+  declarationsSummary,
+  selectDeclaration,
   gate,
 }: BuildGroupsArgs): PortalSidebarGroup[] {
   const isLocked = !!gate && gate.unlocked === false;
@@ -763,13 +773,24 @@ export function buildPortalGroups({
           hint: isLocked ? lockedHint : undefined,
           onClick: isLocked ? undefined : () => selectOnboardingStep(step.key),
         })),
-        ...ADDITIONAL_ONBOARDING_ITEMS.map((item) => ({
-          key: `onboard:${item.key}`,
-          label: item.name,
-          status: "coming_soon" as PortalItemStatus,
-          disabled: true,
-          hint: "Coming soon",
-        })),
+        ...ADDITIONAL_ONBOARDING_ITEMS.map((item) => {
+          const declStatus = declarationsSummary?.items.find((d) => d.key === item.key)?.status;
+          let mapped: PortalItemStatus = "not_started";
+          let hint: string | undefined;
+          if (declStatus === "submitted") { mapped = "completed"; hint = "Submitted"; }
+          else if (declStatus === "draft") { mapped = "in_progress"; hint = "Draft saved"; }
+          else if (declStatus === "reopened") { mapped = "in_progress"; hint = "Re-opened by admin"; }
+          return {
+            key: `onboard:${item.key}`,
+            label: item.name,
+            status: isLocked ? ("locked" as PortalItemStatus) : mapped,
+            disabled: isLocked || !selectDeclaration,
+            hint: isLocked ? lockedHint : hint,
+            onClick: isLocked || !selectDeclaration
+              ? undefined
+              : () => selectDeclaration(item.key),
+          };
+        }),
       ],
     },
     {

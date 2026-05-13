@@ -48,6 +48,8 @@ interface PortalData {
   };
   // Task 114: induction-summary block (21 read-and-acknowledge items).
   induction?: { unlocked: boolean; total: number; outstanding: number };
+  // Task 121: declaration completion summary used by hub progress.
+  declarations?: { total: number; completed: number };
   token: string;
   firstVisit?: boolean;
 }
@@ -215,12 +217,15 @@ function OverviewPanel({
 }) {
   const { nurse, journey, token } = portal;
 
-  const onboardCompleted = PORTAL_STEPS.filter(
+  const onboardStepsCompleted = PORTAL_STEPS.filter(
     (s) => normalizeStatus(stepStatuses[s.key]) === "completed",
   ).length;
   const onboardAwaiting = PORTAL_STEPS.filter(
     (s) => normalizeStatus(stepStatuses[s.key]) === "awaiting_verification",
   ).length;
+  // Task 121: declaration completion now contributes to onboarding progress.
+  const declarationsCompleted = portal.declarations?.completed ?? 0;
+  const onboardCompleted = onboardStepsCompleted + declarationsCompleted;
   const onboardTotal = PORTAL_STEPS.length + ADDITIONAL_ONBOARDING_ITEMS.length;
 
   const stages = [
@@ -453,6 +458,14 @@ export default function PortalHub() {
     enabled: !!token,
   });
 
+  const { data: declarationsData } = useQuery<{
+    items: { key: string; title: string; status: "not_started" | "draft" | "submitted" | "reopened" }[];
+    total: number; completed: number; outstanding: number;
+  }>({
+    queryKey: [`/api/portal/${token}/declarations`],
+    enabled: !!token,
+  });
+
   const groups = useMemo<PortalSidebarGroup[]>(() => {
     if (!portal || !token) return [];
     return buildPortalGroups({
@@ -484,8 +497,10 @@ export default function PortalHub() {
         ? { totalRequired: sopComprehensionData.totalRequired, outstanding: sopComprehensionData.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      declarationsSummary: declarationsData ?? null,
+      selectDeclaration: (key) => navigate(`/portal/declaration/${key}`),
     });
-  }, [portal, token, stepStatuses, navigate, policiesData, sopComprehensionData]);
+  }, [portal, token, stepStatuses, navigate, policiesData, sopComprehensionData, declarationsData]);
 
   // After the bootstrap fetch lands (cookie now set), normalize the URL to
   // /portal so the original token never lingers in the address bar / history.
@@ -543,7 +558,12 @@ export default function PortalHub() {
         <WelcomeIntro onContinue={dismissIntro} />
       ) : (
         <OverviewPanel
-          portal={portal}
+          portal={{
+            ...portal,
+            declarations: declarationsData
+              ? { total: declarationsData.total, completed: declarationsData.completed }
+              : portal.declarations,
+          }}
           stepStatuses={stepStatuses}
           onJumpToOnboarding={(stepKey) => {
             const target = stepKey

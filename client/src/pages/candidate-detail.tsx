@@ -8,6 +8,7 @@ import { AIMarkdown } from "@/components/ai-markdown";
 import { renderEmailMarkdown } from "@shared/email-markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
+import { DeclarationsPanel } from "@/components/admin/declarations-panel";
 import { InductionProgressPanel } from "@/components/admin/induction-progress-panel";
 import { SopComprehensionPanel } from "@/components/admin/sop-comprehension-panel";
 import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
@@ -4781,6 +4782,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
   return (
     <div className="space-y-4">
       <OnboardingAccessPanel candidateId={candidateId} />
+      <DeclarationsPanel candidateId={candidateId} />
       {isSuperAdmin && <PortalAccessPanel candidateId={candidateId} />}
       <div className="flex gap-2" data-testid="section-toggle">
         <Button
