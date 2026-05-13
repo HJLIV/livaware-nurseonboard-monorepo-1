@@ -314,6 +314,9 @@ export function registerPortalRoutes(app: Express) {
         mimeType: req.file.mimetype,
         source: "nurse",
         uploadedBy: "nurse",
+        // Nurse-uploaded paperwork must NOT auto-fill official identity
+        // fields like passport / NMC PIN / DBS — those are admin-managed.
+        skipPersonalInfo: true,
       });
 
       const doc = await storage.getDocument(ingest.documentId);

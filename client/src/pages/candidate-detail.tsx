@@ -3596,17 +3596,38 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "mandatory-training"] });
       queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "onboarding-state"] });
       queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/employment-history`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
       const cvAdded = result.cv?.addedEntries?.length ?? 0;
       const trainingAdded = result.autoRecorded?.length ?? 0;
+      const piFilled = result.personalInfo?.filled || [];
+      const piConflicts = result.personalInfo?.conflicts || [];
+      const FIELD_LABELS: Record<string, string> = {
+        dateOfBirth: "DOB",
+        address: "address",
+        phone: "phone",
+        passportNumber: "passport number",
+        nmcPin: "NMC PIN",
+        dbsNumber: "DBS number",
+      };
+      const piFilledLabel = piFilled.length
+        ? `auto-filled ${piFilled.map((f: any) => FIELD_LABELS[f.field] || f.field).join(", ")}`
+        : null;
+      const piConflictLabel = piConflicts.length
+        ? `${piConflicts.length} field${piConflicts.length === 1 ? "" : "s"} differ from existing profile — review`
+        : null;
       const extras = [
         trainingAdded > 0 ? `${trainingAdded} training module(s) auto-recorded` : null,
         cvAdded > 0 ? `${cvAdded} work history entr${cvAdded === 1 ? "y" : "ies"} added from CV` : null,
+        piFilledLabel,
+        piConflictLabel,
       ].filter(Boolean).join(" — ");
       toast({
         title: result.aiAvailable === false ? "Document Uploaded" : "Document Uploaded & Classified",
         description: result.aiAvailable === false
           ? "Document saved successfully. AI classification is currently unavailable — you can categorise it manually."
           : `Identified as: ${result.classification.detectedType}${extras ? ` — ${extras}` : ""}`,
+        variant: piConflicts.length ? "destructive" : "default",
       });
     } catch (err: any) {
       toast({ title: "Upload Failed", description: err.message || "Could not process document", variant: "destructive" });

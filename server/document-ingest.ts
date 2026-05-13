@@ -7,6 +7,13 @@ import { parseCvWorkHistory, preCheckCv } from "./cv-ai";
 import { analyzeCertificateWithAI } from "./certificate-ai";
 import { triggerSharePointUpload, triggerEmailNotification } from "./sharepoint-helper";
 import { MANDATORY_TRAINING_MODULES } from "@shared/schema";
+import {
+  applyExtractedPersonalInfo,
+  categorySupportsPersonalInfoExtraction,
+  extractPersonalInfoFromDocument,
+  personalInfoFieldLabel,
+  type PersonalInfoApplyResult,
+} from "./personal-info-extract-ai";
 
 export type IngestSource = "admin" | "nurse" | "orphan_recovery" | "sharepoint_recovery" | "mailbox_recovery" | "chase_reply";
 
@@ -25,6 +32,7 @@ export interface IngestResult {
   trainingModulesAdded: string[];
   classificationConfidence: string;
   matchedTrainingModules: string[];
+  personalInfo: PersonalInfoApplyResult | null;
 }
 
 const norm = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
@@ -75,6 +83,14 @@ export async function ingestExistingFile(opts: {
    * pipeline.
    */
   preClassification?: Awaited<ReturnType<typeof classifyDocumentSmart>>;
+  /**
+   * If true, do NOT auto-fill personal-identity fields on the nurse profile
+   * from this document. Used by nurse-facing portal endpoints (e.g. CV
+   * upload) so a nurse can't accidentally populate "official" identity
+   * fields from their own paperwork — those should only be set from
+   * admin-led smart uploads of trusted documents.
+   */
+  skipPersonalInfo?: boolean;
 }): Promise<IngestResult> {
   const { nurseId, absolutePath, originalFilename, mimeType, source } = opts;
 
@@ -264,6 +280,88 @@ export async function ingestExistingFile(opts: {
     }
   }
 
+  // ── 4b. Personal-identity fields → nurse profile auto-fill ────────────
+  // For documents that carry identity data (passport, driving licence, BRP,
+  // NMC cert, DBS cert, proof of address, CV) ask the AI for the personal
+  // fields and only fill in the ones the nurse profile is missing. Failures
+  // are non-fatal — admins can still type the values manually.
+  let personalInfoResult: PersonalInfoApplyResult | null = null;
+  if (!opts.skipPersonalInfo && aiAvailable && categorySupportsPersonalInfoExtraction(detectedCategory)) {
+    try {
+      const candidate = await storage.getCandidate(nurseId);
+      if (candidate) {
+        const extraction = await extractPersonalInfoFromDocument({
+          absolutePath,
+          mimeType,
+          category: detectedCategory,
+          documentType: detectedType,
+          candidateName: candidate.fullName,
+        });
+        if (extraction) {
+          personalInfoResult = await applyExtractedPersonalInfo(nurseId, extraction);
+          // If the AI detected values that disagree with what's already on
+          // the profile, flag the document so the warning persists in the
+          // doc browser even after the toast disappears.
+          if (personalInfoResult.conflicts.length > 0) {
+            try {
+              const existingDoc = await storage.getDocument(doc.id);
+              const existingIssues = Array.isArray(existingDoc?.aiIssues) ? (existingDoc?.aiIssues as any[]) : [];
+              await storage.updateDocument(doc.id, {
+                aiStatus: "warning",
+                aiIssues: [
+                  ...existingIssues,
+                  {
+                    code: "personal_info_conflict",
+                    message: `AI detected personal info that differs from this nurse's existing profile (${personalInfoResult.conflicts.map(c => personalInfoFieldLabel(c.field)).join(", ")}). Please review.`,
+                    conflicts: personalInfoResult.conflicts.map(c => ({
+                      field: c.field,
+                      label: personalInfoFieldLabel(c.field),
+                      existing: c.existing,
+                      detected: c.detected,
+                    })),
+                  },
+                ],
+                aiAnalyzedAt: new Date(),
+              } as any);
+            } catch (flagErr: any) {
+              console.warn("[ingestExistingFile] Failed to flag doc with personal-info conflict (non-fatal)", flagErr?.message || flagErr);
+            }
+          }
+          if (personalInfoResult.filled.length > 0 || personalInfoResult.conflicts.length > 0) {
+            try {
+              await storage.createAuditLog({
+                nurseId,
+                action: "personal_info_auto_extracted",
+                agentName: opts.uploadedBy ?? (source === "nurse" ? "nurse" : "admin"),
+                detail: {
+                  documentId: doc.id,
+                  category: detectedCategory,
+                  documentType: detectedType,
+                  confidence: personalInfoResult.confidence,
+                  filled: personalInfoResult.filled.map((f) => ({
+                    field: f.field,
+                    label: personalInfoFieldLabel(f.field),
+                    value: f.value,
+                  })),
+                  conflicts: personalInfoResult.conflicts.map((c) => ({
+                    field: c.field,
+                    label: personalInfoFieldLabel(c.field),
+                    existing: c.existing,
+                    detected: c.detected,
+                  })),
+                },
+              } as any);
+            } catch (auditErr: any) {
+              console.warn("[ingestExistingFile] Personal-info audit failed (non-fatal)", auditErr?.message || auditErr);
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn("[ingestExistingFile] Personal-info extraction failed (non-fatal):", e?.message || e);
+    }
+  }
+
   // ── 5. Training certificate → mandatory training rows ─────────────────
   let trainingAdded: string[] = [];
   if (
@@ -295,6 +393,7 @@ export async function ingestExistingFile(opts: {
     trainingModulesAdded: trainingAdded,
     classificationConfidence: classification?.confidence || "none",
     matchedTrainingModules: classification?.matchedTrainingModules || [],
+    personalInfo: personalInfoResult,
   };
 }
 

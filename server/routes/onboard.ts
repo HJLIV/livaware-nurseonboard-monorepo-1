@@ -881,7 +881,7 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
-  app.post("/api/candidates/:id/smart-document-upload", uploadLimiter, upload.single("file"), async (req, res) => {
+  app.post("/api/candidates/:id/smart-document-upload", requireAdmin, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = param(req, "id");
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -922,6 +922,8 @@ export function registerAdminRoutes(app: Express) {
           cvEntriesSkipped: ingest.cvEntriesSkipped,
           cvEducationAdded: ingest.cvEducationAdded,
           cvEducationSkipped: ingest.cvEducationSkipped,
+          personalInfoFilled: ingest.personalInfo?.filled.map((f) => f.field) || [],
+          personalInfoConflicts: ingest.personalInfo?.conflicts.map((c) => c.field) || [],
         },
       });
 
@@ -947,6 +949,7 @@ export function registerAdminRoutes(app: Express) {
               educationSkipped: ingest.cvEducationSkipped,
             }
           : null,
+        personalInfo: ingest.personalInfo,
       });
     } catch (err: any) {
       console.error("[Smart Document Upload] Error:", err.message);
