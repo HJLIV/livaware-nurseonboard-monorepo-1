@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -20,8 +20,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getStageDisplayName } from "@shared/schema";
 import { RunComplianceCheckOnAllButton, SendAllPortalInvitesButton, RecoverDocumentsButton } from "@/pages/candidates";
 
@@ -280,11 +282,138 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestor
   );
 }
 
+function NurseListRow({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestore, isArchiving, isRestoring, index }: { nurse: Nurse; onClick: () => void; onAdvance?: () => void; isAdvancing?: boolean; onArchive?: () => void; onRestore?: () => void; isArchiving?: boolean; isRestoring?: boolean; index: number }) {
+  const stage = stageConfig[nurse.currentStage] || stageConfig.preboard;
+  const nameParts = nurse.fullName.split(" ");
+  const initials = nameParts.length >= 2
+    ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+    : (nurse.fullName[0] || "?").toUpperCase();
+
+  return (
+    <TableRow
+      className="group cursor-pointer animate-fade-in-up outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
+      style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+      data-testid={`nurse-row-${nurse.id}`}
+      role="link"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <TableCell className="py-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 text-xs font-bold text-primary">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+              {nurse.fullName}
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground sm:hidden">
+              <Mail className="h-3 w-3 text-muted-foreground/40" />
+              <span className="truncate">{nurse.email}</span>
+            </div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5 hidden sm:table-cell">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+          <Mail className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+          <span className="truncate">{nurse.email}</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5">
+        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${stage.bg}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${stage.dot}`} />
+          <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.text}`}>{getStageDisplayName(nurse.currentStage)}</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5 hidden md:table-cell"><StatusBadge status={nurse.preboardStatus} /></TableCell>
+      <TableCell className="py-2.5 hidden md:table-cell"><StatusBadge status={nurse.onboardStatus} /></TableCell>
+      <TableCell className="py-2.5 hidden lg:table-cell"><StatusBadge status={nurse.arcadeStatus} /></TableCell>
+      <TableCell className="py-2.5 hidden xl:table-cell">
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+          <Calendar className="h-3 w-3" />
+          {new Date(nurse.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {nurse.currentStage === "preboard" && onAdvance && !nurse.archivedAt && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] gap-1 px-2"
+              onClick={(e) => { e.stopPropagation(); onAdvance(); }}
+              disabled={isAdvancing}
+            >
+              {isAdvancing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChevronRight className="h-3 w-3" />}
+              Advance
+            </Button>
+          )}
+          {nurse.archivedAt && onRestore && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px] gap-1 px-2"
+              onClick={(e) => { e.stopPropagation(); onRestore(); }}
+              disabled={isRestoring}
+              data-testid={`button-restore-nurse-${nurse.id}`}
+            >
+              {isRestoring ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArchiveRestore className="h-3 w-3" />}
+              Restore
+            </Button>
+          )}
+          {!nurse.archivedAt && onArchive && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-[11px] gap-1 px-2 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Archive ${nurse.fullName}? They'll be hidden from the active list and can be restored later.`)) {
+                  onArchive();
+                }
+              }}
+              disabled={isArchiving}
+              data-testid={`button-archive-nurse-${nurse.id}`}
+            >
+              {isArchiving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Archive className="h-3 w-3" />}
+            </Button>
+          )}
+          <ArrowUpRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary transition-colors shrink-0" />
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+type NurseViewMode = "cards" | "list";
+const NURSE_VIEW_MODE_STORAGE_KEY = "nurses:viewMode";
+
 export default function NursesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "archived">("active");
   const [, setLocation] = useLocation();
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<NurseViewMode>("cards");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(NURSE_VIEW_MODE_STORAGE_KEY);
+      if (stored === "cards" || stored === "list") setViewMode(stored);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NURSE_VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {}
+  }, [viewMode]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -447,31 +576,120 @@ export default function NursesPage() {
               {filtered?.length ?? 0} of {nursesList.length}
             </Badge>
           )}
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => { if (v === "cards" || v === "list") setViewMode(v); }}
+            className="ml-auto shrink-0 rounded-md border border-border/60 bg-card p-0.5"
+            data-testid="toggle-view-mode"
+          >
+            <ToggleGroupItem
+              value="cards"
+              size="sm"
+              aria-label="Card view"
+              className="h-8 px-2.5 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              data-testid="toggle-view-cards"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="ml-1.5 text-xs font-medium hidden sm:inline">Cards</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="list"
+              size="sm"
+              aria-label="List view"
+              className="h-8 px-2.5 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              data-testid="toggle-view-list"
+            >
+              <ListIcon className="h-4 w-4" />
+              <span className="ml-1.5 text-xs font-medium hidden sm:inline">List</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Card key={i}><CardContent className="p-5"><Skeleton className="h-24 w-full" /></CardContent></Card>
-            ))}
-          </div>
+          viewMode === "list" ? (
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Candidate</TableHead>
+                    <TableHead className="hidden sm:table-cell">Email</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead className="hidden md:table-cell">Applicant</TableHead>
+                    <TableHead className="hidden md:table-cell">Onboard</TableHead>
+                    <TableHead className="hidden lg:table-cell">Arcade</TableHead>
+                    <TableHead className="hidden xl:table-cell">Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <Card key={i}><CardContent className="p-5"><Skeleton className="h-24 w-full" /></CardContent></Card>
+              ))}
+            </div>
+          )
         ) : filtered && filtered.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((nurse, i) => (
-              <NurseCard
-                key={nurse.id}
-                nurse={nurse}
-                onClick={() => setLocation(`/candidates/${nurse.id}`)}
-                onAdvance={() => advanceMutation.mutate(nurse.id)}
-                isAdvancing={advancingId === nurse.id}
-                onArchive={() => archiveMutation.mutate(nurse.id)}
-                onRestore={() => restoreMutation.mutate(nurse.id)}
-                isArchiving={archiveMutation.isPending && archiveMutation.variables === nurse.id}
-                isRestoring={restoreMutation.isPending && restoreMutation.variables === nurse.id}
-                index={i}
-              />
-            ))}
-          </div>
+          viewMode === "list" ? (
+            <Card className="overflow-hidden animate-fade-in-up animate-delay-200">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Candidate</TableHead>
+                    <TableHead className="hidden sm:table-cell">Email</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead className="hidden md:table-cell">Applicant</TableHead>
+                    <TableHead className="hidden md:table-cell">Onboard</TableHead>
+                    <TableHead className="hidden lg:table-cell">Arcade</TableHead>
+                    <TableHead className="hidden xl:table-cell">Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((nurse, i) => (
+                    <NurseListRow
+                      key={nurse.id}
+                      nurse={nurse}
+                      onClick={() => setLocation(`/candidates/${nurse.id}`)}
+                      onAdvance={() => advanceMutation.mutate(nurse.id)}
+                      isAdvancing={advancingId === nurse.id}
+                      onArchive={() => archiveMutation.mutate(nurse.id)}
+                      onRestore={() => restoreMutation.mutate(nurse.id)}
+                      isArchiving={archiveMutation.isPending && archiveMutation.variables === nurse.id}
+                      isRestoring={restoreMutation.isPending && restoreMutation.variables === nurse.id}
+                      index={i}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((nurse, i) => (
+                <NurseCard
+                  key={nurse.id}
+                  nurse={nurse}
+                  onClick={() => setLocation(`/candidates/${nurse.id}`)}
+                  onAdvance={() => advanceMutation.mutate(nurse.id)}
+                  isAdvancing={advancingId === nurse.id}
+                  onArchive={() => archiveMutation.mutate(nurse.id)}
+                  onRestore={() => restoreMutation.mutate(nurse.id)}
+                  isArchiving={archiveMutation.isPending && archiveMutation.variables === nurse.id}
+                  isRestoring={restoreMutation.isPending && restoreMutation.variables === nurse.id}
+                  index={i}
+                />
+              ))}
+            </div>
+          )
         ) : (
           <Card className="animate-fade-in-up">
             <CardContent className="flex flex-col items-center justify-center py-20 text-center">

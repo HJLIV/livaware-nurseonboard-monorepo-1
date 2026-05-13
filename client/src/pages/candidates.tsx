@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/app-layout";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -11,12 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch, FolderSearch, Cloud, Inbox, ChevronDown, AlertTriangle, CheckCircle2, X, Link2, Trash2 } from "lucide-react";
+import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch, FolderSearch, Cloud, Inbox, ChevronDown, AlertTriangle, CheckCircle2, X, Link2, Trash2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DialogDescription } from "@/components/ui/dialog";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Candidate, OnboardingState } from "@shared/schema";
@@ -427,6 +429,126 @@ function CandidateRow({ candidate, index }: { candidate: Candidate; index: numbe
   );
 }
 
+function CandidateListRow({ candidate, index }: { candidate: Candidate; index: number }) {
+  const { data: state } = useQuery<OnboardingState>({
+    queryKey: ["/api/candidates", candidate.id, "onboarding-state"],
+  });
+  const [, navigate] = useLocation();
+
+  const initials = candidate.fullName.split(" ").map(n => n[0]).join("").slice(0, 2);
+  const stepStatuses = state?.stepStatuses as Record<string, string> | undefined;
+  const href = `/candidates/${candidate.id}`;
+
+  return (
+    <TableRow
+      className="group cursor-pointer animate-fade-in-up outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
+      style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+      data-testid={`candidate-row-${candidate.id}`}
+      onClick={() => navigate(href)}
+      tabIndex={0}
+      role="link"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate(href);
+        }
+      }}
+    >
+      <TableCell className="py-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20 text-xs font-bold text-primary shrink-0">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <Link href={`/candidates/${candidate.id}`} onClick={(e) => e.stopPropagation()}>
+              <span className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate block">
+                {candidate.fullName}
+              </span>
+            </Link>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground sm:hidden">
+              <Mail className="h-3 w-3 text-muted-foreground/40" />
+              <span className="truncate">{candidate.email}</span>
+            </div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5">
+        <StatusBadge status={candidate.status} />
+      </TableCell>
+      <TableCell className="py-2.5">
+        {candidate.band ? (
+          <Badge variant="outline" className="text-[10px] font-semibold">Band {candidate.band}</Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">—</span>
+        )}
+      </TableCell>
+      <TableCell className="py-2.5 hidden sm:table-cell">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+          <Mail className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+          <span className="truncate">{candidate.email}</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-2.5 hidden xl:table-cell">
+        {candidate.phone ? (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Phone className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+            <span>{candidate.phone}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">—</span>
+        )}
+      </TableCell>
+      <TableCell className="py-2.5 hidden lg:table-cell">
+        {candidate.nmcPin ? (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Stethoscope className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+            <span>{candidate.nmcPin}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">—</span>
+        )}
+      </TableCell>
+      <TableCell className="py-2.5 hidden xl:table-cell max-w-[200px]">
+        {candidate.specialisms && candidate.specialisms.length > 0 ? (
+          <span className="text-xs text-muted-foreground/80 truncate block" title={candidate.specialisms.join(", ")}>
+            {candidate.specialisms.join(", ")}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">—</span>
+        )}
+      </TableCell>
+      <TableCell className="py-2.5 hidden md:table-cell">
+        {stepStatuses ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <StepProgress
+                    stepStatuses={stepStatuses}
+                    currentStep={state?.currentStep}
+                    compact
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="p-3">
+                <StepProgress
+                  stepStatuses={stepStatuses}
+                  currentStep={state?.currentStep}
+                />
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <span className="text-xs text-muted-foreground/40">—</span>
+        )}
+      </TableCell>
+      <TableCell className="py-2.5 w-8">
+        <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-primary transition-colors" />
+      </TableCell>
+    </TableRow>
+  );
+}
+
 interface OrphanFile {
   filename: string;
   sizeBytes: number;
@@ -698,9 +820,26 @@ export function RecoverDocumentsButton() {
   );
 }
 
+type ViewMode = "cards" | "list";
+const VIEW_MODE_STORAGE_KEY = "candidates:viewMode";
+
 export default function CandidatesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (stored === "cards" || stored === "list") setViewMode(stored);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {}
+  }, [viewMode]);
 
   const { data: candidates, isLoading } = useQuery<Candidate[]>({ queryKey: ["/api/candidates"] });
 
@@ -767,14 +906,69 @@ export default function CandidatesPage() {
               {filtered.length} of {candidates.length}
             </Badge>
           )}
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => { if (v === "cards" || v === "list") setViewMode(v); }}
+            className="ml-auto shrink-0 rounded-md border border-border/60 bg-card p-0.5"
+            data-testid="toggle-view-mode"
+          >
+            <ToggleGroupItem
+              value="cards"
+              size="sm"
+              aria-label="Card view"
+              className="h-8 px-2.5 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              data-testid="toggle-view-cards"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="ml-1.5 text-xs font-medium hidden sm:inline">Cards</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="list"
+              size="sm"
+              aria-label="List view"
+              className="h-8 px-2.5 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+              data-testid="toggle-view-list"
+            >
+              <ListIcon className="h-4 w-4" />
+              <span className="ml-1.5 text-xs font-medium hidden sm:inline">List</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <Card key={i}><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
-            ))}
-          </div>
+          viewMode === "list" ? (
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Candidate</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Band</TableHead>
+                    <TableHead className="hidden sm:table-cell">Email</TableHead>
+                    <TableHead className="hidden xl:table-cell">Phone</TableHead>
+                    <TableHead className="hidden lg:table-cell">NMC PIN</TableHead>
+                    <TableHead className="hidden xl:table-cell">Specialisms</TableHead>
+                    <TableHead className="hidden md:table-cell">Pipeline</TableHead>
+                    <TableHead className="w-8" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(i => (
+                <Card key={i}><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
+              ))}
+            </div>
+          )
         ) : filtered.length === 0 ? (
           <Card className="animate-fade-in-up animate-delay-200">
             <CardContent className="flex flex-col items-center justify-center py-20 text-center">
@@ -794,6 +988,29 @@ export default function CandidatesPage() {
                   : "Register your first candidate to begin onboarding"}
               </p>
             </CardContent>
+          </Card>
+        ) : viewMode === "list" ? (
+          <Card className="overflow-hidden animate-fade-in-up animate-delay-200">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Band</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden xl:table-cell">Phone</TableHead>
+                  <TableHead className="hidden lg:table-cell">NMC PIN</TableHead>
+                  <TableHead className="hidden xl:table-cell">Specialisms</TableHead>
+                  <TableHead className="hidden md:table-cell">Pipeline</TableHead>
+                  <TableHead className="w-8" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((candidate, i) => (
+                  <CandidateListRow key={candidate.id} candidate={candidate} index={i} />
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         ) : (
           <div className="space-y-3">
