@@ -1,18 +1,13 @@
 import type { Express } from "express";
+import { requireAdmin } from "../middleware";
 import { storage } from "../preboard-storage";
 import { storage as appStorage } from "../storage";
 import { insertAssessmentSchema, assessmentResponseSchema, portalLinks, nurses } from "@shared/schema";
-import { analyzeAssessment } from "../preboard-ai";
-import { sendEmail } from "../preboard-outlook";
-import { buildEmailHtml } from "../preboard-email-template";
-import { generatePdfReport } from "../preboard-pdf-report";
-import { getSuspectBurstCharThreshold } from "../preboard-integrity-settings";
+import { runAssessmentDeliveryPipeline, runAiStep, runEmailStep } from "../preboard-delivery";
 import { logAction } from "../services/audit";
 import { db } from "../db";
 import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
-
-const RECIPIENT_EMAIL = process.env.REPORT_EMAIL || "";
 
 const submitSchema = z.object({
   nurseName: z.string().min(2, "Name must be at least 2 characters"),
@@ -142,55 +137,60 @@ export async function registerRoutes(
 
       res.json({ id: assessment.id, status: "received" });
 
-      (async () => {
-        try {
-          const analysis = await analyzeAssessment(
-            assessment.nurseName,
-            parsed.data.responses
-          );
-          const updated = await storage.updateAssessmentAnalysis(assessment.id, analysis);
-
-          if (updated && RECIPIENT_EMAIL) {
-            try {
-              const html = buildEmailHtml(updated);
-              let attachments: { name: string; contentType: string; contentBytes: string }[] | undefined;
-
-              try {
-                const suspectBurstCharThreshold = await getSuspectBurstCharThreshold();
-                const pdfBuffer = await generatePdfReport(updated, {
-                  suspectBurstCharThreshold,
-                });
-                const safeName = updated.nurseName.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_");
-                attachments = [{
-                  name: `Livaware_Assessment_${safeName}.pdf`,
-                  contentType: "application/pdf",
-                  contentBytes: pdfBuffer.toString("base64"),
-                }];
-                console.log(`PDF generated for assessment ${assessment.id} (${(pdfBuffer.length / 1024).toFixed(1)}KB)`);
-              } catch (pdfErr) {
-                console.error(`PDF generation failed for assessment ${assessment.id}, sending email without attachment:`, pdfErr);
-              }
-
-              await sendEmail(
-                RECIPIENT_EMAIL,
-                `NURSE PREBOARDING ANSWER - ${updated.nurseName}`,
-                html,
-                attachments
-              );
-              await storage.markEmailSent(assessment.id);
-              console.log(`Email sent for assessment ${assessment.id}`);
-            } catch (emailErr) {
-              console.error(`Failed to send email for assessment ${assessment.id}:`, emailErr);
-            }
-          }
-        } catch (aiErr) {
-          console.error(`Failed to analyze assessment ${assessment.id}:`, aiErr);
-        }
-      })();
+      // Fire-and-forget delivery pipeline. All terminal outcomes
+      // (success / AI failed / email failed / skipped no recipient)
+      // are persisted to the assessment row + audit log inside the
+      // pipeline itself, so admins can recover via the rerun-ai /
+      // resend-email endpoints without re-submission.
+      void runAssessmentDeliveryPipeline(assessment.id);
 
     } catch (err) {
       console.error("Error creating assessment:", err);
       res.status(500).json({ error: "Failed to submit assessment" });
+    }
+  });
+
+  // Admin: re-run AI analysis for an existing assessment (task 111).
+  // AI-only — to resend the email use POST .../resend-email.
+  // Admin / super-admin only.
+  app.post("/api/preboard/assessments/:id/rerun-ai", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid assessment id" });
+    const existing = await storage.getAssessment(id);
+    if (!existing) return res.status(404).json({ error: "Assessment not found" });
+    try {
+      const updated = await runAiStep(id);
+      await logAction(existing.nurseId ?? null, "preboard", "assessment_ai_rerun",
+        req.session?.username || "admin",
+        { assessmentId: id, nurseName: existing.nurseName });
+      res.json({ status: "ok", assessment: updated });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ status: "failed", error: message });
+    }
+  });
+
+  // Admin: resend the report email for an existing assessment (task 111).
+  // Admin / super-admin only.
+  app.post("/api/preboard/assessments/:id/resend-email", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid assessment id" });
+    if (!process.env.REPORT_EMAIL) {
+      return res.status(400).json({
+        error: "REPORT_EMAIL is not configured — set the REPORT_EMAIL environment variable to enable report emails.",
+      });
+    }
+    const existing = await storage.getAssessment(id);
+    if (!existing) return res.status(404).json({ error: "Assessment not found" });
+    try {
+      const updated = await runEmailStep(id);
+      await logAction(existing.nurseId ?? null, "preboard", "assessment_email_resent",
+        req.session?.username || "admin",
+        { assessmentId: id, nurseName: existing.nurseName });
+      res.json({ status: "ok", assessment: updated });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ status: "failed", error: message });
     }
   });
 }

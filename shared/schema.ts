@@ -201,6 +201,20 @@ export const preboardAssessments = pgTable("preboard_assessments", {
   aiAnalysis: text("ai_analysis"),
   emailSent: boolean("email_sent").default(false),
   completedAt: timestamp("completed_at").default(sql`CURRENT_TIMESTAMP`),
+  // ─── Delivery pipeline status (task 111) ──────────────────────────
+  // Tracks the post-submission AI + email pipeline so admins can see
+  // when a transient failure has dropped the report email and re-run
+  // the missing step manually. ai_status: pending|ok|failed.
+  // email_status: pending|sent|failed|skipped_no_recipient.
+  aiStatus: text("ai_status").default("pending").notNull(),
+  aiError: text("ai_error"),
+  aiAttempts: integer("ai_attempts").default(0).notNull(),
+  aiAttemptedAt: timestamp("ai_attempted_at"),
+  emailStatus: text("email_status").default("pending").notNull(),
+  emailError: text("email_error"),
+  emailAttempts: integer("email_attempts").default(0).notNull(),
+  emailAttemptedAt: timestamp("email_attempted_at"),
+  emailSentAt: timestamp("email_sent_at"),
 });
 
 // ==================== ONBOARD MODULE ====================

@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap, AlertTriangle, Activity } from "lucide-react";
+import { Search, ClipboardCheck, Eye, Brain, Calendar, User, ArrowUpRight, Zap, AlertTriangle, Activity, Sparkles, Send, Loader2, Mail } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthRole } from "@/lib/use-auth-role";
 import { useSuspectBurstCharThreshold } from "@/hooks/use-preboard-integrity-settings";
 
 interface AssessmentResponseItem {
@@ -83,7 +84,44 @@ function AssessmentDetailDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  if (!assessment) return null;
+  const { toast } = useToast();
+  const { isAdmin: isAdminRole } = useAuthRole();
+  const a = assessment as (PreboardAssessment & {
+    aiStatus?: string | null; aiError?: string | null; aiAttempts?: number | null;
+    emailStatus?: string | null; emailError?: string | null; emailAttempts?: number | null;
+    emailSentAt?: string | null;
+  }) | null;
+
+  const rerunAi = useMutation({
+    mutationFn: async () => {
+      if (!a?.id) throw new Error("No assessment");
+      const res = await apiRequest("POST", `/api/preboard/assessments/${a.id}/rerun-ai`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preboard/assessments"] });
+      toast({ title: "AI analysis re-run" });
+    },
+    onError: (err: Error) => toast({ title: "AI re-run failed", description: err.message, variant: "destructive" }),
+  });
+
+  const resendEmail = useMutation({
+    mutationFn: async () => {
+      if (!a?.id) throw new Error("No assessment");
+      const res = await apiRequest("POST", `/api/preboard/assessments/${a.id}/resend-email`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/preboard/assessments"] });
+      toast({ title: "Report email sent" });
+    },
+    onError: (err: Error) => toast({ title: "Resend failed", description: err.message, variant: "destructive" }),
+  });
+
+  if (!assessment || !a) return null;
+
+  const aiStatus = a.aiStatus || "pending";
+  const emStatus = a.emailStatus || "pending";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,6 +155,70 @@ function AssessmentDetailDialog({
               })}
             </div>
           )}
+
+          <div className="rounded-xl border bg-card p-4 space-y-3" data-testid="card-preboard-delivery">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Report Delivery</p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[10px]">
+                <span data-testid="pill-ai-status" className={`rounded-full border px-2 py-0.5 ${
+                  aiStatus === "ok" ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                  : aiStatus === "failed" ? "border-destructive/40 text-destructive bg-destructive/10"
+                  : "border-muted-foreground/30 text-muted-foreground bg-muted/30"
+                }`}>
+                  {aiStatus === "ok" ? "AI: ready" : aiStatus === "failed" ? `AI failed${a.aiAttempts ? ` (${a.aiAttempts} tries)` : ""}` : "AI pending"}
+                </span>
+                <span data-testid="pill-email-status" className={`rounded-full border px-2 py-0.5 ${
+                  emStatus === "sent" ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                  : emStatus === "failed" ? "border-destructive/40 text-destructive bg-destructive/10"
+                  : emStatus === "skipped_no_recipient" ? "border-amber-500/40 text-amber-600 bg-amber-500/10"
+                  : "border-muted-foreground/30 text-muted-foreground bg-muted/30"
+                }`}>
+                  {emStatus === "sent"
+                    ? (a.emailSentAt ? `Sent ${new Date(a.emailSentAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}` : "Email sent")
+                    : emStatus === "failed" ? `Email failed${a.emailAttempts ? ` (${a.emailAttempts} tries)` : ""}`
+                    : emStatus === "skipped_no_recipient" ? "Skipped — no recipient"
+                    : "Email pending"}
+                </span>
+              </div>
+            </div>
+            {(a.aiError || a.emailError) && (
+              <div className="space-y-1">
+                {a.aiError && aiStatus === "failed" && (
+                  <p className="text-xs text-destructive/80"><span className="font-semibold">AI error:</span> {a.aiError}</p>
+                )}
+                {a.emailError && (emStatus === "failed" || emStatus === "skipped_no_recipient") && (
+                  <p className="text-xs text-destructive/80"><span className="font-semibold">Email error:</span> {a.emailError}</p>
+                )}
+              </div>
+            )}
+            {isAdminRole ? (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => rerunAi.mutate()} disabled={rerunAi.isPending} data-testid="button-rerun-ai">
+                  {rerunAi.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Re-run AI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => resendEmail.mutate()}
+                  disabled={resendEmail.isPending}
+                  data-testid="button-resend-email"
+                  title={emStatus === "skipped_no_recipient" ? "Set REPORT_EMAIL, then click to send" : undefined}
+                >
+                  {resendEmail.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Resend email
+                </Button>
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/70" data-testid="text-delivery-readonly">
+                Re-run / resend actions are admin-only.
+              </p>
+            )}
+          </div>
 
           {assessment.aiAnalysis && (
             <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
@@ -356,6 +458,29 @@ export default function AdminPreboard() {
                         AI analysis available
                       </div>
                     )}
+                    {(() => {
+                      const a = assessment as PreboardAssessment & { aiStatus?: string | null; emailStatus?: string | null };
+                      const ai = a.aiStatus || "pending";
+                      const em = a.emailStatus || "pending";
+                      if (ai === "pending" && em === "pending") return null;
+                      const aiCls = ai === "ok" ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                        : ai === "failed" ? "border-destructive/40 text-destructive bg-destructive/10"
+                        : "border-muted-foreground/30 text-muted-foreground bg-muted/30";
+                      const emCls = em === "sent" ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                        : em === "failed" ? "border-destructive/40 text-destructive bg-destructive/10"
+                        : em === "skipped_no_recipient" ? "border-amber-500/40 text-amber-600 bg-amber-500/10"
+                        : "border-muted-foreground/30 text-muted-foreground bg-muted/30";
+                      return (
+                        <div className="flex flex-wrap gap-1 text-[10px]" data-testid={`row-delivery-status-${assessment.id}`}>
+                          <span className={`rounded-full border px-1.5 py-0.5 ${aiCls}`} data-testid={`row-pill-ai-${assessment.id}`}>
+                            AI: {ai === "ok" ? "ready" : ai === "failed" ? "failed" : "pending"}
+                          </span>
+                          <span className={`rounded-full border px-1.5 py-0.5 ${emCls}`} data-testid={`row-pill-email-${assessment.id}`}>
+                            Email: {em === "sent" ? "sent" : em === "failed" ? "failed" : em === "skipped_no_recipient" ? "no recipient" : "pending"}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <div className="flex gap-2 mt-2">
                       <Button
                         variant="outline"

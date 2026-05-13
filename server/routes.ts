@@ -155,6 +155,16 @@ export async function registerRoutes(
   const { registerRoutes: registerPreboardRoutes } = await import("./routes/preboard");
   await registerPreboardRoutes(app);
 
+  // Backfill ai/email delivery status for assessments created before
+  // task 111 added the new tracking columns. Idempotent — only patches
+  // rows where the new columns are still NULL.
+  try {
+    const { backfillDeliveryStatus } = await import("./preboard-delivery");
+    await backfillDeliveryStatus();
+  } catch (err) {
+    console.error("[Preboard] backfillDeliveryStatus failed:", err);
+  }
+
   // === ONBOARD MODULE (full AI-powered compliance, NMC, DBS, references) ===
   const { registerAdminRoutes } = await import("./routes/onboard");
   registerAdminRoutes(app);

@@ -33,6 +33,7 @@ import { useSuspectBurstCharThreshold } from "@/hooks/use-preboard-integrity-set
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { useAuthRole } from "@/lib/use-auth-role";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback, useRef } from "react";
 import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
@@ -104,6 +105,101 @@ function formatNextOfKin(value: string | null | undefined): string {
   const nok = parseNextOfKin(value);
   const parts = [nok.name, nok.relationship, nok.contactNumber].filter(Boolean);
   return parts.join(" — ");
+}
+
+function PreboardDeliveryPanel({
+  aiStatus, aiError, aiAttempts,
+  emailStatus, emailError, emailAttempts, emailSentAt,
+  onRerunAi, onResendEmail, rerunPending, resendPending,
+  isAdmin,
+}: {
+  isAdmin: boolean;
+  aiStatus?: string | null;
+  aiError?: string | null;
+  aiAttempts?: number | null;
+  emailStatus?: string | null;
+  emailError?: string | null;
+  emailAttempts?: number | null;
+  emailSentAt?: string | null;
+  onRerunAi: () => void;
+  onResendEmail: () => void;
+  rerunPending: boolean;
+  resendPending: boolean;
+}) {
+  const ai = aiStatus || "pending";
+  const em = emailStatus || "pending";
+
+  const aiPill = ai === "ok"
+    ? { label: "AI: ready", cls: "border-emerald-500/40 text-emerald-600 bg-emerald-500/10" }
+    : ai === "failed"
+    ? { label: `AI failed${aiAttempts ? ` (${aiAttempts} tries)` : ""}`, cls: "border-destructive/40 text-destructive bg-destructive/10" }
+    : { label: "AI pending", cls: "border-muted-foreground/30 text-muted-foreground bg-muted/30" };
+
+  const emPill = em === "sent"
+    ? { label: emailSentAt ? `Sent ${new Date(emailSentAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}` : "Email sent", cls: "border-emerald-500/40 text-emerald-600 bg-emerald-500/10" }
+    : em === "failed"
+    ? { label: `Email failed${emailAttempts ? ` (${emailAttempts} tries)` : ""}`, cls: "border-destructive/40 text-destructive bg-destructive/10" }
+    : em === "skipped_no_recipient"
+    ? { label: "Skipped — no recipient configured", cls: "border-amber-500/40 text-amber-600 bg-amber-500/10" }
+    : { label: "Email pending", cls: "border-muted-foreground/30 text-muted-foreground bg-muted/30" };
+
+  return (
+    <Card className="border border-card-border" data-testid="card-preboard-delivery">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold">Report Delivery</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={`text-[10px] ${aiPill.cls}`} data-testid="pill-ai-status">{aiPill.label}</Badge>
+            <Badge variant="outline" className={`text-[10px] ${emPill.cls}`} data-testid="pill-email-status">{emPill.label}</Badge>
+          </div>
+        </div>
+        {(aiError || emailError) && (
+          <div className="space-y-1">
+            {aiError && ai === "failed" && (
+              <p className="text-xs text-destructive/80"><span className="font-semibold">AI error:</span> {aiError}</p>
+            )}
+            {emailError && (em === "failed" || em === "skipped_no_recipient") && (
+              <p className="text-xs text-destructive/80"><span className="font-semibold">Email error:</span> {emailError}</p>
+            )}
+          </div>
+        )}
+        {isAdmin ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onRerunAi}
+              disabled={rerunPending}
+              data-testid="button-rerun-ai"
+            >
+              {rerunPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Re-run AI analysis
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onResendEmail}
+              disabled={resendPending}
+              data-testid="button-resend-email"
+              title={em === "skipped_no_recipient" ? "Set REPORT_EMAIL, then click to send" : undefined}
+            >
+              {resendPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Resend report email
+            </Button>
+          </div>
+        ) : (
+          <p className="text-[10px] text-muted-foreground/70" data-testid="text-delivery-readonly">
+            Re-run / resend actions are admin-only.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function PortalBadge() {
@@ -4191,6 +4287,7 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
 }
 
 function PreboardTab({ candidateId, candidate }: { candidateId: string; candidate: Candidate }) {
+  const { isAdmin: isAdminRole } = useAuthRole();
   const { toast } = useToast();
   const [fastTrackReason, setFastTrackReason] = useState(candidate.fastTrackReason || "");
   const [isEditingReason, setIsEditingReason] = useState(false);
@@ -4229,9 +4326,46 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
     aiAnalysis: string | null;
     emailSent: boolean | null;
     completedAt: string | null;
+    aiStatus?: string | null;
+    aiError?: string | null;
+    aiAttempts?: number | null;
+    emailStatus?: string | null;
+    emailError?: string | null;
+    emailAttempts?: number | null;
+    emailSentAt?: string | null;
   }>({
     queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`],
     retry: false,
+  });
+
+  const rerunAiMutation = useMutation({
+    mutationFn: async () => {
+      if (!assessment?.id) throw new Error("No assessment");
+      const res = await apiRequest("POST", `/api/preboard/assessments/${assessment.id}/rerun-ai`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`] });
+      toast({ title: "AI analysis re-run", description: "Analysis regenerated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "AI re-run failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resendEmailMutation = useMutation({
+    mutationFn: async () => {
+      if (!assessment?.id) throw new Error("No assessment");
+      const res = await apiRequest("POST", `/api/preboard/assessments/${assessment.id}/resend-email`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/preboard/assessments/by-nurse/${candidateId}`] });
+      toast({ title: "Report email sent" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Resend failed", description: err.message, variant: "destructive" });
+    },
   });
 
   if (isLoading) {
@@ -4411,6 +4545,21 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
           </Card>
         )}
       </div>
+
+      <PreboardDeliveryPanel
+        isAdmin={isAdminRole}
+        aiStatus={assessment.aiStatus}
+        aiError={assessment.aiError}
+        aiAttempts={assessment.aiAttempts}
+        emailStatus={assessment.emailStatus}
+        emailError={assessment.emailError}
+        emailAttempts={assessment.emailAttempts}
+        emailSentAt={assessment.emailSentAt}
+        onRerunAi={() => rerunAiMutation.mutate()}
+        onResendEmail={() => resendEmailMutation.mutate()}
+        rerunPending={rerunAiMutation.isPending}
+        resendPending={resendEmailMutation.isPending}
+      />
 
       {assessment.aiAnalysis && (
         <Card className="border border-primary/10 bg-primary/5">

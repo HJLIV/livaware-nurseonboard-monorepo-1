@@ -233,12 +233,19 @@ const SOP_SECTIONS: SOPSection[] = [
           'If the assessment meets your standards, advance the applicant to the Candidate stage from their profile page. If not, you can leave them at the Applicant stage for re-assessment.',
         tip: "The assessment is designed to be completed in 10-15 minutes. Applicants access it through their portal link.",
       },
+      {
+        action: "Check report delivery & retry if needed",
+        detail:
+          'Each assessment now shows a "Report Delivery" panel with two pills: AI analysis status and report-email status. The pipeline retries transient failures (Anthropic 5xx/overloaded, network blips) with exponential backoff. If something stays red, click "Re-run AI" or "Resend report email" — both buttons are on the applicant detail page (Assessment tab) and on the Applicants admin detail dialog. All retries are written to the audit trail.',
+        tip: "If the email pill says \"Skipped — no recipient\", the REPORT_EMAIL environment variable is missing. Set it and resend.",
+      },
     ],
     quickLink: "/preboard",
     quickLinkLabel: "Go to Assessments",
     warnings: [
       "Applicants can only access the assessment through their unique portal link.",
       "Assessment responses are time-limited — the timer is visible to the applicant during the assessment.",
+      "If you see an AI or email failure that won't clear after a re-run, check the Anthropic / Microsoft Graph status pages — the retry already exhausted 4 attempts.",
     ],
   },
   {
