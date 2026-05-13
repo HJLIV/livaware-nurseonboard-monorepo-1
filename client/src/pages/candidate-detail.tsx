@@ -27,8 +27,16 @@ import {
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
   ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck,
-  ChevronDown, ChevronRight, Send, Activity
+  ChevronDown, ChevronRight, Send, Activity, MoreHorizontal, Wand2
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { useSuspectBurstCharThreshold } from "@/hooks/use-preboard-integrity-settings";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -4004,6 +4012,46 @@ export default function CandidateDetail() {
     },
   });
 
+  const refillPersonalInfoMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/candidates/${candidateId}/refill-personal-info`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/candidates/${candidateId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      const filledCount = data?.filled?.length || 0;
+      const conflictCount = data?.conflicts?.length || 0;
+      const scanned = data?.documentsScanned || 0;
+      if (filledCount === 0 && conflictCount === 0) {
+        toast({
+          title: "Nothing new to fill in",
+          description: scanned === 0
+            ? "There aren't any documents on file that we can read personal details from yet."
+            : `Looked at ${scanned} document${scanned === 1 ? "" : "s"} — every detail is either already filled in or couldn't be read.`,
+        });
+        return;
+      }
+      const filledLabels = (data.filled as any[]).map(f => f.label);
+      const uniqueFilled = Array.from(new Set(filledLabels));
+      const parts = [
+        uniqueFilled.length ? `filled in ${uniqueFilled.join(", ")}` : null,
+        conflictCount ? `${conflictCount} difference${conflictCount === 1 ? "" : "s"} need your review` : null,
+      ].filter(Boolean).join(" — ");
+      toast({
+        title: "Personal details updated from documents",
+        description: `${parts}. Reviewed ${scanned} document${scanned === 1 ? "" : "s"}.`,
+        variant: conflictCount ? "destructive" : "default",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't read personal details", description: err?.message || "Something went wrong while reading the documents.", variant: "destructive" });
+    },
+  });
+
   const restoreMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/nurses/${candidateId}/restore`, {});
@@ -4083,61 +4131,102 @@ export default function CandidateDetail() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                data-testid="button-download-pdf"
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = `/api/candidates/${candidateId}/pdf-report`;
-                  a.download = "";
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                }}
-              >
-                <FileDown className="h-4 w-4 mr-1.5" />
-                Download PDF
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => generateLinkMutation.mutate()}
-                disabled={generateLinkMutation.isPending}
-                size="sm"
-                data-testid="button-generate-portal-link"
-              >
-                <Mail className="h-4 w-4 mr-1.5" />
-                {generateLinkMutation.isPending ? "Sending..." : "Send Portal Invite"}
-              </Button>
-              {candidate.archivedAt ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => restoreMutation.mutate()}
-                  disabled={restoreMutation.isPending}
-                  data-testid="button-restore-candidate"
+                  data-testid="button-candidate-actions"
+                  disabled={
+                    generateLinkMutation.isPending ||
+                    archiveMutation.isPending ||
+                    restoreMutation.isPending ||
+                    refillPersonalInfoMutation.isPending
+                  }
                 >
-                  <ArchiveRestore className="h-4 w-4 mr-1.5" />
-                  {restoreMutation.isPending ? "Restoring..." : "Restore"}
+                  {(generateLinkMutation.isPending || archiveMutation.isPending || restoreMutation.isPending || refillPersonalInfoMutation.isPending)
+                    ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    : <MoreHorizontal className="h-4 w-4 mr-1.5" />}
+                  Actions
                 </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (window.confirm(`Archive ${candidate.fullName}? They'll be hidden from the active list but can be restored at any time.`)) {
-                      archiveMutation.mutate();
-                    }
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>What would you like to do?</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  data-testid="action-send-portal-invite"
+                  disabled={generateLinkMutation.isPending}
+                  onSelect={(e) => { e.preventDefault(); generateLinkMutation.mutate(); }}
+                >
+                  <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <div className="flex flex-col">
+                    <span>Email the candidate their portal link</span>
+                    <span className="text-[11px] text-muted-foreground">Sends a fresh sign-in link to {candidate.email || "their inbox"}</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="action-download-pdf"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    const a = document.createElement("a");
+                    a.href = `/api/candidates/${candidateId}/pdf-report`;
+                    a.download = "";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                   }}
-                  disabled={archiveMutation.isPending}
-                  data-testid="button-archive-candidate"
                 >
-                  <Archive className="h-4 w-4 mr-1.5" />
-                  {archiveMutation.isPending ? "Archiving..." : "Archive"}
-                </Button>
-              )}
-            </div>
+                  <FileDown className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <div className="flex flex-col">
+                    <span>Download the full file as a PDF</span>
+                    <span className="text-[11px] text-muted-foreground">A printable summary of everything on this record</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="action-refill-personal-info"
+                  disabled={refillPersonalInfoMutation.isPending}
+                  onSelect={(e) => { e.preventDefault(); refillPersonalInfoMutation.mutate(); }}
+                >
+                  <Wand2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <div className="flex flex-col">
+                    <span>{refillPersonalInfoMutation.isPending ? "Reading documents…" : "Fill in missing details from their documents"}</span>
+                    <span className="text-[11px] text-muted-foreground">Looks at the passport, NMC certificate, DBS, etc. and fills any blank fields</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {candidate.archivedAt ? (
+                  <DropdownMenuItem
+                    data-testid="action-restore-candidate"
+                    disabled={restoreMutation.isPending}
+                    onSelect={(e) => { e.preventDefault(); restoreMutation.mutate(); }}
+                  >
+                    <ArchiveRestore className="h-4 w-4 mr-2 text-emerald-500" />
+                    <div className="flex flex-col">
+                      <span>Bring this candidate back to the active list</span>
+                      <span className="text-[11px] text-muted-foreground">Reverses the archive action</span>
+                    </div>
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    data-testid="action-archive-candidate"
+                    disabled={archiveMutation.isPending}
+                    className="text-red-600 focus:text-red-600"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (window.confirm(`Archive ${candidate.fullName}? They'll be hidden from the active list but can be restored at any time.`)) {
+                        archiveMutation.mutate();
+                      }
+                    }}
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    <div className="flex flex-col">
+                      <span>Hide this candidate from the active list</span>
+                      <span className="text-[11px] text-muted-foreground/80">You can bring them back at any time</span>
+                    </div>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {magicLinks && magicLinks.length > 0 && (
               <div className="text-xs text-muted-foreground text-right">
                 {magicLinks[0].usedAt ? (

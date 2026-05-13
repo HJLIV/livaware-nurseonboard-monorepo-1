@@ -5,6 +5,12 @@ import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
+import {
+  applyExtractedPersonalInfo,
+  categorySupportsPersonalInfoExtraction,
+  extractPersonalInfoFromDocument,
+  personalInfoFieldLabel,
+} from "../personal-info-extract-ai";
 import { checkDbsCertificate, isDbsConfigured, DbsUpdateServiceError } from "../dbs-service";
 import { isNmcAgentAvailable, validatePin, parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
@@ -1203,6 +1209,120 @@ export function registerAdminRoutes(app: Express) {
     } catch (error: any) {
       console.error("[Compliance Check] Error:", error);
       res.status(500).json({ error: "Failed to run compliance check" });
+    }
+  });
+
+  // Bulk re-run personal-info extraction across every existing identity
+  // document on the candidate's record. Useful for nurses who were
+  // onboarded before this AI auto-fill was switched on. Only fills
+  // empty profile fields — never overwrites — and surfaces conflicts.
+  app.post("/api/candidates/:id/refill-personal-info", requireAdmin, async (req, res) => {
+    try {
+      const nurseId = param(req, "id");
+      const candidate = await storage.getCandidate(nurseId);
+      if (!candidate) return res.status(404).json({ error: "Candidate not found" });
+
+      const allDocs = await storage.getDocuments(nurseId);
+      // Cap to a sensible upper bound so this stays within the request
+      // budget even for nurses with very large document folders.
+      const MAX_DOCS = 15;
+      const eligible = allDocs
+        .filter(d => categorySupportsPersonalInfoExtraction(d.category || "") && !!d.filePath)
+        .slice(0, MAX_DOCS);
+
+      const totalFilled: { field: string; label: string; value: string; documentId: string }[] = [];
+      const totalConflicts: { field: string; label: string; existing: string; detected: string; documentId: string }[] = [];
+      const documentsScanned: string[] = [];
+      const documentsFailed: { documentId: string; reason: string }[] = [];
+
+      // ── Step 1: extract from every doc IN PARALLEL (bounded concurrency) ──
+      // The Anthropic calls are independent reads, so they can safely run
+      // concurrently. The applyExtractedPersonalInfo step (which writes
+      // to the nurse profile) is then run serially after, so each doc
+      // sees the values previous docs filled and we don't double-fill.
+      const CONCURRENCY = 3;
+      type ExtractTask = { doc: typeof eligible[number]; absPath: string };
+      const tasks: ExtractTask[] = [];
+      for (const doc of eligible) {
+        const filename = path.basename(doc.filePath || doc.filename);
+        const absPath = path.join(uploadsDir, filename);
+        if (!fs.existsSync(absPath)) {
+          documentsFailed.push({ documentId: doc.id, reason: "file missing on disk" });
+          continue;
+        }
+        tasks.push({ doc, absPath });
+      }
+
+      const extractions: Array<{ doc: typeof eligible[number]; result: Awaited<ReturnType<typeof extractPersonalInfoFromDocument>> | null; error?: string }> = [];
+      for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+        const slice = tasks.slice(i, i + CONCURRENCY);
+        const settled = await Promise.allSettled(
+          slice.map(t => extractPersonalInfoFromDocument({
+            absolutePath: t.absPath,
+            mimeType: t.doc.mimeType || "application/pdf",
+            category: t.doc.category || "other",
+            documentType: t.doc.type || null,
+            candidateName: candidate.fullName,
+          })),
+        );
+        settled.forEach((s, idx) => {
+          const doc = slice[idx].doc;
+          if (s.status === "fulfilled") {
+            extractions.push({ doc, result: s.value });
+            documentsScanned.push(doc.id);
+          } else {
+            documentsFailed.push({ documentId: doc.id, reason: s.reason?.message || "extraction failed" });
+          }
+        });
+      }
+
+      // ── Step 2: apply extractions to the profile, one doc at a time ────
+      for (const { doc, result: extraction } of extractions) {
+        if (!extraction) continue;
+        try {
+          const applied = await applyExtractedPersonalInfo(nurseId, extraction);
+          for (const f of applied.filled) {
+            totalFilled.push({ field: f.field, label: personalInfoFieldLabel(f.field), value: f.value, documentId: doc.id });
+          }
+          for (const c of applied.conflicts) {
+            totalConflicts.push({
+              field: c.field,
+              label: personalInfoFieldLabel(c.field),
+              existing: c.existing,
+              detected: c.detected,
+              documentId: doc.id,
+            });
+          }
+        } catch (e: any) {
+          documentsFailed.push({ documentId: doc.id, reason: e?.message || "apply failed" });
+        }
+      }
+
+      if (totalFilled.length > 0 || totalConflicts.length > 0) {
+        await storage.createAuditLog({
+          nurseId,
+          action: "personal_info_bulk_refill",
+          agentName: agentFor(req),
+          detail: {
+            documentsConsidered: eligible.length,
+            documentsScanned: documentsScanned.length,
+            documentsFailed: documentsFailed.length,
+            filled: totalFilled,
+            conflicts: totalConflicts,
+          },
+        } as any);
+      }
+
+      res.json({
+        documentsConsidered: eligible.length,
+        documentsScanned: documentsScanned.length,
+        documentsFailed,
+        filled: totalFilled,
+        conflicts: totalConflicts,
+      });
+    } catch (error: any) {
+      console.error("[Refill Personal Info] Error:", error);
+      res.status(500).json({ error: "Failed to refill personal info" });
     }
   });
 
