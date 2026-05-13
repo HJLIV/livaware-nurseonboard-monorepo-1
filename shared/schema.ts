@@ -971,7 +971,6 @@ export const MANDATORY_TRAINING_MODULES = [
   { name: "Modern Slavery Awareness", renewalFrequency: "3 years" },
   { name: "Duty of Candour", renewalFrequency: "3 years" },
   { name: "Lone Working Safety", renewalFrequency: "Annual" },
-  { name: "Food Hygiene Awareness", renewalFrequency: "3 years" },
 ] as const;
 
 export const PORTAL_STEPS = [

@@ -45,7 +45,6 @@ const MODULE_KEYWORDS: Record<string, string[]> = {
   "Modern Slavery Awareness": ["modern slavery", "human trafficking"],
   "Duty of Candour": ["duty of candour", "duty of candor", "candour"],
   "Lone Working Safety": ["lone working", "lone worker"],
-  "Food Hygiene Awareness": ["food hygiene", "food safety", "food handling"],
 };
 
 export async function parseTrainingCertificate(buffer: Buffer): Promise<TrainingCertParseResult> {
