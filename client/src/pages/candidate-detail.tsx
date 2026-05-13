@@ -4758,7 +4758,7 @@ function readQueryParams(): { section?: string; tab?: string } {
 }
 
 const VALID_ONBOARDING_TABS = new Set([
-  "identity", "nmc", "dbs", "right_to_work", "profile", "competency", "health", "references", "indemnity",
+  "identity", "nmc", "dbs", "right_to_work", "profile", "competency", "health", "references", "indemnity", "declarations",
 ]);
 const VALID_COMPLIANCE_TABS = new Set(["induction", "training_compliance", "documents", "audit"]);
 
@@ -4782,7 +4782,6 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
   return (
     <div className="space-y-4">
       <OnboardingAccessPanel candidateId={candidateId} />
-      <DeclarationsPanel candidateId={candidateId} />
       {isSuperAdmin && <PortalAccessPanel candidateId={candidateId} />}
       <div className="flex gap-2" data-testid="section-toggle">
         <Button
@@ -4840,6 +4839,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsTrigger value="health" className="text-xs gap-1.5"><Heart className="h-3 w-3" />Health<StepStatusDot status={stepStatuses.health} /></TabsTrigger>
             <TabsTrigger value="references" className="text-xs gap-1.5"><Users className="h-3 w-3" />References<StepStatusDot status={stepStatuses.references} /></TabsTrigger>
             <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity<StepStatusDot status={stepStatuses.indemnity} /></TabsTrigger>
+            <TabsTrigger value="declarations" className="text-xs gap-1.5"><ClipboardCheck className="h-3 w-3" />Declarations</TabsTrigger>
           </TabsList>
           <div className="mt-6">
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
@@ -4851,6 +4851,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="health"><HealthTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="references"><ReferencesTab candidateId={candidateId} /></TabsContent>
             <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} candidateName={candidate.fullName} /></TabsContent>
+            <TabsContent value="declarations"><DeclarationsPanel candidateId={candidateId} /></TabsContent>
           </div>
         </Tabs>
         </>

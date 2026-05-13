@@ -184,10 +184,10 @@ export function DeclarationsPanel({ candidateId }: { candidateId: string }) {
                     size="sm"
                     variant="ghost"
                     onClick={() => setOpenKey(item.key)}
-                    disabled={item.status === "not_started"}
                     data-testid={`button-view-declaration-${item.key}`}
                   >
-                    <Eye className="h-3.5 w-3.5 mr-1" /> View
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    {item.status === "not_started" ? "Preview" : "View"}
                   </Button>
                   {item.status === "submitted" && (
                     <Button
@@ -213,30 +213,45 @@ export function DeclarationsPanel({ candidateId }: { candidateId: string }) {
           </SheetHeader>
           {detail ? (
             <div className="space-y-4 mt-4 text-sm">
+              {detail.declaration.intro && (
+                <p className="text-xs text-muted-foreground italic">{detail.declaration.intro}</p>
+              )}
               {detail.latest ? (
-                <>
-                  <div className="rounded-md bg-muted p-3 text-xs space-y-1">
-                    <div>Version: <strong>{detail.latest.version}</strong></div>
-                    <div>Status: <strong>{detail.latest.status}</strong></div>
-                    {detail.latest.submittedAt && (
-                      <div>Signed: <strong>{new Date(detail.latest.submittedAt).toLocaleString()}</strong> by <strong>{detail.latest.signatureName}</strong></div>
-                    )}
-                    {detail.latest.ipAddress && <div>IP: <code>{detail.latest.ipAddress}</code></div>}
-                    {detail.latest.reopenReason && (
-                      <div>Re-open reason: <em>{detail.latest.reopenReason}</em></div>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    {detail.declaration.questions.map((q) => (
-                      <div key={q.id} className="border-b pb-2">
-                        <p className="text-xs font-medium text-muted-foreground">{q.prompt}</p>
-                        <AnswerCell q={q} value={detail.latest!.answers[q.id]} />
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <div className="rounded-md bg-muted p-3 text-xs space-y-1">
+                  <div>Version: <strong>{detail.latest.version}</strong></div>
+                  <div>Status: <strong>{detail.latest.status}</strong></div>
+                  {detail.latest.submittedAt && (
+                    <div>Signed: <strong>{new Date(detail.latest.submittedAt).toLocaleString()}</strong> by <strong>{detail.latest.signatureName}</strong></div>
+                  )}
+                  {detail.latest.ipAddress && <div>IP: <code>{detail.latest.ipAddress}</code></div>}
+                  {detail.latest.reopenReason && (
+                    <div>Re-open reason: <em>{detail.latest.reopenReason}</em></div>
+                  )}
+                </div>
               ) : (
-                <p className="text-muted-foreground">No submission yet.</p>
+                <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  Not yet submitted by the candidate. Below is a preview of the questions they will be asked.
+                </div>
+              )}
+              <div className="space-y-3">
+                {detail.declaration.questions.map((q) => (
+                  <div key={q.id} className="border-b pb-2">
+                    <p className="text-xs font-medium text-muted-foreground">{q.prompt}</p>
+                    {detail.latest ? (
+                      <AnswerCell q={q} value={detail.latest.answers[q.id]} />
+                    ) : (
+                      <p className="text-xs italic text-muted-foreground/60 mt-0.5">Awaiting candidate response</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {detail.declaration.legalReferences && detail.declaration.legalReferences.length > 0 && (
+                <div className="text-[11px] text-muted-foreground/70 pt-2 border-t">
+                  <p className="font-medium mb-1">Legal references</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {detail.declaration.legalReferences.map((ref) => <li key={ref}>{ref}</li>)}
+                  </ul>
+                </div>
               )}
             </div>
           ) : <Skeleton className="h-32 w-full mt-4" />}
