@@ -8,9 +8,11 @@ import {
   attempts,
   clearances,
   documents,
+  sopComprehensionAttempts,
   MANDATORY_TRAINING_MODULES,
   COMPETENCY_MATRIX,
 } from "@shared/schema";
+import { SOP_COMPREHENSION_QUESTIONS } from "../sop-comprehension-content";
 import { storage } from "../storage";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { isOutlookConfigured } from "../outlook";
@@ -996,6 +998,95 @@ export function registerAdminReportsRoutes(app: Express) {
     } catch (err: any) {
       console.error("[admin-reports] competency-matrix failed:", err);
       res.status(500).json({ message: err?.message || "Failed to build competency matrix" });
+    }
+  });
+
+  // ==================== SOP COMPREHENSION MATRIX ====================
+  // One row per nurse, one column per SOP comprehension question. A cell is
+  // green once the nurse has answered the *current question version* correctly
+  // (matches the per-nurse panel's pass logic), amber if they have attempted
+  // it but not yet passed at the current version, and red if they've never
+  // attempted it.
+  app.get("/api/admin/reports/sop-comprehension-matrix", requireAdmin, async (_req, res) => {
+    try {
+      const [candidates, allAttempts] = await Promise.all([
+        storage.getCandidates(),
+        db.select().from(sopComprehensionAttempts),
+      ]);
+
+      // Index attempts by nurse → slug → list of attempts (sorted desc by time)
+      const byNurse = new Map<string, Map<string, typeof allAttempts>>();
+      for (const a of allAttempts) {
+        let m = byNurse.get(a.nurseId);
+        if (!m) { m = new Map(); byNurse.set(a.nurseId, m); }
+        const list = m.get(a.sopSlug) ?? [];
+        list.push(a);
+        m.set(a.sopSlug, list);
+      }
+
+      const columns: MatrixColumn[] = SOP_COMPREHENSION_QUESTIONS.map((q) => ({
+        key: `sop_${q.sopSlug}`,
+        label: q.sopTitle,
+        group: "SOP Comprehension",
+      }));
+
+      const rows: MatrixCandidate[] = candidates.map((c) => {
+        const cells: Record<string, MatrixCell> = {};
+        const nurseMap = byNurse.get(c.id);
+        for (const q of SOP_COMPREHENSION_QUESTIONS) {
+          const attempts = nurseMap?.get(q.sopSlug) ?? [];
+          // Only consider attempts at the *current* question version, mirroring
+          // the per-nurse panel logic in server/routes/sop-comprehension.ts.
+          // Sort same-version attempts descending by attemptedAt ONCE so both
+          // `latest` and the chosen `passed` row are picked deterministically.
+          const sameVersion = attempts
+            .filter((a) => a.questionVersion === q.version)
+            .slice()
+            .sort((a, b) => {
+              const ta = a.attemptedAt ? new Date(a.attemptedAt).getTime() : 0;
+              const tb = b.attemptedAt ? new Date(b.attemptedAt).getTime() : 0;
+              return tb - ta;
+            });
+          // Most-recent successful attempt at the current version drives the
+          // green cell's date — matches what an admin would expect when
+          // they see "Passed (3 attempts)" on a row.
+          const passed = sameVersion.find((a) => a.isCorrect) ?? null;
+          const latest = sameVersion[0] ?? null;
+          if (passed) {
+            cells[`sop_${q.sopSlug}`] = {
+              status: "green",
+              label: `Passed (${sameVersion.length} attempt${sameVersion.length === 1 ? "" : "s"})`,
+              date: passed.attemptedAt ? new Date(passed.attemptedAt).toISOString() : null,
+            };
+          } else if (latest) {
+            cells[`sop_${q.sopSlug}`] = {
+              status: "amber",
+              label: `Needs retry (${sameVersion.length} attempt${sameVersion.length === 1 ? "" : "s"})`,
+              date: latest.attemptedAt ? new Date(latest.attemptedAt).toISOString() : null,
+            };
+          } else {
+            cells[`sop_${q.sopSlug}`] = { status: "red", label: "Not attempted" };
+          }
+        }
+        return {
+          id: c.id,
+          name: c.fullName,
+          email: c.email,
+          band: c.band ?? null,
+          onboardStatus: c.onboardStatus ?? null,
+          cells,
+        };
+      });
+
+      const response: MatrixResponse = {
+        generatedAt: new Date().toISOString(),
+        columns,
+        candidates: rows,
+      };
+      res.json(response);
+    } catch (err: any) {
+      console.error("[admin-reports] sop-comprehension-matrix failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to build SOP comprehension matrix" });
     }
   });
 }

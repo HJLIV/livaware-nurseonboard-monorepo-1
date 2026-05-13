@@ -85,6 +85,7 @@ const sections: NavSectionDef[] = [
       { label: "Onboarding Matrix", href: "/reports/onboarding", icon: TableProperties, adminOnly: true },
       { label: "Training Matrix", href: "/reports/training", icon: GraduationCap, adminOnly: true },
       { label: "Competency Matrix", href: "/reports/competency", icon: Award, adminOnly: true },
+      { label: "SOP Comprehension Matrix", href: "/reports/sop-comprehension", icon: Award, adminOnly: true },
     ],
   },
   {

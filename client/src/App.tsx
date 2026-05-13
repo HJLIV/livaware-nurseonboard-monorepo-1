@@ -58,6 +58,7 @@ const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
 const OnboardingMatrixPage = lazy(() => import("@/pages/reports/onboarding-matrix"));
 const TrainingMatrixPage = lazy(() => import("@/pages/reports/training-matrix"));
 const CompetencyMatrixPage = lazy(() => import("@/pages/reports/competency-matrix"));
+const SopComprehensionMatrixPage = lazy(() => import("@/pages/reports/sop-comprehension-matrix"));
 
 // Admin platform settings
 const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
@@ -192,6 +193,7 @@ function AuthenticatedRouter() {
               <Route path="/reports/onboarding">{() => <AppLayout><AdminRoute component={OnboardingMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/training">{() => <AppLayout><AdminRoute component={TrainingMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/competency">{() => <AppLayout><AdminRoute component={CompetencyMatrixPage} /></AppLayout>}</Route>
+              <Route path="/reports/sop-comprehension">{() => <AppLayout><AdminRoute component={SopComprehensionMatrixPage} /></AppLayout>}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
