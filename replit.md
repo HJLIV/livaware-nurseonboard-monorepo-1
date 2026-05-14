@@ -222,3 +222,44 @@ The unified `shared/schema.ts` exports compatibility aliases so each app's origi
 - Target: `autoscale`
 - Build command: `npm run build`
 - Run command: `node dist/index.cjs`
+
+## Project-Specific Agent Skills
+
+Authoritative repo conventions live as agent skills under `.agents/skills/`.
+Read the relevant SKILL.md before making changes in that area — they
+encode the exact files, middleware, audit names, gating, grep recipes,
+and pre-merge checks this monorepo expects.
+
+- `portal-admin-parity` — Keep nurse-portal and admin write surfaces in
+  lockstep (auth, audit, gating, side-effects, sidebar).
+- `sidebar-registry` — Add/move pages in `sidebar-nav.tsx` (admin) or
+  `portal-shell.tsx` `buildPortalGroups` (portal); role/stage gating
+  matrix; canonical "Locked — finish Assessment first" wording.
+- `schema-cascade` — Required order for any change to `shared/schema.ts`
+  (alias, nurseId FK, audit enum, `db:push`, storage, routes, Zod, FE
+  types, tests).
+- `audit-trail-conventions` — Module/action taxonomy, anti-synonym rules,
+  what the Audit page and Super-Admin Activity Dashboard expect.
+- `stage-and-role-gating` — Pick the right middleware (`requireAdmin`,
+  `requireSuperAdmin`, `validatePortalToken`, `requireOnboardingUnlocked`,
+  `requireNurseStageCompleted`, `requireInductionAcknowledged`).
+- `new-portal-feature` — End-to-end recipe for any nurse-portal feature
+  (schema → storage → routes → portal hub payload → portal sidebar →
+  tests).
+- `new-admin-report` — Whole-roster matrix/report flow (server bulk
+  fetch + traffic-light cells + matrix page + CSV export + optimistic
+  Saved-indicator UX).
+- `chase-and-notification-patterns` — Chase emails, secure portal links,
+  mailbox auto-ingest, scheduler reuse for any future scheduled
+  notification.
+- `ai-service-conventions` — OpenAI/Anthropic env precedence, availability
+  checks, fire-and-forget pattern, terminal status taxonomy
+  (`documents.aiStatus` + `aiIssues` codes), no-silent-fallback rule,
+  re-run auditability.
+- `microsoft-graph-integration` — sendMail / mailbox scan / SharePoint
+  upload / MSAL SSO patterns and required env vars.
+- `vitest-api-tests` — Naming, helpers, session/portal-token setup, what
+  to assert per feature in `tests/NN-*.test.ts`.
+- `pre-merge-checklist` — Final review pass before `mark_task_complete`
+  (build, `db:push`, tests, sidebar, audit, gating, replit.md, `/guide`).
+- `replit-md-maintenance` — When and how to update this file.
