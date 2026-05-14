@@ -715,6 +715,157 @@ function PreboardIntegrityCard() {
   );
 }
 
+interface AnnouncementPreview {
+  subject: string;
+  html: string;
+  text: string;
+  recipientCount: number;
+}
+
+interface AnnouncementSendResult {
+  attempted: number;
+  sent: number;
+  failed: { nurseId: string; email: string; error: string }[];
+}
+
+function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: boolean }) {
+  const { toast } = useToast();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [lastResult, setLastResult] = useState<AnnouncementSendResult | null>(null);
+
+  const { data: preview, isLoading: previewLoading } = useQuery<AnnouncementPreview>({
+    queryKey: ["/api/admin/announcements/platform-update/preview"],
+    enabled: previewOpen,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/announcements/platform-update/send");
+      return (await res.json()) as AnnouncementSendResult;
+    },
+    onSuccess: (r) => {
+      setLastResult(r);
+      setConfirmOpen(false);
+      toast({
+        title: "Announcement broadcast",
+        description: `${r.sent}/${r.attempted} sent · ${r.failed.length} failed`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Send failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Platform update announcement</CardTitle>
+            <CardDescription className="mt-1">
+              Broadcast a one-off email to every active nurse explaining the recent changes
+              (Skills Arcade, Policies &amp; SOPs, Availability coming soon, and the new
+              stage-completed gating).
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setPreviewOpen(true)} data-testid="button-preview-announcement">
+            <Mail className="h-4 w-4 mr-2" /> Preview email
+          </Button>
+          <SuperAdminGate>
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={!outlookConfigured || sendMutation.isPending}
+              data-testid="button-send-announcement"
+            >
+              <Send className="h-4 w-4 mr-2" /> Send to all nurses…
+            </Button>
+          </SuperAdminGate>
+        </div>
+        {!outlookConfigured && (
+          <p className="text-xs text-amber-300">
+            Outlook is not configured — connect Microsoft Graph credentials before sending.
+          </p>
+        )}
+        {lastResult && (
+          <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm">
+            <p>
+              Last broadcast: <strong>{lastResult.sent}</strong> sent of {lastResult.attempted} ·{" "}
+              <strong>{lastResult.failed.length}</strong> failed
+            </p>
+            {lastResult.failed.length > 0 && (
+              <ul className="mt-2 list-disc list-inside text-xs text-muted-foreground space-y-1">
+                {lastResult.failed.slice(0, 5).map((f) => (
+                  <li key={f.nurseId}>
+                    {f.email}: {f.error}
+                  </li>
+                ))}
+                {lastResult.failed.length > 5 && <li>… and {lastResult.failed.length - 5} more</li>}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{preview?.subject || "Platform update announcement"}</DialogTitle>
+              <DialogDescription>
+                Will be sent to {preview?.recipientCount ?? "…"} active nurse(s) via the system mailbox.
+              </DialogDescription>
+            </DialogHeader>
+            {previewLoading || !preview ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="rounded border border-border/60 overflow-hidden">
+                <iframe
+                  title="Email preview"
+                  srcDoc={preview.html}
+                  className="w-full h-[55vh] bg-white"
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send platform update to all nurses?</DialogTitle>
+              <DialogDescription>
+                This will email every active nurse on file using the system mailbox. This action
+                cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={sendMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => sendMutation.mutate()}
+                disabled={sendMutation.isPending}
+                data-testid="button-confirm-send-announcement"
+              >
+                {sendMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
+                ) : (
+                  <><Send className="h-4 w-4 mr-2" /> Send now</>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -817,6 +968,8 @@ export default function AdminSettingsPage() {
       </div>
 
       <SuperAdminViewOnlyBanner />
+
+      <PlatformAnnouncementCard outlookConfigured={outlookConfigured} />
 
       {!outlookConfigured && (
         <Card className="border-amber-500/30 bg-amber-500/5">

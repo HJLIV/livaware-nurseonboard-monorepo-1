@@ -199,6 +199,9 @@ export async function registerRoutes(
   const { registerAuditRoutes } = await import("./routes/audit");
   registerAuditRoutes(app);
 
+  const { registerAnnouncementRoutes } = await import("./routes/announcements");
+  registerAnnouncementRoutes(app);
+
   // === DOCUMENTS BROWSER ===
   const { registerDocumentRoutes } = await import("./routes/documents");
   registerDocumentRoutes(app);
