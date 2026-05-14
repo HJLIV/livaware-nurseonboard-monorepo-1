@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SHIFT_LABELS, type Shift, type AvailabilityStatus } from "@shared/schema";
 
@@ -292,6 +292,54 @@ export default function PortalAvailabilityPage() {
             Set AM, PM and Night availability for each day. You can edit the current month and the next 6 months.
           </p>
         </div>
+
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex gap-3 text-sm">
+            <Info className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium">Tell us about your other work commitments</p>
+              <p className="text-muted-foreground">
+                If you hold a substantive role elsewhere — a full-time NHS post,
+                care-home contract, regular shifts with another agency, or
+                self-employed work — please mark those days as{" "}
+                <span className="font-medium text-foreground">Unavailable</span>.
+                We use this to comply with the European Working Time Directive
+                (max 48 hrs/week averaged) and to make sure we don't roster you
+                into unsafe back-to-back shifts.
+              </p>
+              <p className="text-muted-foreground">
+                You can add free-text context about other work in your{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground"
+                  onClick={() => navigate("/portal/page?step=profile")}
+                  data-testid="link-profile-employment"
+                >
+                  Professional Profile &rarr; Employment history
+                </button>
+                .
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="p-4 flex gap-3 text-sm">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-medium">Safety notice — double shifts</p>
+              <p className="text-muted-foreground">
+                Marking yourself available for back-to-back shifts (e.g. AM + PM,
+                or PM + Night on the same day, or a Night followed by an AM the
+                next morning) increases the risk of fatigue-related clinical
+                error and is generally discouraged. By accepting such a roster
+                you confirm you have had adequate rest and are fit to practise
+                safely. If you are unsure, please mark only one shift per 24 hrs
+                as available.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {portalLoading && !portal && (
           <Card><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
