@@ -895,19 +895,6 @@ export function buildPortalGroups({
           disabled: isLocked || stageLocked || !selectPolicies,
         },
         {
-          key: "compliance:training",
-          label: "Mandatory Training",
-          status: isLocked || stageLocked
-            ? ("locked" as PortalItemStatus)
-            : normalizeStatus(stepStatuses.training),
-          hint: isLocked ? lockedHint : stageLocked ? stageLockedHint : undefined,
-          disabled: isLocked || stageLocked,
-          onClick:
-            isLocked || stageLocked
-              ? undefined
-              : () => selectOnboardingStep("training"),
-        },
-        {
           key: "compliance:livaware_modules",
           label: "Livaware training modules",
           status: "coming_soon",
@@ -962,6 +949,33 @@ export function buildPortalGroups({
                   window.location.href = url;
                 },
         },
+        // Mandatory Training is the final step of Induction & Training:
+        // it only unlocks once policies, the induction handbook, and
+        // the Skills Arcade have all been completed.
+        (() => {
+          const policiesDone = !!policiesSummary && policiesSummary.outstanding === 0;
+          const inductionDone = !!inductionSummary && inductionSummary.unlocked;
+          const arcadeDone = normalizeStatus(journey.skillsArcade.status) === "completed";
+          const prereqsDone = policiesDone && inductionDone && arcadeDone;
+          const trainingLocked = isLocked || stageLocked || !prereqsDone;
+          let lockHint: string | undefined;
+          if (isLocked) lockHint = lockedHint;
+          else if (stageLocked) lockHint = stageLockedHint;
+          else if (!prereqsDone)
+            lockHint = "Locked — finish Policies, Induction and Skills Arcade first";
+          return {
+            key: "compliance:training",
+            label: "Mandatory Training",
+            status: trainingLocked
+              ? ("locked" as PortalItemStatus)
+              : normalizeStatus(stepStatuses.training),
+            hint: lockHint,
+            disabled: trainingLocked,
+            onClick: trainingLocked
+              ? undefined
+              : () => selectOnboardingStep("training"),
+          };
+        })(),
       ],
     },
     ...(availabilityEnabled
