@@ -330,7 +330,7 @@ export default function PortalPoliciesPage() {
       token={token}
       candidateName={portal.nurse.fullName}
       groups={groups}
-      activeKey="compliance:policies"
+      activeKey="induction:policies"
     >
       {stageLocked ? <StageLockedCard label="Policies to read & sign" /> : content}
     </PortalShell>

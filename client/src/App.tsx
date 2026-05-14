@@ -67,6 +67,8 @@ const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
 const PortalInductionPage = lazy(() => import("@/pages/portal/induction"));
 const PortalDeclarationPage = lazy(() => import("@/pages/portal/declaration"));
 const PortalSopComprehensionPage = lazy(() => import("@/pages/portal/sop-comprehension"));
+const PortalSectionPage = lazy(() => import("@/pages/portal/section"));
+const PortalMockupPage = lazy(() => import("@/pages/portal/mockup"));
 
 // Super admin
 const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity"));
@@ -150,6 +152,10 @@ function AuthenticatedRouter() {
         <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
+        <Route path="/portal/section/:section" component={() => <PortalSectionPage />} />
+        {import.meta.env.DEV && (
+          <Route path="/portal/mockup" component={() => <PortalMockupPage />} />
+        )}
         <Route path="/portal" component={() => <PortalHub />} />
         {/* Legacy tokenized portal routes — kept for back-compat with
             existing bootstrap links and external email links. */}

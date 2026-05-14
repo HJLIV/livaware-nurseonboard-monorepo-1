@@ -415,7 +415,7 @@ export default function PortalSopComprehensionPage() {
       token={token}
       candidateName={portal.nurse.fullName}
       groups={groups}
-      activeKey="compliance:sop_comprehension"
+      activeKey="induction:sop_comprehension"
     >
       {stageLocked ? <StageLockedCard label="SOP Comprehension Check" /> : content}
     </PortalShell>

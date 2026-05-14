@@ -532,7 +532,7 @@ export default function PortalInductionPage() {
       token={token}
       candidateName={portal.nurse.fullName}
       groups={groups}
-      activeKey="compliance:induction"
+      activeKey="induction:handbook"
     >
       {stageLocked ? <StageLockedCard label="Induction (Staff Handbook)" /> : content}
       <SopComprehensionDialog

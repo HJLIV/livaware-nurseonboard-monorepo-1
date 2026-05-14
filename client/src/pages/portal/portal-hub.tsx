@@ -16,7 +16,11 @@ import {
   Shield,
   Sparkles,
   BookOpenCheck,
+  GraduationCap,
+  Lock,
+  Compass,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import {
   PortalShell,
@@ -203,172 +207,319 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
   );
 }
 
-function OverviewPanel({
+// ─── Journey-first home ─────────────────────────────────────────────────
+//
+// Walks the live `groups` from buildPortalGroups so that locked / done
+// states reflect the same gating rules the rest of the portal uses.
+// Items with status "locked" never count as outstanding here, so we
+// can't tease the user with a count for a section they cannot open.
+
+const STAGE_ORDER: {
+  groupKey: string;
+  view: "assessment" | "compliance" | "induction" | "training";
+  label: string;
+  icon: typeof ClipboardCheck;
+  blurb: string;
+}[] = [
+  { groupKey: "assessment", view: "assessment", label: "Assessment", icon: ClipboardCheck, blurb: "Clinical exam, competency, CV" },
+  { groupKey: "onboarding", view: "compliance", label: "Compliance", icon: ShieldCheck, blurb: "Identity, RTW, references, declarations" },
+  { groupKey: "induction", view: "induction", label: "Induction", icon: BookOpenCheck, blurb: "Handbook, policies, SOP quizzes" },
+  { groupKey: "training", view: "training", label: "Training", icon: GraduationCap, blurb: "Mandatory training & Skills Arcade" },
+];
+
+function JourneyHome({
   portal,
-  stepStatuses,
-  onJumpToOnboarding,
-  policiesSummary,
-  onOpenPolicies,
+  groups,
+  chaseModules,
+  onJump,
+  onOpenChase,
 }: {
   portal: PortalData;
-  stepStatuses: Record<string, string>;
-  onJumpToOnboarding: (stepKey?: string) => void;
-  policiesSummary: { totalRequired: number; outstanding: number } | null;
-  onOpenPolicies: () => void;
+  groups: PortalSidebarGroup[];
+  chaseModules: { label: string; status: "red" | "amber" | "green" }[];
+  onJump: (view: "assessment" | "compliance" | "induction" | "training") => void;
+  onOpenChase: () => void;
 }) {
-  const { nurse, journey, token } = portal;
+  const { nurse, gate } = portal;
+  const isAssessmentLocked = gate ? !gate.unlocked : false;
+  const isStageLocked = gate?.complianceApproved === false;
+  // Treat the user as "fresh" when nothing has been touched yet — no
+  // assessment prereq met, and no stage status moved off "pending".
+  const isFresh =
+    isAssessmentLocked &&
+    !!gate &&
+    !gate.prerequisites.examinationCompleted &&
+    !gate.prerequisites.competencyDeclared &&
+    !gate.prerequisites.cvReviewed;
 
-  const onboardStepsCompleted = PORTAL_STEPS.filter(
-    (s) => normalizeStatus(stepStatuses[s.key]) === "completed",
-  ).length;
-  const onboardAwaiting = PORTAL_STEPS.filter(
-    (s) => normalizeStatus(stepStatuses[s.key]) === "awaiting_verification",
-  ).length;
-  // Task 121: declaration completion now contributes to onboarding progress.
-  const declarationsCompleted = portal.declarations?.completed ?? 0;
-  const onboardCompleted = onboardStepsCompleted + declarationsCompleted;
-  const onboardTotal = PORTAL_STEPS.length + ADDITIONAL_ONBOARDING_ITEMS.length;
+  const progress = STAGE_ORDER.map((s) => {
+    const g = groups.find((x) => x.key === s.groupKey);
+    const items = (g?.items ?? []).filter((i) => i.status !== "coming_soon");
+    const done = items.filter((i) => i.status === "completed").length;
+    const total = items.length;
+    const allLocked = total > 0 && items.every((i) => i.status === "locked");
+    const allDone = total > 0 && done === total;
+    return { ...s, done, total, allLocked, allDone };
+  });
 
-  const stages = [
-    {
-      key: "assessment",
-      label: "Assessment",
-      description: "Complete your initial clinical and situational assessment.",
-      icon: ClipboardCheck,
-      color: "text-blue-400",
-      bgColor: "bg-blue-500/10",
-      status: journey.preboard.status,
-      actionUrl: journey.preboard.actionUrl,
-      actionLabel: journey.preboard.label,
-      progress: undefined as string | undefined,
-    },
-    {
-      key: "onboard",
-      label: "Compliance",
-      description: "Identity, documents, training, references and personal declarations.",
-      icon: ShieldCheck,
-      color: "text-emerald-400",
-      bgColor: "bg-emerald-500/10",
-      status: journey.onboard.status,
-      actionUrl: undefined,
-      actionLabel: onboardCompleted > 0 ? "Continue" : "Start onboarding",
-      progress: `${onboardCompleted} of ${onboardTotal} complete${onboardAwaiting > 0 ? ` · ${onboardAwaiting} awaiting verification` : ""}`,
-    },
-    {
-      key: "compliance",
-      label: "Induction & Training",
-      description: "Read and acknowledge the policies, induction and training that form part of your file.",
-      icon: BookOpenCheck,
-      color: "text-amber-400",
-      bgColor: "bg-amber-500/10",
-      status: policiesSummary
-        ? policiesSummary.totalRequired === 0
-          ? "not_started"
-          : policiesSummary.outstanding === 0
-            ? "completed"
-            : "in_progress"
-        : "not_started",
-      actionUrl: undefined,
-      actionLabel: policiesSummary && policiesSummary.outstanding > 0 ? "Review & sign" : "Open policies",
-      progress: policiesSummary
-        ? policiesSummary.totalRequired === 0
-          ? "No policies to acknowledge yet"
-          : policiesSummary.outstanding === 0
-            ? `All ${policiesSummary.totalRequired} policies acknowledged`
-            : `${policiesSummary.outstanding} of ${policiesSummary.totalRequired} outstanding`
-        : "Loading…",
-    },
-  ];
+  // First actionable item across stages (skips locked / completed / coming_soon).
+  let nextAction:
+    | { sectionLabel: string; view: typeof STAGE_ORDER[number]["view"]; itemLabel: string; icon: typeof ClipboardCheck }
+    | null = null;
+  for (const s of STAGE_ORDER) {
+    const g = groups.find((x) => x.key === s.groupKey);
+    const item = g?.items.find(
+      (i) => i.status !== "completed" && i.status !== "locked" && i.status !== "coming_soon",
+    );
+    if (item) {
+      nextAction = { sectionLabel: s.label, view: s.view, itemLabel: item.label, icon: s.icon };
+      break;
+    }
+  }
+
+  // To-do glance: explicit, item-level outstanding work the user can
+  // actually act on right now. Locked items are excluded so we never
+  // advertise a count for something the user can't open.
+  const todo = STAGE_ORDER.flatMap((s) => {
+    const g = groups.find((x) => x.key === s.groupKey);
+    const items = (g?.items ?? []).filter(
+      (i) => i.status !== "completed" && i.status !== "locked" && i.status !== "coming_soon",
+    );
+    return items.map((i) => ({
+      sectionKey: s.view,
+      sectionLabel: s.label,
+      icon: s.icon,
+      itemLabel: i.label,
+      hint: i.hint,
+    }));
+  });
+  const outstandingChase = chaseModules.filter((m) => !["green"].includes(m.status));
+
+  const firstName = nurse.fullName.split(" ")[0] || nurse.fullName;
 
   return (
-    <div className="space-y-6" data-testid="portal-overview">
+    <div className="space-y-6 max-w-3xl" data-testid="portal-overview">
       <div>
         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-1">
-          Welcome back
+          Welcome{isFresh ? "" : " back"}
         </p>
         <h1 className="font-serif text-3xl font-light tracking-tight" data-testid="text-overview-name">
-          {nurse.fullName}
+          Hello, {firstName}
         </h1>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Current stage:</span>
-          <StatusBadge status={nurse.currentStage} isStage />
-        </div>
-        <p className="text-sm text-muted-foreground mt-3 max-w-2xl leading-relaxed">
-          Use the sidebar on the left to jump to any section. Anything still
-          outstanding is pinned at the top of the menu so you always know where
-          you left off.
+        <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+          {isFresh
+            ? "Welcome to your Livaware nurse portal. Here's what your onboarding looks like — we'll walk you through it step by step."
+            : "Here's where you are in your onboarding — pick up where you left off."}
         </p>
       </div>
 
-      <div className="space-y-3">
-        {stages.map((stage) => {
-          const norm = normalizeStatus(stage.status);
-          const isCompleted = norm === "completed";
-          const isInProgress = norm === "in_progress" || norm === "awaiting_verification";
-          const Icon = stage.icon;
+      {isFresh && (
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/0" data-testid="portal-home-walkthrough">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/15 text-primary shrink-0">
+                <Compass className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-primary/80 mb-1">How it works</p>
+                <h2 className="font-serif text-xl font-light tracking-tight">Your onboarding in four steps</h2>
+              </div>
+            </div>
+            <ol className="space-y-3">
+              {STAGE_ORDER.map((s, idx) => {
+                const Icon = s.icon;
+                return (
+                  <li key={s.view} className="flex items-start gap-3">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/15 text-primary text-[11px] font-semibold shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-3.5 w-3.5 text-primary/70" />
+                        <p className="text-sm font-medium">{s.label}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                        {s.blurb}
+                        {idx > 0 && (
+                          <span className="text-muted-foreground/60">
+                            {" "}· unlocks once you've finished {STAGE_ORDER[idx - 1].label}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="text-xs text-muted-foreground/80 mt-4 pt-4 border-t border-border leading-relaxed">
+              You can stop and come back at any time — your progress is saved automatically.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
-          const handleAction = () => {
-            if (stage.key === "onboard") {
-              onJumpToOnboarding();
-            } else if (stage.key === "compliance") {
-              onOpenPolicies();
-            } else if (stage.actionUrl) {
-              window.location.href = stage.actionUrl;
-            }
-          };
+      {(isAssessmentLocked || isStageLocked) && !isFresh && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="portal-home-locked-explainer">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium mb-1">
+                {isAssessmentLocked
+                  ? "Compliance, Induction & Training are locked while you finish Assessment"
+                  : "Induction & Training open after compliance approval"}
+              </p>
+              <p className="text-muted-foreground leading-relaxed">
+                {isAssessmentLocked
+                  ? "Submit your clinical examination, complete your competency self-rating, and upload your CV — the rest of the portal opens automatically."
+                  : "Once an admin signs off your compliance pack, your handbook, policies, SOP quizzes and Skills Arcade will all become available."}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          return (
-            <Card
-              key={stage.key}
-              className={cn(
-                "transition-all",
-                isInProgress && "ring-1 ring-primary/20 border-primary/15",
-              )}
-              data-testid={`overview-stage-${stage.key}`}
-            >
-              <CardContent className="flex items-center gap-4 py-5">
-                <div
-                  className={cn(
-                    "flex h-11 w-11 items-center justify-center rounded-xl shrink-0",
-                    isCompleted ? "bg-emerald-500/10" : stage.bgColor,
-                  )}
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                  ) : (
-                    <Icon className={cn("h-5 w-5", stage.color)} />
-                  )}
-                </div>
+      {nextAction ? (
+        <Card className="border-primary/20 bg-primary/5" data-testid="portal-home-next-action">
+          <CardContent className="p-5 sm:p-6 flex items-start gap-4">
+            <span className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-primary/15 text-primary shrink-0">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-primary/80 mb-1">
+                {isFresh ? "Start here" : "Next up"} · {nextAction.sectionLabel}
+              </p>
+              <h2 className="font-serif text-xl font-light tracking-tight mb-1">{nextAction.itemLabel}</h2>
+              <p className="text-sm text-muted-foreground">A few minutes is usually enough.</p>
+            </div>
+            <Button onClick={() => onJump(nextAction!.view)} className="shrink-0 mt-1">
+              {isFresh ? "Begin" : "Continue"}
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <CardContent className="p-6 flex items-center gap-4">
+            <CheckCircle2 className="h-6 w-6 text-emerald-500 shrink-0" />
+            <div>
+              <h2 className="font-serif text-xl font-light tracking-tight mb-1">You're all caught up</h2>
+              <p className="text-sm text-muted-foreground">Everything we need is in. Thank you!</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">{stage.label}</p>
-                    <StatusBadge status={stage.status} />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {stage.progress || stage.description}
-                  </p>
-                </div>
-
-                {isCompleted ? (
-                  <Badge
-                    variant="outline"
-                    className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
-                  >
-                    Done
-                  </Badge>
-                ) : (
-                  <Button size="sm" onClick={handleAction} className="shrink-0">
-                    {stage.actionLabel}
-                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Button>
+      <div data-testid="portal-home-stages">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-3">Your journey</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {progress.map((p) => {
+            const Icon = p.icon;
+            const pct = p.total === 0 ? 0 : Math.round((p.done / p.total) * 100);
+            const locked = p.allLocked && !p.allDone;
+            return (
+              <button
+                key={p.view}
+                type="button"
+                onClick={() => !locked && onJump(p.view)}
+                disabled={locked}
+                className={cn(
+                  "text-left rounded-lg border p-4 transition-colors",
+                  p.allDone
+                    ? "border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
+                    : locked
+                      ? "border-border bg-muted/40 opacity-80 cursor-not-allowed"
+                      : "border-border bg-card hover:bg-secondary/40",
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
-
+                data-testid={`portal-home-stage-${p.view}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon
+                    className={cn(
+                      "h-4 w-4",
+                      p.allDone ? "text-emerald-500" : locked ? "text-muted-foreground/50" : "text-primary/80",
+                    )}
+                  />
+                  <span className="text-sm font-medium">{p.label}</span>
+                  {p.allDone && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 ml-auto" />}
+                  {locked && <Lock className="h-3 w-3 text-muted-foreground/50 ml-auto" />}
+                </div>
+                <Progress value={pct} className={cn("h-1.5 mb-1.5", p.allDone && "[&>div]:bg-emerald-500")} />
+                <p className="text-[11px] text-muted-foreground tabular-nums">
+                  {locked ? "Locked" : `${p.done} of ${p.total} done`}
+                </p>
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {outstandingChase.length > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="portal-home-chase">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 shrink-0">
+                <ArrowRight className="h-5 w-5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-amber-700/80 dark:text-amber-400/80 mb-1">
+                  Documents requested
+                </p>
+                <h2 className="font-serif text-xl font-light tracking-tight">
+                  {outstandingChase.length} training {outstandingChase.length === 1 ? "certificate" : "certificates"} to upload
+                </h2>
+              </div>
+              <Button onClick={onOpenChase} size="sm" className="shrink-0">
+                Upload now
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <ul className="text-xs text-muted-foreground space-y-1 ml-13 pl-0.5">
+              {outstandingChase.slice(0, 5).map((m) => (
+                <li key={m.label}>· {m.label}</li>
+              ))}
+              {outstandingChase.length > 5 && (
+                <li className="text-muted-foreground/70">+ {outstandingChase.length - 5} more</li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {todo.length > 0 && !isFresh && (
+        <div data-testid="portal-home-todo">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-3">To do at a glance</p>
+          <ul className="divide-y divide-border rounded-lg border border-border bg-card overflow-hidden">
+            {todo.slice(0, 8).map((r, idx) => {
+              const Icon = r.icon;
+              return (
+                <li key={`${r.sectionKey}-${idx}`}>
+                  <button
+                    type="button"
+                    onClick={() => onJump(r.sectionKey)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/40 transition-colors"
+                    data-testid={`portal-home-todo-item-${idx}`}
+                  >
+                    <Icon className="h-4 w-4 text-primary/70 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm leading-tight">{r.itemLabel}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {r.sectionLabel}
+                        {r.hint ? ` · ${r.hint}` : ""}
+                      </p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {todo.length > 8 && (
+            <p className="text-[11px] text-muted-foreground/70 mt-2 text-center">
+              + {todo.length - 8} more across your sections
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -475,7 +626,7 @@ export default function PortalHub() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
-      availabilityEnabled: true,
+      availabilityEnabled: portal.nurse.currentStage === "completed",
       selectAvailability: () => navigate(`/portal/availability`),
       // Cookie-based navigation — no token in the URL.
       selectOverview: () => navigate(`/portal`),
@@ -561,24 +712,14 @@ export default function PortalHub() {
       {showIntro ? (
         <WelcomeIntro onContinue={dismissIntro} />
       ) : (
-        <OverviewPanel
-          portal={{
-            ...portal,
-            declarations: declarationsData
-              ? { total: declarationsData.total, completed: declarationsData.completed }
-              : portal.declarations,
-          }}
-          stepStatuses={stepStatuses}
-          onJumpToOnboarding={(stepKey) => {
-            const target = stepKey
-              ? `/portal/page?step=${stepKey}`
-              : `/portal/page`;
-            navigate(target);
-          }}
-          policiesSummary={policiesData
-            ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
-            : null}
-          onOpenPolicies={() => navigate(`/portal/policies`)}
+        <JourneyHome
+          portal={portal}
+          groups={groups}
+          chaseModules={
+            (chaseStatus?.modules ?? []).map((m) => ({ label: m.label, status: m.status }))
+          }
+          onJump={(view) => navigate(`/portal/section/${view}`)}
+          onOpenChase={() => navigate(`/portal/${token}`)}
         />
       )}
     </PortalShell>
