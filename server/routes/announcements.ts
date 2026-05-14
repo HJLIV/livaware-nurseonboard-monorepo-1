@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { requireSuperAdmin } from "../middleware";
+import { requireAdmin, requireSuperAdmin } from "../middleware";
 import {
   PLATFORM_UPDATE_SUBJECT,
   buildPlatformUpdateHtml,
@@ -9,7 +9,7 @@ import {
 import { storage } from "../storage";
 
 export function registerAnnouncementRoutes(app: Express) {
-  app.get("/api/admin/announcements/platform-update/preview", requireSuperAdmin, async (_req, res) => {
+  app.get("/api/admin/announcements/platform-update/preview", requireAdmin, async (_req, res) => {
     const sampleName = "Sample Nurse";
     const nurses = await storage.getCandidates();
     const recipientCount = nurses.filter(
