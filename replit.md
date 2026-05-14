@@ -47,6 +47,7 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 ### Nurse Availability Calendar (Task #124)
 - New `nurseAvailability` table (`shared/schema.ts`): `(nurseId, date YYYY-MM-DD, shift)` unique. `shift ∈ {am, pm, night}`, `status ∈ {available, preferred, unavailable}` (an "unset" cell means no row). Tracks `updatedBy` + `updatedByRole` for the future rostering app.
 - Editable window: current month → +6 months ahead. Only nurses with `currentStage === "completed"` see / can edit availability.
+- Shift pattern: UI surfaces only **Day** + **Night** via `VISIBLE_SHIFTS = ["am", "night"]` in `shared/schema.ts` (`am` is relabelled to "Day"). The legacy `pm` enum value is preserved in the DB for historic rows but is no longer rendered in the portal grid or admin matrix. Each cell supports a left-click (apply current paint) or a right-click context menu listing every status (Available / Preferred / Unavailable / Clear). The portal page also shows two notice cards above the grid: an EWTD prompt asking nurses to declare other employment, and a safety disclaimer about back-to-back / double shifts.
 - New `availability` value added to `auditModuleEnum` (DB push applied) so all availability edits are logged under their own audit module.
 - Server: `server/routes/availability.ts` exposes:
   - `GET/PUT /api/portal/:token/availability` (gated to completed; `validatePortalToken`). Bulk upsert via Zod `cells: [{date, shift, status}]`; status `"unset"` deletes the row.

@@ -1370,7 +1370,11 @@ export type InsertNurseAvailability = z.infer<typeof insertNurseAvailabilitySche
 export type Shift = "am" | "pm" | "night";
 export type AvailabilityStatus = "available" | "preferred" | "unavailable";
 export const SHIFTS: Shift[] = ["am", "pm", "night"];
-export const SHIFT_LABELS: Record<Shift, string> = { am: "AM", pm: "PM", night: "Night" };
+// UI shows a 2-shift Day / Night pattern. The legacy "pm" enum value is
+// kept in the DB so historic rows are preserved, but it's no longer
+// surfaced in either the portal or admin matrix.
+export const VISIBLE_SHIFTS: Shift[] = ["am", "night"];
+export const SHIFT_LABELS: Record<Shift, string> = { am: "Day", pm: "PM", night: "Night" };
 
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;

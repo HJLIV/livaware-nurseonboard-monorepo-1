@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Check, ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SHIFT_LABELS, type Shift, type AvailabilityStatus } from "@shared/schema";
+import { SHIFT_LABELS, VISIBLE_SHIFTS, type Shift, type AvailabilityStatus } from "@shared/schema";
 
 type CellStatus = AvailabilityStatus | "unset";
 
@@ -182,7 +182,7 @@ function NurseEditor({ nurseId, month, onClose }: { nurseId: string; month: stri
               <thead className="sticky top-0 bg-card">
                 <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                   <th className="px-2 py-1.5">Date</th>
-                  {(["am", "pm", "night"] as Shift[]).map((s) => (
+                  {VISIBLE_SHIFTS.map((s) => (
                     <th key={s} className="px-1 py-1.5 text-center">{SHIFT_LABELS[s]}</th>
                   ))}
                 </tr>
@@ -194,7 +194,7 @@ function NurseEditor({ nurseId, month, onClose }: { nurseId: string; month: stri
                   return (
                     <tr key={d} className="border-b last:border-0">
                       <td className="px-2 py-1 whitespace-nowrap">{dn} {dow}</td>
-                      {(["am", "pm", "night"] as Shift[]).map((s) => {
+                      {VISIBLE_SHIFTS.map((s) => {
                         const cur = lookup[d]?.[s] || "unset";
                         const meta = STATUS_OPTIONS.find((x) => x.key === cur)!;
                         return (
@@ -376,7 +376,7 @@ export default function AvailabilityMatrixPage() {
                           return (
                             <td key={d} className="px-1 py-2 text-center border-l align-middle">
                               <div className="flex items-center justify-center gap-0.5">
-                                {(["am", "pm", "night"] as Shift[]).map((s) => (
+                                {VISIBLE_SHIFTS.map((s) => (
                                   <span
                                     key={s}
                                     className={cn("h-2 w-2 rounded-full", STATUS_DOT[cell[s] || "unset"])}

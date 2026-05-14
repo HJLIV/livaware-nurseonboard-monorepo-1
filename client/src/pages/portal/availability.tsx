@@ -13,7 +13,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SHIFT_LABELS, type Shift, type AvailabilityStatus } from "@shared/schema";
+import { SHIFT_LABELS, VISIBLE_SHIFTS, type Shift, type AvailabilityStatus } from "@shared/schema";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 type CellStatus = AvailabilityStatus | "unset";
 
@@ -64,7 +70,7 @@ function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-GB", { month: "long", year: "numeric" });
 }
-const SHIFT_KEYS: Shift[] = ["am", "pm", "night"];
+const SHIFT_KEYS: Shift[] = VISIBLE_SHIFTS;
 
 export default function PortalAvailabilityPage() {
   const [, navigate] = useLocation();
@@ -289,7 +295,7 @@ export default function PortalAvailabilityPage() {
             My Availability
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Set AM, PM and Night availability for each day. You can edit the current month and the next 6 months.
+            Set Day and Night availability for each shift. Click a cell to apply your current paint, or right-click for the full status menu. You can edit the current month and the next 6 months.
           </p>
         </div>
 
@@ -455,7 +461,7 @@ export default function PortalAvailabilityPage() {
                       {weeks.map((wk) => (
                         <Fragment key={wk.weekStart}>
                           <tr className="bg-muted/40 border-b">
-                            <td colSpan={5} className="px-3 py-1.5">
+                            <td colSpan={SHIFT_KEYS.length + 2} className="px-3 py-1.5">
                               <div className="flex items-center justify-between">
                                 <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
                                   Week of {new Date(wk.weekStart).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
@@ -487,16 +493,45 @@ export default function PortalAvailabilityPage() {
                                   const meta = STATUSES.find((x) => x.key === cur)!;
                                   return (
                                     <td key={s} className="px-3 py-1.5 text-center">
-                                      <button
-                                        onClick={() => setCell(d, s)}
-                                        className={cn(
-                                          "inline-flex h-7 w-20 items-center justify-center rounded-md text-[11px] font-medium transition",
-                                          cur === "unset" ? "bg-muted/50 text-muted-foreground/60 hover:bg-muted" : meta.cls,
-                                        )}
-                                        data-testid={`cell-${d}-${s}`}
-                                      >
-                                        {cur === "unset" ? "—" : meta.label}
-                                      </button>
+                                      <ContextMenu>
+                                        <ContextMenuTrigger asChild>
+                                          <button
+                                            onClick={() => setCell(d, s)}
+                                            className={cn(
+                                              "inline-flex h-7 w-20 items-center justify-center rounded-md text-[11px] font-medium transition",
+                                              cur === "unset" ? "bg-muted/50 text-muted-foreground/60 hover:bg-muted" : meta.cls,
+                                            )}
+                                            data-testid={`cell-${d}-${s}`}
+                                            title="Click to apply current paint, right-click for options"
+                                          >
+                                            {cur === "unset" ? "—" : meta.label}
+                                          </button>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent className="w-44">
+                                          {STATUSES.map((opt) => (
+                                            <ContextMenuItem
+                                              key={opt.key}
+                                              onSelect={() =>
+                                                writeMutation.mutate([
+                                                  { date: d, shift: s, status: opt.key },
+                                                ])
+                                              }
+                                              data-testid={`cell-menu-${d}-${s}-${opt.key}`}
+                                            >
+                                              <span
+                                                className={cn(
+                                                  "mr-2 inline-block h-2.5 w-2.5 rounded-full",
+                                                  opt.key === "unset" ? "bg-muted-foreground/40" : opt.cls,
+                                                )}
+                                              />
+                                              {opt.label}
+                                              {cur === opt.key && (
+                                                <Check className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                                              )}
+                                            </ContextMenuItem>
+                                          ))}
+                                        </ContextMenuContent>
+                                      </ContextMenu>
                                     </td>
                                   );
                                 })}
