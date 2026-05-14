@@ -816,6 +816,8 @@ export function buildPortalGroups({
             onClick = undefined;
           } else if (step.key === "right_to_work" && selectDeclaration) {
             onClick = () => selectDeclaration("age_and_eligibility");
+          } else if (step.key === "health" && selectDeclaration) {
+            onClick = () => selectDeclaration("occupational_health");
           } else {
             onClick = () => selectOnboardingStep(step.key);
           }
@@ -847,7 +849,15 @@ export function buildPortalGroups({
                 }
               },
         },
-        ...ADDITIONAL_ONBOARDING_ITEMS.map((item) => {
+        ...ADDITIONAL_ONBOARDING_ITEMS.filter(
+          // These two declarations are already surfaced via their
+          // PORTAL_STEPS counterparts ("Right to Work" → age_and_eligibility,
+          // "Health Declaration" → occupational_health) so we skip them
+          // here to avoid duplicate sidebar entries.
+          (item) =>
+            item.key !== "age_and_eligibility" &&
+            item.key !== "occupational_health",
+        ).map((item) => {
           const declStatus = declarationsSummary?.items.find((d) => d.key === item.key)?.status;
           let mapped: PortalItemStatus = "not_started";
           let hint: string | undefined;
