@@ -243,7 +243,7 @@ function OverviewPanel({
     },
     {
       key: "onboard",
-      label: "Onboarding",
+      label: "Compliance",
       description: "Identity, documents, training, references and personal declarations.",
       icon: ShieldCheck,
       color: "text-emerald-400",
@@ -255,8 +255,8 @@ function OverviewPanel({
     },
     {
       key: "compliance",
-      label: "Policies & attestations",
-      description: "Read and acknowledge the policies that form part of your compliance file.",
+      label: "Induction & Training",
+      description: "Read and acknowledge the policies, induction and training that form part of your file.",
       icon: BookOpenCheck,
       color: "text-amber-400",
       bgColor: "bg-amber-500/10",
@@ -474,7 +474,7 @@ export default function PortalHub() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
-      availabilityEnabled: portal.nurse.currentStage === "completed",
+      availabilityEnabled: true,
       selectAvailability: () => navigate(`/portal/availability`),
       // Cookie-based navigation — no token in the URL.
       selectOverview: () => navigate(`/portal`),

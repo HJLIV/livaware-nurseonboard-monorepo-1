@@ -776,7 +776,7 @@ export function buildPortalGroups({
     },
     {
       key: "onboarding",
-      title: "Onboarding",
+      title: "Compliance",
       icon: <ShieldCheck className="h-3.5 w-3.5" />,
       defaultOpen: !isLocked,
       items: [
@@ -868,7 +868,7 @@ export function buildPortalGroups({
     },
     {
       key: "compliance",
-      title: "Compliance",
+      title: "Induction & Training",
       icon: <BookOpenCheck className="h-3.5 w-3.5" />,
       defaultOpen: !isLocked,
       items: [

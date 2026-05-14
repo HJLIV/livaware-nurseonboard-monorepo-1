@@ -270,7 +270,7 @@ export default function PortalAvailabilityPage() {
     });
   }, [portal, navigate]);
 
-  const ineligible = portal && portal.nurse.currentStage !== "completed";
+  const ineligible = false;
 
   return (
     <PortalShell

@@ -132,13 +132,6 @@ async function applyCell(
 async function ensureCompletedNurse(nurseId: string): Promise<{ ok: boolean; nurse?: any; status?: number; message?: string }> {
   const nurse = await storage.getCandidate(nurseId);
   if (!nurse) return { ok: false, status: 404, message: "Nurse not found" };
-  if (nurse.currentStage !== "completed") {
-    return {
-      ok: false,
-      status: 403,
-      message: "Availability is only available to fully-onboarded nurses (stage: completed).",
-    };
-  }
   return { ok: true, nurse };
 }
 
