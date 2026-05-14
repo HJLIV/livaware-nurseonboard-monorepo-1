@@ -201,8 +201,15 @@ export function registerPortalRoutes(app: Express) {
   });
 
   app.get("/api/portal/:token/onboarding-state", validatePortalToken, async (req, res) => {
-    const state = await storage.getOnboardingState((req as any).nurseId);
-    res.json(state || null);
+    const nurseId = (req as any).nurseId;
+    const state = await storage.getOnboardingState(nurseId);
+    if (!state) return res.json(null);
+    const { enrichStepStatuses } = await import("../onboarding-status-derive");
+    const enriched = await enrichStepStatuses(
+      nurseId,
+      (state.stepStatuses as Record<string, string>) || {},
+    );
+    res.json({ ...state, stepStatuses: enriched });
   });
 
   app.get("/api/portal/:token/employment-history", validatePortalToken, async (req, res) => {

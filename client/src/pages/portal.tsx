@@ -783,10 +783,17 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
   const { data: identityDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
   });
+  const { data: ageDecl } = useQuery<any>({
+    queryKey: ["/api/portal", token, "declarations", "age_and_eligibility"],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/${token}/declarations/age_and_eligibility`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
   const [fullName, setFullName] = useState(candidate.fullName || "");
   const [email, setEmail] = useState(candidate.email || "");
   const [phone, setPhone] = useState(candidate.phone || "");
-  const [dateOfBirth, setDateOfBirth] = useState(candidate.dateOfBirth || "");
   const [address, setAddress] = useState(candidate.address || "");
   const [pronouns, setPronouns] = useState(candidate.preferredPronouns || "");
   const [nokName, setNokName] = useState(parseNextOfKin(candidate.nextOfKin).name);
@@ -794,6 +801,27 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
   const [nokContact, setNokContact] = useState(parseNextOfKin(candidate.nextOfKin).contactNumber);
   const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const declAnswers = (ageDecl?.latest?.answers as Record<string, any> | undefined) || {};
+  const declDob = declAnswers.date_of_birth ? String(declAnswers.date_of_birth) : "";
+  const legacyDob = (candidate as any).dateOfBirth ? String((candidate as any).dateOfBirth).slice(0, 10) : "";
+  const dobValue = declDob || legacyDob;
+  const dobSource: "declaration" | "legacy" | "missing" = declDob ? "declaration" : legacyDob ? "legacy" : "missing";
+  const declPassport = declAnswers.rtw_document_reference || declAnswers.passport_number || "";
+  const legacyPassport = (candidate as any).passportNumber || "";
+  const passportValue = declPassport || legacyPassport;
+  const passportSource: "declaration" | "legacy" | "missing" = declPassport ? "declaration" : legacyPassport ? "legacy" : "missing";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#equal-opportunities") return;
+    const tryScroll = () => {
+      const el = document.getElementById("equal-opportunities");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    const t = window.setTimeout(tryScroll, 150);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const isLocked = (field: string, originalValue: string | null | undefined) => {
     const val = originalValue ?? "";
@@ -804,7 +832,7 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("PATCH", `/api/portal/${token}/candidate`, {
-        fullName, email, phone, dateOfBirth, address,
+        fullName, email, phone, address,
         preferredPronouns: pronouns, nextOfKin: serializeNextOfKin(nokName, nokRelationship, nokContact) || null,
       });
       return res.json();
@@ -813,18 +841,17 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
       setUnlockedFields(new Set());
-      toast({ title: "Identity saved", description: "Your identity details have been updated." });
+      toast({ title: "Demographics saved", description: "Your demographic details have been updated." });
     },
   });
 
   return (
-    <SectionWrapper title="Identity & Contact" icon={<User className="h-5 w-5" />} status={status}>
+    <SectionWrapper title="Demographics" icon={<User className="h-5 w-5" />} status={status}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <PortalLockedInput label="Full Name" value={fullName} onChange={setFullName} locked={isLocked("fullName", candidate.fullName)} onUnlock={() => unlock("fullName")} testId="input-portal-fullname" />
           <PortalLockedInput label="Email" value={email} onChange={setEmail} locked={isLocked("email", candidate.email)} onUnlock={() => unlock("email")} type="email" testId="input-portal-email" />
           <PortalLockedInput label="Phone" value={phone} onChange={setPhone} locked={isLocked("phone", candidate.phone)} onUnlock={() => unlock("phone")} testId="input-portal-phone" />
-          <PortalLockedInput label="Date of Birth" value={dateOfBirth} onChange={setDateOfBirth} locked={isLocked("dateOfBirth", candidate.dateOfBirth)} onUnlock={() => unlock("dateOfBirth")} type="date" testId="input-portal-dob" />
           <div className="sm:col-span-2">
             <PortalLockedInput label="Address" value={address} onChange={setAddress} locked={isLocked("address", candidate.address)} onUnlock={() => unlock("address")} rows={2} testId="input-portal-address" />
           </div>
@@ -867,15 +894,64 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
 
         <Separator />
 
-        <PassportUpload token={token} existingPassportNumber={candidate.passportNumber} />
-
         <PortalProofOfAddress token={token} />
 
         <DocumentAiAlert docs={identityDocs} category="proof_of_address" />
 
+        <div className="rounded-md border border-card-border bg-muted/20 p-3 space-y-3" data-testid="readonly-dob-passport">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Date of birth</Label>
+                <p className="text-sm font-medium" data-testid="readonly-dob-value">
+                  {dobValue || <span className="text-muted-foreground italic">Not yet recorded</span>}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {dobSource === "declaration"
+                    ? "From your Age & Eligibility declaration."
+                    : dobSource === "legacy"
+                      ? "Previously recorded — please confirm in Age & Eligibility."
+                      : "Add your date of birth in Age & Eligibility."}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Right-to-work / passport reference</Label>
+                <p className="text-sm font-medium" data-testid="readonly-passport-value">
+                  {passportValue || <span className="text-muted-foreground italic">Not yet recorded</span>}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {passportSource === "declaration"
+                    ? "From your Age & Eligibility declaration."
+                    : passportSource === "legacy"
+                      ? "Previously recorded — please confirm in Age & Eligibility."
+                      : "Add your right-to-work document in Age & Eligibility."}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => (window.location.href = `/portal/${token}/declaration/age_and_eligibility`)}
+              data-testid="button-open-age-eligibility-from-demographics"
+            >
+              Open declaration
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            <strong className="text-foreground">Date of birth, passport &amp; right-to-work documents</strong> are
+            captured once in the <em>Age &amp; Eligibility</em> declaration so we never ask for them twice.
+          </p>
+        </div>
+
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-identity">
-          {saveMutation.isPending ? "Saving..." : "Save Identity Details"}
+          {saveMutation.isPending ? "Saving..." : "Save Demographics"}
         </Button>
+
+        <Separator />
+
+        <div id="equal-opportunities" className="scroll-mt-24 pt-2" data-testid="section-equal-opportunities-embedded">
+          <EqualOpportunitiesStep token={token} status={undefined} embedded />
+        </div>
       </div>
     </SectionWrapper>
   );
@@ -1221,200 +1297,63 @@ function DbsStep({ token, candidate, status }: { token: string; candidate: Candi
 }
 
 function RightToWorkStep({ token, status }: { token: string; status?: string }) {
-  const [docType, setDocType] = useState("Passport");
-  const [expiryDate, setExpiryDate] = useState("");
-  const [shareCode, setShareCode] = useState("");
-  const { toast } = useToast();
-
+  const [, setLocation] = useLocation();
   const { data: docs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
   });
+  const { data: ageDecl } = useQuery<any>({
+    queryKey: ["/api/portal", token, "declarations", "age_and_eligibility"],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/${token}/declarations/age_and_eligibility`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
   const allRtwDocs = (docs || []).filter((d: any) => d.category === "right_to_work");
-  const shareCodeDocs = allRtwDocs.filter((d: any) => d.type === "Share Code Screenshot");
-  const rtwDocs = allRtwDocs.filter((d: any) => d.type !== "Share Code Screenshot");
-  const trimmedCode = shareCode.trim();
-  const canSubmitShareCode = trimmedCode.length > 0;
+  const declAnswers = (ageDecl?.latest?.answers as Record<string, any> | undefined) || {};
+  const hasRtwDoc = allRtwDocs.length > 0 || Boolean(declAnswers.rtw_document_file);
+  const hasShareCode = Boolean(declAnswers.share_code) || allRtwDocs.some((d: any) => d.type === "Share Code Screenshot");
+  const hasDob = Boolean(declAnswers.date_of_birth);
+  const declSubmitted = Boolean(ageDecl?.latest?.submittedAt);
+  const items: Array<{ key: string; label: string; done: boolean }> = [
+    { key: "dob", label: "Date of birth recorded", done: hasDob },
+    { key: "rtw_doc", label: "Right-to-work document uploaded (passport / BRP / visa / settlement)", done: hasRtwDoc },
+    { key: "share_code", label: "gov.uk share code (only if you have one)", done: hasShareCode },
+    { key: "signed", label: "Age & Eligibility declaration signed", done: declSubmitted },
+  ];
 
   return (
     <SectionWrapper title="Right to Work" icon={<FileCheck className="h-5 w-5" />} status={status}>
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Upload evidence of your right to work in the UK. This must be one of: UK/EU passport, biometric residence permit (BRP), visa, EU Settlement Scheme status, or birth certificate with proof of nationality.
-        </p>
-
-        {rtwDocs.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Uploaded Documents</Label>
-            {rtwDocs.map((doc: any) => (
-              <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
-                {doc.expiryDate && <Badge variant="outline" className="text-xs shrink-0">Expires: {doc.expiryDate}</Badge>}
-                {doc.filePath && (
-                  <a
-                    href={doc.filePath}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
-                    data-testid={`link-portal-rtw-view-${doc.id}`}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    View
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <DocumentAiAlert docs={docs} category="right_to_work" />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
-          <div className="space-y-2">
-            <Label>Document Type</Label>
-            <Select value={docType} onValueChange={setDocType}>
-              <SelectTrigger data-testid="select-portal-rtw-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Passport">UK/EU Passport</SelectItem>
-                <SelectItem value="BRP">Biometric Residence Permit (BRP)</SelectItem>
-                <SelectItem value="Visa">Visa</SelectItem>
-                <SelectItem value="EU Settlement">EU Settlement Scheme</SelectItem>
-                <SelectItem value="Birth Certificate">Birth Certificate</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Expiry Date</Label>
-            <Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} data-testid="input-portal-rtw-expiry" />
-          </div>
+        <div className="rounded-md border border-blue-800/40 bg-blue-950/20 p-4 text-sm" data-testid="rtw-moved-notice">
+          <p className="font-medium text-blue-300">Right-to-work evidence has moved.</p>
+          <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+            Your right-to-work documents, gov.uk share code and date of birth are now captured in one place — the
+            <strong> Age &amp; Eligibility</strong> declaration — so we never ask for them twice. Open the
+            declaration to add or update your evidence and sign it.
+          </p>
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <Label className="text-sm font-medium">Upload Document</Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload a clear scan or photo of your selected document. For passports, upload the photo page. For BRP cards, upload both front and back.
-            </p>
-          </div>
-          <FileUpload
-            uploadUrl={`/api/portal/${token}/upload`}
-            onUploadComplete={(file) => {
-              apiRequest("POST", `/api/portal/${token}/documents`, {
-                type: docType,
-                filename: file.filename,
-                originalFilename: file.originalFilename,
-                filePath: file.filePath,
-                fileSize: file.fileSize,
-                mimeType: file.mimeType,
-                category: "right_to_work",
-                expiryDate: expiryDate || null,
-              }).then(() => {
-                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
-                queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
-                toast({ title: "Document uploaded" });
-              });
-            }}
-          />
-        </div>
-
-        <div className="rounded-lg border border-card-border bg-muted/30 p-4 space-y-4">
-          <div className="space-y-1">
-            <Label className="text-sm font-medium">Share code (if you have one)</Label>
-            <p className="text-xs text-muted-foreground">
-              If you generated a Right to Work share code on gov.uk (BRP, visa or EU Settlement holders), enter it
-              below <strong>and</strong> upload a screenshot of the gov.uk results page showing your photo, name,
-              expiry date and status. Both the code and the screenshot are required — a code on its own is not
-              accepted.{" "}
-              <a
-                href="https://www.gov.uk/prove-right-to-work"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-1"
-                data-testid="link-portal-share-code-help"
-              >
-                How to get your share code <ExternalLink className="h-3 w-3" />
-              </a>
-            </p>
-          </div>
-
-          {shareCodeDocs.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Submitted share codes</Label>
-              {shareCodeDocs.map((doc: any) => (
-                <div key={doc.id} className="flex items-center gap-2 rounded-md border p-2 text-sm bg-background">
+        <div className="rounded-lg border border-card-border bg-background/40 p-4 space-y-3">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Checklist</Label>
+          <ul className="space-y-2">
+            {items.map((it) => (
+              <li key={it.key} className="flex items-center gap-2 text-sm" data-testid={`rtw-checklist-${it.key}`}>
+                {it.done ? (
                   <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">Share code: {doc.notes || "—"}</p>
-                    <p className="text-xs text-muted-foreground truncate">{doc.originalFilename || doc.filename}</p>
-                  </div>
-                  {doc.filePath && (
-                    <a
-                      href={doc.filePath}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
-                      data-testid={`link-portal-share-code-view-${doc.id}`}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      View
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label>Share code</Label>
-            <Input
-              value={shareCode}
-              onChange={(e) => setShareCode(e.target.value)}
-              placeholder="e.g. ABC123DEF"
-              data-testid="input-portal-share-code"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Screenshot of gov.uk share-code page</Label>
-            <p className="text-xs text-muted-foreground">
-              Upload an image (or take a photo) of the gov.uk page showing your photo, name, expiry date and right
-              to work status.
-            </p>
-            {!canSubmitShareCode && (
-              <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-share-code-required">
-                Enter your share code first, then upload the screenshot to submit.
-              </p>
-            )}
-            <div className={canSubmitShareCode ? "" : "pointer-events-none opacity-50"} data-testid="wrapper-share-code-upload">
-              <FileUpload
-                uploadUrl={`/api/portal/${token}/upload`}
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                capture="environment"
-                hint="Image or PDF up to 10MB — camera capture supported on mobile"
-                data-testid="upload-portal-share-code-screenshot"
-                onUploadComplete={(file) => {
-                  if (!canSubmitShareCode) return;
-                  apiRequest("POST", `/api/portal/${token}/documents`, {
-                    type: "Share Code Screenshot",
-                    filename: file.filename,
-                    originalFilename: file.originalFilename,
-                    filePath: file.filePath,
-                    fileSize: file.fileSize,
-                    mimeType: file.mimeType,
-                    category: "right_to_work",
-                    notes: trimmedCode,
-                  }).then(() => {
-                    setShareCode("");
-                    queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
-                    queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
-                    toast({ title: "Share code & screenshot saved" });
-                  });
-                }}
-              />
-            </div>
-          </div>
+                ) : (
+                  <div className="h-4 w-4 rounded-full border border-muted-foreground/40 shrink-0" />
+                )}
+                <span className={it.done ? "text-foreground" : "text-muted-foreground"}>{it.label}</span>
+              </li>
+            ))}
+          </ul>
+          <Button
+            onClick={() => setLocation(`/portal/${token}/declaration/age_and_eligibility`)}
+            data-testid="button-open-age-eligibility"
+          >
+            Open Age &amp; Eligibility declaration
+          </Button>
         </div>
       </div>
     </SectionWrapper>
@@ -2942,7 +2881,7 @@ interface EqualOpportunitiesData {
   updatedAt: string;
 }
 
-function EqualOpportunitiesStep({ token, status }: { token: string; status?: string }) {
+function EqualOpportunitiesStep({ token, status, embedded }: { token: string; status?: string; embedded?: boolean }) {
   const { data: existing } = useQuery<EqualOpportunitiesData | null>({
     queryKey: ["/api/portal", token, "equal-opportunities"],
   });
@@ -2980,9 +2919,14 @@ function EqualOpportunitiesStep({ token, status }: { token: string; status?: str
     },
   });
 
-  return (
-    <SectionWrapper title="Equal Opportunities" icon={<Equal className="h-5 w-5" />} status={status}>
+  const body = (
       <div className="space-y-5">
+        {embedded && (
+          <div className="flex items-center gap-2">
+            <Equal className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-serif text-lg font-light tracking-tight" data-testid="heading-eq-opps-embedded">Equal Opportunities</h3>
+          </div>
+        )}
         <div className="rounded-md border border-blue-800/40 bg-blue-950/20 p-4 text-sm" data-testid="eq-opps-confidentiality">
           <div className="flex items-start gap-2.5">
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-400" />
@@ -3076,6 +3020,11 @@ function EqualOpportunitiesStep({ token, status }: { token: string; status?: str
           {saveMutation.isPending ? "Saving..." : "Save Equal Opportunities Form"}
         </Button>
       </div>
+  );
+  if (embedded) return body;
+  return (
+    <SectionWrapper title="Equal Opportunities" icon={<Equal className="h-5 w-5" />} status={status}>
+      {body}
     </SectionWrapper>
   );
 }
@@ -3115,7 +3064,12 @@ export default function PortalPage() {
   const [currentStep, setCurrentStep] = useState<number>(() => {
     const stepKey = getStepFromQuery();
     if (!stepKey) return 1;
-    const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+    if (stepKey === "equal_opportunities") {
+      if (typeof window !== "undefined") window.location.hash = "#equal-opportunities";
+      return 1;
+    }
+    const runtime = PORTAL_STEPS.filter((s) => s.key !== "equal_opportunities");
+    const idx = runtime.findIndex((s) => s.key === stepKey);
     return idx >= 0 ? idx + 1 : 1;
   });
 
@@ -3124,7 +3078,13 @@ export default function PortalPage() {
     const handler = () => {
       const stepKey = getStepFromQuery();
       if (!stepKey) return;
-      const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+      if (stepKey === "equal_opportunities") {
+        if (typeof window !== "undefined") window.location.hash = "#equal-opportunities";
+        setCurrentStep(1);
+        return;
+      }
+      const runtime = PORTAL_STEPS.filter((s) => s.key !== "equal_opportunities");
+      const idx = runtime.findIndex((s) => s.key === stepKey);
       if (idx >= 0) setCurrentStep(idx + 1);
     };
     window.addEventListener("popstate", handler);
@@ -3189,7 +3149,14 @@ export default function PortalPage() {
   });
 
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
-  const totalSteps = PORTAL_STEPS.length;
+  // EO is no longer a standalone step — it lives embedded in Demographics.
+  // We keep PORTAL_STEPS as the canonical list (used elsewhere) but for
+  // runtime navigation we filter EO out so step indices don't include it.
+  const RUNTIME_STEPS = useMemo(
+    () => PORTAL_STEPS.filter((s) => s.key !== "equal_opportunities"),
+    [],
+  );
+  const totalSteps = RUNTIME_STEPS.length;
 
   // Required document categories the candidate must upload at least one of.
   // Mirrors the categories used by the per-step uploaders in this file.
@@ -3219,7 +3186,7 @@ export default function PortalPage() {
     (stepIndex: number) => {
       const clamped = Math.max(1, Math.min(totalSteps, stepIndex));
       setCurrentStep(clamped);
-      const stepKey = PORTAL_STEPS[clamped - 1]?.key;
+      const stepKey = RUNTIME_STEPS[clamped - 1]?.key;
       if (stepKey && typeof window !== "undefined") {
         const url = new URL(window.location.href);
         url.searchParams.set("step", stepKey);
@@ -3244,15 +3211,20 @@ export default function PortalPage() {
       gate: portalHub?.gate ?? null,
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) => {
-        const idx = PORTAL_STEPS.findIndex((s) => s.key === stepKey);
+        if (stepKey === "equal_opportunities") {
+          if (typeof window !== "undefined") window.location.hash = "#equal-opportunities";
+          goToStep(1);
+          return;
+        }
+        const idx = RUNTIME_STEPS.findIndex((s) => s.key === stepKey);
         if (idx >= 0) goToStep(idx + 1);
       },
       selectCompetency: () => {
-        const idx = PORTAL_STEPS.findIndex((s) => s.key === "competency");
+        const idx = RUNTIME_STEPS.findIndex((s) => s.key === "competency");
         if (idx >= 0) goToStep(idx + 1);
       },
       selectCvUpload: () => {
-        const idx = PORTAL_STEPS.findIndex((s) => s.key === "profile");
+        const idx = RUNTIME_STEPS.findIndex((s) => s.key === "profile");
         if (idx >= 0) goToStep(idx + 1);
       },
       inductionSummary: portalHub?.induction
@@ -3299,7 +3271,7 @@ export default function PortalPage() {
 
   const activeCandidate = candidate || verifyData.candidate;
 
-  const currentPortalStep = PORTAL_STEPS[currentStep - 1];
+  const currentPortalStep = RUNTIME_STEPS[currentStep - 1];
 
   const stepComponents: Record<number, React.ReactNode> = {
     1: <IdentityStep token={token} candidate={activeCandidate} status={stepStatuses.identity} />,
@@ -3312,7 +3284,6 @@ export default function PortalPage() {
     8: <HealthStep token={token} status={stepStatuses.health} />,
     9: <ReferencesStep token={token} status={stepStatuses.references} />,
     10: <IndemnityStep token={token} status={stepStatuses.indemnity} />,
-    11: <EqualOpportunitiesStep token={token} status={stepStatuses.equal_opportunities} />,
   };
 
   const activeKey = `onboard:${currentPortalStep?.key ?? "identity"}`;
@@ -3328,15 +3299,17 @@ export default function PortalPage() {
       <div className="space-y-4" data-testid="portal-page">
         {stepComponents[currentStep]}
 
-        <StepCompletionFooter
-          token={token}
-          stepKey={currentPortalStep?.key ?? "identity"}
-          stepName={currentPortalStep?.name ?? ""}
-          status={stepStatuses[currentPortalStep?.key ?? "identity"]}
-          onCompleted={() => {
-            goToStep(currentStep + 1);
-          }}
-        />
+        {currentPortalStep?.key !== "right_to_work" && (
+          <StepCompletionFooter
+            token={token}
+            stepKey={currentPortalStep?.key ?? "identity"}
+            stepName={currentPortalStep?.name ?? ""}
+            status={stepStatuses[currentPortalStep?.key ?? "identity"]}
+            onCompleted={() => {
+              goToStep(currentStep + 1);
+            }}
+          />
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
           {currentStep > 1 && (

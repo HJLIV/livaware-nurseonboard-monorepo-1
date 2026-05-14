@@ -1189,9 +1189,10 @@ export function registerAdminRoutes(app: Express) {
   });
 
   app.get("/api/candidates/:id/onboarding-state", async (req, res) => {
-    let result = await storage.getOnboardingState(param(req, "id"));
+    const nurseId = param(req, "id");
+    let result = await storage.getOnboardingState(nurseId);
     if (!result) {
-      const candidate = await storage.getCandidate(param(req, "id"));
+      const candidate = await storage.getCandidate(nurseId);
       if (candidate) {
         result = await storage.createOnboardingState({
           nurseId: candidate.id,
@@ -1200,7 +1201,13 @@ export function registerAdminRoutes(app: Express) {
         });
       }
     }
-    res.json(result || null);
+    if (!result) return res.json(null);
+    const { enrichStepStatuses } = await import("../onboarding-status-derive");
+    const enriched = await enrichStepStatuses(
+      nurseId,
+      (result.stepStatuses as Record<string, string>) || {},
+    );
+    res.json({ ...result, stepStatuses: enriched });
   });
 
   app.get("/api/candidates/:id/audit-log", async (req, res) => {

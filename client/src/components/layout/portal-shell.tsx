@@ -781,15 +781,71 @@ export function buildPortalGroups({
       defaultOpen: !isLocked,
       items: [
         ...PORTAL_STEPS.filter(
-          (step) => !ASSESSMENT_HOISTED_STEP_KEYS.includes(step.key),
-        ).map((step) => ({
-          key: `onboard:${step.key}`,
-          label: step.name,
-          status: isLocked ? ("locked" as PortalItemStatus) : normalizeStatus(stepStatuses[step.key]),
+          (step) =>
+            !ASSESSMENT_HOISTED_STEP_KEYS.includes(step.key) &&
+            step.key !== "equal_opportunities",
+        ).map((step) => {
+          const label = step.key === "identity" ? "Demographics" : step.name;
+          const ageDecl = declarationsSummary?.items.find(
+            (d) => d.key === "age_and_eligibility",
+          );
+          const ohDecl = declarationsSummary?.items.find(
+            (d) => d.key === "occupational_health",
+          );
+          let derivedStatus: PortalItemStatus;
+          if (step.key === "right_to_work") {
+            derivedStatus =
+              ageDecl?.status === "submitted"
+                ? "completed"
+                : ageDecl?.status === "draft" || ageDecl?.status === "reopened"
+                  ? "in_progress"
+                  : normalizeStatus(stepStatuses.right_to_work);
+          } else if (step.key === "health") {
+            derivedStatus =
+              ohDecl?.status === "submitted"
+                ? "completed"
+                : ohDecl?.status === "draft" || ohDecl?.status === "reopened"
+                  ? "in_progress"
+                  : normalizeStatus(stepStatuses.health);
+          } else {
+            derivedStatus = normalizeStatus(stepStatuses[step.key]);
+          }
+          let onClick: (() => void) | undefined;
+          if (isLocked) {
+            onClick = undefined;
+          } else if (step.key === "right_to_work" && selectDeclaration) {
+            onClick = () => selectDeclaration("age_and_eligibility");
+          } else {
+            onClick = () => selectOnboardingStep(step.key);
+          }
+          return {
+            key: `onboard:${step.key}`,
+            label,
+            status: isLocked ? ("locked" as PortalItemStatus) : derivedStatus,
+            disabled: isLocked,
+            hint: isLocked ? lockedHint : undefined,
+            onClick,
+          };
+        }),
+        // Equal Opportunities lives inline under Demographics. Surface it
+        // as a deep-link sidebar item that scrolls to the anchor.
+        {
+          key: "onboard:equal_opportunities",
+          label: "Equal Opportunities",
+          status: isLocked
+            ? ("locked" as PortalItemStatus)
+            : normalizeStatus(stepStatuses.equal_opportunities),
           disabled: isLocked,
           hint: isLocked ? lockedHint : undefined,
-          onClick: isLocked ? undefined : () => selectOnboardingStep(step.key),
-        })),
+          onClick: isLocked
+            ? undefined
+            : () => {
+                selectOnboardingStep("identity");
+                if (typeof window !== "undefined") {
+                  window.location.hash = "#equal-opportunities";
+                }
+              },
+        },
         ...ADDITIONAL_ONBOARDING_ITEMS.map((item) => {
           const declStatus = declarationsSummary?.items.find((d) => d.key === item.key)?.status;
           let mapped: PortalItemStatus = "not_started";

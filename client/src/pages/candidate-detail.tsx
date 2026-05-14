@@ -377,13 +377,11 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
     fullName: candidate.fullName || "",
     email: candidate.email || "",
     phone: candidate.phone || "",
-    dateOfBirth: candidate.dateOfBirth || "",
     address: candidate.address || "",
     preferredPronouns: candidate.preferredPronouns || "",
     nokName: parseNextOfKin(candidate.nextOfKin).name,
     nokRelationship: parseNextOfKin(candidate.nextOfKin).relationship,
     nokContact: parseNextOfKin(candidate.nextOfKin).contactNumber,
-    passportNumber: candidate.passportNumber || "",
     nmcPin: candidate.nmcPin || "",
     dbsNumber: candidate.dbsNumber || "",
     band: candidate.band?.toString() || "",
@@ -391,6 +389,25 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
     yearsQualified: candidate.yearsQualified?.toString() || "",
   });
   const [unlockedFields, setUnlockedFields] = useState<Set<string>>(new Set());
+
+  // Read-through fallback: DOB + passport are owned by the
+  // age_and_eligibility declaration (task 125). Show those answers as the
+  // authoritative source; legacy nurses.* columns are display-only.
+  const { data: ageDecl } = useQuery<any>({
+    queryKey: ["/api/nurses", candidate.id, "declarations", "age_and_eligibility"],
+    queryFn: async () => {
+      const res = await fetch(`/api/nurses/${candidate.id}/declarations/age_and_eligibility`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+  const declAnswers = (ageDecl?.latest?.answers as Record<string, any> | undefined) || {};
+  const declDob = declAnswers.date_of_birth || null;
+  const declPassportRef = declAnswers.rtw_document_reference || declAnswers.passport_number || null;
+  const displayDob = declDob || candidate.dateOfBirth || null;
+  const displayPassport = declPassportRef || candidate.passportNumber || null;
+  const dobFromDecl = !!declDob;
+  const passportFromDecl = !!declPassportRef;
 
   const isFieldLocked = (field: string, originalValue: string | null | undefined) => {
     const val = originalValue ?? "";
@@ -406,13 +423,11 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       fullName: candidate.fullName || "",
       email: candidate.email || "",
       phone: candidate.phone || "",
-      dateOfBirth: candidate.dateOfBirth || "",
       address: candidate.address || "",
       preferredPronouns: candidate.preferredPronouns || "",
       nokName: parseNextOfKin(candidate.nextOfKin).name,
       nokRelationship: parseNextOfKin(candidate.nextOfKin).relationship,
       nokContact: parseNextOfKin(candidate.nextOfKin).contactNumber,
-      passportNumber: candidate.passportNumber || "",
       nmcPin: candidate.nmcPin || "",
       dbsNumber: candidate.dbsNumber || "",
       band: candidate.band?.toString() || "",
@@ -433,12 +448,10 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       if (form.fullName !== (candidate.fullName || "")) payload.fullName = form.fullName;
       if (form.email !== (candidate.email || "")) payload.email = form.email;
       if (form.phone !== (candidate.phone || "")) payload.phone = form.phone || null;
-      if (form.dateOfBirth !== (candidate.dateOfBirth || "")) payload.dateOfBirth = form.dateOfBirth || null;
       if (form.address !== (candidate.address || "")) payload.address = form.address || null;
       if (form.preferredPronouns !== (candidate.preferredPronouns || "")) payload.preferredPronouns = form.preferredPronouns || null;
       const newNok = serializeNextOfKin(form.nokName, form.nokRelationship, form.nokContact);
       if (newNok !== (candidate.nextOfKin || "")) payload.nextOfKin = newNok || null;
-      if (form.passportNumber !== (candidate.passportNumber || "")) payload.passportNumber = form.passportNumber || null;
       if (form.nmcPin !== (candidate.nmcPin || "")) payload.nmcPin = form.nmcPin || null;
       if (form.dbsNumber !== (candidate.dbsNumber || "")) payload.dbsNumber = form.dbsNumber || null;
       if (form.band !== (candidate.band?.toString() || "")) payload.band = form.band ? parseInt(form.band) : null;
@@ -473,12 +486,16 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Demographics</h3>
             <div className="space-y-3">
               <InfoRow icon={<User className="h-4 w-4" />} label="Full Name" value={candidate.fullName} />
               <InfoRow icon={<Mail className="h-4 w-4" />} label="Email" value={candidate.email} />
               <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone" value={candidate.phone} />
-              <InfoRow icon={<Calendar className="h-4 w-4" />} label="Date of Birth" value={candidate.dateOfBirth} />
+              <InfoRow
+                icon={<Calendar className="h-4 w-4" />}
+                label={`Date of Birth${dobFromDecl ? " (from Age & Eligibility declaration)" : ""}`}
+                value={displayDob || undefined}
+              />
               <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address" value={candidate.address} />
               <InfoRow label="Preferred Pronouns" value={candidate.preferredPronouns} />
               <InfoRow label="Next of Kin — Name" value={parseNextOfKin(candidate.nextOfKin).name || undefined} />
@@ -489,8 +506,11 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
             <div className="space-y-3">
-              <InfoRow icon={<FileText className="h-4 w-4" />} label="Passport Number" value={candidate.passportNumber} />
-              <PassportPhotoUpload candidate={candidate} />
+              <InfoRow
+                icon={<FileText className="h-4 w-4" />}
+                label={`Passport / RTW reference${passportFromDecl ? " (from Age & Eligibility declaration)" : ""}`}
+                value={displayPassport || undefined}
+              />
               <InfoRow icon={<Award className="h-4 w-4" />} label="NMC PIN" value={candidate.nmcPin} />
               <InfoRow icon={<Shield className="h-4 w-4" />} label="DBS Number" value={candidate.dbsNumber} />
               <InfoRow label="Band" value={candidate.band ? `Band ${candidate.band}` : undefined} />
@@ -528,12 +548,14 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Personal Information</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Demographics</h3>
+          <div className="rounded-md border border-card-border bg-muted/20 p-2.5 text-[11px] text-muted-foreground" data-testid="hint-dob-passport-decl">
+            Date of birth, passport &amp; right-to-work fields are owned by the <em>Age &amp; Eligibility</em> declaration and aren't editable here.
+          </div>
           <div className="space-y-3">
             <LockedInput label="Full Name" value={form.fullName} onChange={v => updateField("fullName", v)} locked={isFieldLocked("fullName", candidate.fullName)} onUnlock={() => unlockField("fullName")} testId="input-edit-fullName" />
             <LockedInput label="Email" value={form.email} onChange={v => updateField("email", v)} locked={isFieldLocked("email", candidate.email)} onUnlock={() => unlockField("email")} type="email" testId="input-edit-email" />
             <LockedInput label="Phone" value={form.phone} onChange={v => updateField("phone", v)} locked={isFieldLocked("phone", candidate.phone)} onUnlock={() => unlockField("phone")} placeholder="e.g. 07700 900123" testId="input-edit-phone" />
-            <LockedInput label="Date of Birth" value={form.dateOfBirth} onChange={v => updateField("dateOfBirth", v)} locked={isFieldLocked("dateOfBirth", candidate.dateOfBirth)} onUnlock={() => unlockField("dateOfBirth")} type="date" testId="input-edit-dob" />
             <LockedInput label="Address" value={form.address} onChange={v => updateField("address", v)} locked={isFieldLocked("address", candidate.address)} onUnlock={() => unlockField("address")} rows={2} testId="input-edit-address" />
             <LockedInput label="Preferred Pronouns" value={form.preferredPronouns} onChange={v => updateField("preferredPronouns", v)} locked={isFieldLocked("preferredPronouns", candidate.preferredPronouns)} onUnlock={() => unlockField("preferredPronouns")} placeholder="e.g. she/her" testId="input-edit-pronouns" />
             <LockedInput label="Next of Kin — Name" value={form.nokName} onChange={v => updateField("nokName", v)} locked={isFieldLocked("nokName", parseNextOfKin(candidate.nextOfKin).name)} onUnlock={() => unlockField("nokName")} placeholder="e.g. Jane Smith" testId="input-edit-nok-name" />
@@ -544,8 +566,6 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>
           <div className="space-y-3">
-            <LockedInput label="Passport Number" value={form.passportNumber} onChange={v => updateField("passportNumber", v)} locked={isFieldLocked("passportNumber", candidate.passportNumber)} onUnlock={() => unlockField("passportNumber")} testId="input-edit-passport" />
-            <PassportPhotoUpload candidate={candidate} />
             <LockedInput label="NMC PIN" value={form.nmcPin} onChange={v => updateField("nmcPin", v)} locked={isFieldLocked("nmcPin", candidate.nmcPin)} onUnlock={() => unlockField("nmcPin")} placeholder="e.g. 12A3456B" testId="input-edit-nmc" />
             <LockedInput label="DBS Number" value={form.dbsNumber} onChange={v => updateField("dbsNumber", v)} locked={isFieldLocked("dbsNumber", candidate.dbsNumber)} onUnlock={() => unlockField("dbsNumber")} placeholder="e.g. 001234567890" testId="input-edit-dbs" />
             <LockedInput label="Band" value={form.band} onChange={v => updateField("band", v)} locked={isFieldLocked("band", candidate.band?.toString())} onUnlock={() => unlockField("band")} type="number" min="1" max="9" placeholder="e.g. 5" testId="input-edit-band" />
@@ -4830,7 +4850,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
         </Card>
         <Tabs defaultValue={initialOnboardingTab}>
           <TabsList className="flex flex-wrap h-auto gap-1 bg-muted p-1" data-testid="tabs-onboarding">
-            <TabsTrigger value="identity" className="text-xs gap-1.5"><User className="h-3 w-3" />Identity<StepStatusDot status={stepStatuses.identity} /></TabsTrigger>
+            <TabsTrigger value="identity" className="text-xs gap-1.5"><User className="h-3 w-3" />Demographics<StepStatusDot status={stepStatuses.identity} /></TabsTrigger>
             <TabsTrigger value="nmc" className="text-xs gap-1.5"><Shield className="h-3 w-3" />NMC<StepStatusDot status={stepStatuses.nmc} /></TabsTrigger>
             <TabsTrigger value="dbs" className="text-xs gap-1.5"><FileCheck className="h-3 w-3" />DBS<StepStatusDot status={stepStatuses.dbs} /></TabsTrigger>
             <TabsTrigger value="right_to_work" className="text-xs gap-1.5"><Globe className="h-3 w-3" />Right to Work<StepStatusDot status={stepStatuses.right_to_work} /></TabsTrigger>

@@ -324,12 +324,17 @@ const SOP_SECTIONS: SOPSection[] = [
       {
         action: "Candidate onboarding data entry",
         detail:
-          "Candidates fill in 10 sections on the onboarding page: Identity & Contact, NMC PIN, DBS, Health & Disability, Competencies, Employment History, References, Training & Certs, Uniform & Equipment, and Policies & Agreements.",
+          "Candidates fill in 10 sections on the onboarding page: Demographics (with Equal Opportunities embedded inline), NMC PIN, DBS, Right to Work (checklist linking to the Age & Eligibility declaration), Health & Disability, Competencies, Employment History, References, Training & Certs, and Policies & Agreements.",
       },
       {
-        action: "Right to Work — share code evidence",
+        action: "Date of birth, passport & right-to-work evidence — single source of truth",
         detail:
-          "When a nurse provides a gov.uk Right to Work share code, they must also upload a screenshot of the gov.uk results page (showing photo, name, expiry and status). The portal blocks the upload until a code is typed, and the platform stores the code alongside the screenshot. A typed code without a screenshot is treated as missing evidence everywhere — compliance AI checks, the onboarding matrix and the per-nurse step status. Admins can see the share code value next to the screenshot in the candidate's Right to Work tab and in the Documents to review queue.",
+          "DOB, passport / RTW document number, gov.uk share code and the right-to-work document upload all live on the Age & Eligibility declaration. The Demographics step no longer asks for them and the legacy Right to Work step is now a checklist that links straight to that declaration. The admin Demographics tab shows DOB and passport read-only, labelled 'from Age & Eligibility declaration' when a value is present there.",
+      },
+      {
+        action: "Hepatitis B / BBV — single source of truth",
+        detail:
+          "Hep B vaccination, anti-HBs titre, HBsAg, Hep C and HIV status are all asked on the Occupational Health questionnaire. The EPP declaration shows a read-only BBV summary panel that mirrors those answers — to update them, the candidate edits Occupational Health.",
       },
     ],
     tips: [

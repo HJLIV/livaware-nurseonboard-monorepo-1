@@ -165,9 +165,19 @@ const OCCUPATIONAL_HEALTH: DeclarationDefinition = {
     yesNo("musculoskeletal_issues", "Do you have any back, neck, shoulder or other musculoskeletal problems that affect lifting, bending or standing?"),
     yesNo("skin_conditions", "Do you have any skin conditions (e.g. eczema, dermatitis, psoriasis) that may affect frequent hand-washing or glove use?"),
     yesNo("needlestick_history", "Have you had a previous needlestick or sharps injury that required follow-up?"),
-    yesNo("immunisations_up_to_date", "Are your routine immunisations up to date (Hepatitis B, MMR, Varicella, BCG/TB)?"),
-    yesNo("hep_b_vaccinated", "Have you completed a course of Hepatitis B vaccination with documented response (anti-HBs >= 10 mIU/mL)?"),
+    yesNo("immunisations_up_to_date", "Are your routine immunisations up to date (MMR, Varicella, BCG/TB)?"),
     yesNo("tb_screened", "Have you been screened for TB (chest X-ray or IGRA) in the last 12 months?"),
+    // ─── Hepatitis B / BBV (consolidated owner; EPP reads through) ───
+    yesNo("hbv_vaccinated", "Have you completed a Hepatitis B (HBV) vaccination course?"),
+    {
+      id: "hbv_anti_hbs_titre",
+      prompt: "Most recent anti-HBs titre (mIU/mL).",
+      type: "number", required: false, placeholder: "e.g. 100",
+      helpText: "A response >= 10 mIU/mL is generally considered protective; >= 100 is preferred for EPP roles.",
+    },
+    yesNo("hbv_surface_antigen_negative", "Have you had a Hepatitis B surface antigen (HBsAg) test with a negative result?"),
+    yesNo("hcv_negative", "Have you had a Hepatitis C (anti-HCV / HCV-RNA) test with a negative result?"),
+    yesNo("hiv_negative", "Have you had an HIV antibody test with a negative result?"),
     {
       id: "absence_last_2_years",
       prompt: "How many days of sickness absence have you had in the last 24 months (excluding pregnancy-related)?",
@@ -204,7 +214,7 @@ const EPP_DECLARATION: DeclarationDefinition = {
   key: "epp_declaration",
   title: "Exposure-Prone Procedures (EPP) Declaration",
   intro:
-    "An exposure-prone procedure (EPP) is one in which the worker's gloved hands may be in contact with sharp instruments, needle tips or sharp tissues inside a patient's open body cavity, wound or confined anatomical space. This declaration captures your EPP status and BBV (Hepatitis B, Hepatitis C, HIV) clearance.",
+    "An exposure-prone procedure (EPP) is one in which the worker's gloved hands may be in contact with sharp instruments, needle tips or sharp tissues inside a patient's open body cavity, wound or confined anatomical space. This declaration captures your EPP role status only — BBV (Hepatitis B, Hepatitis C, HIV) clearance is now recorded in your Occupational Health declaration and shown read-only here for reference.",
   legalReferences: [
     "Department of Health: Integrated guidance on health clearance of healthcare workers and the management of healthcare workers infected with bloodborne viruses (2007)",
     "PHE / UKHSA EPP guidance",
@@ -220,16 +230,6 @@ const EPP_DECLARATION: DeclarationDefinition = {
         { value: "unsure", label: "Unsure" },
       ],
     },
-    yesNo("hbv_vaccinated", "Have you completed a Hepatitis B (HBV) vaccination course?"),
-    {
-      id: "hbv_anti_hbs_titre",
-      prompt: "Most recent anti-HBs titre (mIU/mL).",
-      type: "number", required: false, placeholder: "e.g. 100",
-      helpText: "A response >= 10 mIU/mL is generally considered protective; >= 100 is preferred for EPP roles.",
-    },
-    yesNo("hbv_surface_antigen_negative", "Have you had a Hepatitis B surface antigen (HBsAg) test with a negative result?"),
-    yesNo("hcv_negative", "Have you had a Hepatitis C (anti-HCV / HCV-RNA) test with a negative result?"),
-    yesNo("hiv_negative", "Have you had an HIV antibody test with a negative result?"),
     {
       id: "epp_evidence_file",
       prompt: "Upload your EPV (employment proof of vaccination / clearance) certificate.",

@@ -75,6 +75,94 @@ interface PortalData {
   token: string;
 }
 
+function BbvSummaryPanel({ token, legacyAnswers }: { token: string; legacyAnswers?: Record<string, any> }) {
+  const [, setLocation] = useLocation();
+  const { data } = useQuery<any>({
+    queryKey: ["/api/portal", token, "declarations", "occupational_health"],
+    queryFn: async () => {
+      const res = await fetch(`/api/portal/${token}/declarations/occupational_health`, { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+  const latest = data?.latest;
+  const ohAns = (latest?.answers as Record<string, any> | undefined) || {};
+  const legacy = legacyAnswers || {};
+  const pick = (k: string) => {
+    const v = ohAns[k];
+    if (v !== undefined && v !== null && v !== "") return v;
+    return legacy[k];
+  };
+  const ans: Record<string, any> = {
+    hbv_vaccinated: pick("hbv_vaccinated") ?? pick("hep_b_vaccinated"),
+    hbv_anti_hbs_titre: pick("hbv_anti_hbs_titre"),
+    hbv_surface_antigen_negative: pick("hbv_surface_antigen_negative"),
+    hcv_negative: pick("hcv_negative"),
+    hiv_negative: pick("hiv_negative"),
+  };
+  const fallbackUsed = Object.keys(ans).some(
+    (k) => (ohAns[k] === undefined || ohAns[k] === null || ohAns[k] === "") && ans[k] !== undefined && ans[k] !== null && ans[k] !== "",
+  );
+  const rows: { id: string; label: string }[] = [
+    { id: "hbv_vaccinated", label: "Hepatitis B vaccination course completed" },
+    { id: "hbv_anti_hbs_titre", label: "Most recent anti-HBs titre (mIU/mL)" },
+    { id: "hbv_surface_antigen_negative", label: "HBsAg negative" },
+    { id: "hcv_negative", label: "Hepatitis C negative" },
+    { id: "hiv_negative", label: "HIV negative" },
+  ];
+  const fmt = (v: unknown) => {
+    if (v === true) return "Yes";
+    if (v === false) return "No";
+    if (v === undefined || v === null || v === "") return "Not yet answered";
+    return String(v);
+  };
+  const anyAnswered = rows.some((r) => ans[r.id] !== undefined && ans[r.id] !== null && ans[r.id] !== "");
+  return (
+    <Card data-testid="bbv-summary-panel">
+      <CardContent className="p-5 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">Bloodborne virus (BBV) status</h3>
+            <p className="text-xs text-muted-foreground">
+              These answers come from your <strong>Occupational Health</strong> questionnaire. Update them there if anything changes — they cannot be edited from this declaration.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            {latest?.status && (
+              <Badge variant="outline" className="text-[10px]">{latest.status}</Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation(`/portal/${token}/declaration/occupational_health`)}
+              data-testid="button-open-oh-from-bbv"
+            >
+              Open Occupational Health
+            </Button>
+          </div>
+        </div>
+        {!anyAnswered ? (
+          <div
+            className="text-xs text-amber-600 dark:text-amber-400"
+            data-testid="bbv-summary-empty"
+          >
+            No BBV answers found yet — please complete the Occupational Health questionnaire first.
+          </div>
+        ) : (
+          <ul className="text-sm divide-y divide-border/60">
+            {rows.map((r) => (
+              <li key={r.id} className="flex items-start justify-between gap-3 py-1.5" data-testid={`bbv-summary-${r.id}`}>
+                <span className="text-muted-foreground">{r.label}</span>
+                <span className="font-medium text-foreground text-right">{fmt(ans[r.id])}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function isVisible(q: Question, answers: Record<string, unknown>): boolean {
   if (!q.conditionalOn) return true;
   return answers[q.conditionalOn.questionId] === q.conditionalOn.equals;
@@ -453,6 +541,13 @@ export default function PortalDeclarationPage() {
               )}
             </div>
           </div>
+
+          {key === "epp_declaration" && (
+            <BbvSummaryPanel
+              token={token!}
+              legacyAnswers={(latest?.answers as Record<string, any>) || undefined}
+            />
+          )}
 
           <Card>
             <CardContent className="p-5 space-y-5">
