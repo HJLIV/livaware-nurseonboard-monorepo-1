@@ -10,10 +10,9 @@ export function StageLockedCard({ label }: { label: string }) {
           {label} is not yet available
         </h2>
         <p className="text-sm text-muted-foreground max-w-md">
-          You'll get access to this section once your onboarding has been
-          completed and your employer has approved you as a Nurse on the
-          platform. Until then, please continue working through your
-          assessment and onboarding tasks.
+          You'll get access to this section once your employer has reviewed
+          and approved your compliance file. Until then, please continue
+          working through your Compliance questionnaires and uploads.
         </p>
       </CardContent>
     </Card>

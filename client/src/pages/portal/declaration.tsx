@@ -239,6 +239,10 @@ export default function PortalDeclarationPage() {
       declarationsSummary: declarationsSummaryData ?? null,
       selectDeclaration: (k) =>
         navigate(`/portal/declaration${token === "me" ? "" : `/${token}`}/${k}`),
+      selectCompetency: () => navigate(`/portal/page?step=competency`),
+      selectCvUpload: () => navigate(`/portal/page?step=profile`),
+      selectInduction: () => navigate(`/portal/induction${token === "me" ? "" : `/${token}`}`),
+      selectSopComprehension: () => navigate(`/portal/sop-comprehension${token === "me" ? "" : `/${token}`}`),
     });
   }, [portal, token, stepStatuses, navigate, declarationsSummaryData]);
 

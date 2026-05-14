@@ -43,6 +43,7 @@ interface PortalData {
   gate?: {
     unlocked: boolean;
     mode: "auto" | "manual";
+    complianceApproved?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
     lockedReason?: string | null;
   };
@@ -415,7 +416,7 @@ export default function PortalHub() {
 
   // Live policies summary so the sidebar item shows accurate progress and
   // the Compliance overview row reflects what's still outstanding.
-  const stageUnlocked = portal?.gate?.stageCompleted !== false;
+  const stageUnlocked = portal?.gate?.complianceApproved !== false;
   const { data: policiesData } = useQuery<{
     policies: Array<unknown>;
     totalRequired: number;

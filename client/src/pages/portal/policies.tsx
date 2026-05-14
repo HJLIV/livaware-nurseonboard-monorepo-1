@@ -167,6 +167,7 @@ interface PortalData {
   gate?: {
     unlocked: boolean;
     stageCompleted?: boolean;
+    complianceApproved?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
   } | null;
   token: string;
@@ -190,7 +191,7 @@ export default function PortalPoliciesPage() {
     enabled: !!token && !!portal,
   });
 
-  const stageUnlocked = portal?.gate?.stageCompleted !== false;
+  const stageUnlocked = portal?.gate?.complianceApproved !== false;
   const { data: policies, isLoading } = useQuery<PoliciesResponse>({
     queryKey: [`/api/portal/${token}/policies`],
     enabled: !!token && stageUnlocked,
@@ -228,11 +229,14 @@ export default function PortalPoliciesPage() {
         ? { totalRequired: sopComprehension.totalRequired, outstanding: sopComprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      selectCompetency: () => navigate(`/portal/page?step=competency`),
+      selectCvUpload: () => navigate(`/portal/page?step=profile`),
+      selectDeclaration: (k) => navigate(`/portal/declaration/${k}`),
       gate: portal.gate ?? null,
     });
   }, [portal, token, stepStatuses, navigate, policies, sopComprehension]);
 
-  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
+  const stageLocked = !!portal?.gate && portal.gate.complianceApproved === false;
 
   const acknowledgeMutation = useMutation({
     mutationFn: async ({ policyId, events }: { policyId: string; events: PolicyReadEventPayload[] }) => {

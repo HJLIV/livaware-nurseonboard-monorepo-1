@@ -63,6 +63,7 @@ interface PortalData {
   gate?: {
     unlocked: boolean;
     stageCompleted?: boolean;
+    complianceApproved?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
   } | null;
   token: string;
@@ -342,7 +343,7 @@ export default function PortalInductionPage() {
     enabled: !!token && !!portal,
   });
 
-  const stageUnlocked = portal?.gate?.stageCompleted !== false;
+  const stageUnlocked = portal?.gate?.complianceApproved !== false;
   const { data: induction, isLoading } = useQuery<InductionResponse>({
     queryKey: [`/api/portal/${token}/induction`],
     enabled: !!token && stageUnlocked,
@@ -387,11 +388,14 @@ export default function PortalInductionPage() {
         ? { totalRequired: sopComprehension.totalRequired, outstanding: sopComprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      selectCompetency: () => navigate(`/portal/page?step=competency`),
+      selectCvUpload: () => navigate(`/portal/page?step=profile`),
+      selectDeclaration: (k) => navigate(`/portal/declaration/${k}`),
       gate: portal.gate ?? null,
     });
   }, [portal, token, stepStatuses, navigate, policies, inductionSummary, sopComprehension]);
 
-  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
+  const stageLocked = !!portal?.gate && portal.gate.complianceApproved === false;
 
   // Slug of the SOP whose comprehension MCQ should pop up. Set after
   // a successful acknowledge of a SOP-tagged induction item; cleared

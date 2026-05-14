@@ -75,6 +75,15 @@ export const nurses = pgTable("nurses", {
   // Free-text reason recorded when an admin re-locks a previously
   // unlocked nurse (surfaced in the audit detail + admin panel).
   onboardingLockedReason: text("onboarding_locked_reason"),
+  // ─── Compliance-approval gate for Induction & Training ─────────
+  // Admin clicks "Approve compliance" once they're satisfied that
+  // every Compliance-group questionnaire has been completed and
+  // checked. Setting this timestamp unlocks the Induction & Training
+  // group (Policies, Training documents, Induction handbook, SOP
+  // comprehension and Skills Arcade) for the nurse. Clearing it
+  // re-locks them.
+  complianceApprovedAt: timestamp("compliance_approved_at"),
+  complianceApprovedBy: text("compliance_approved_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

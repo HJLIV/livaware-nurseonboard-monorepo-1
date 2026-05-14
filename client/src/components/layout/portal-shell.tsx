@@ -602,6 +602,7 @@ export interface PortalGateInfo {
   // induction pack, SOP comprehension) so they aren't visible while the
   // candidate is still working through assessment / onboarding.
   stageCompleted?: boolean;
+  complianceApproved?: boolean;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -684,8 +685,8 @@ export function buildPortalGroups({
   // A stricter gate that opens only when an admin has advanced the
   // candidate to the final "Nurse" stage. Drives policies / induction /
   // SOP comprehension visibility — these are post-onboarding surfaces.
-  const stageLocked = !!gate && gate.stageCompleted === false;
-  const stageLockedHint = "Available once your onboarding has been completed and approved";
+  const stageLocked = !!gate && gate.complianceApproved === false;
+  const stageLockedHint = "Locked — admin must approve compliance first";
 
   // Assessment-group item statuses derive from the gate prerequisites
   // when we have them, otherwise from the existing journey/stepStatus

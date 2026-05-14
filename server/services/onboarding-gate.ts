@@ -16,6 +16,13 @@ export interface GateState {
   // SOP comprehension) which must NOT be visible while the candidate is
   // still working through assessment / onboarding.
   stageCompleted: boolean;
+  // True once an admin has explicitly approved that all Compliance-group
+  // questionnaires have been completed and checked. Drives access to the
+  // Induction & Training group (Policies, Training, Induction, SOP,
+  // Skills Arcade).
+  complianceApproved: boolean;
+  complianceApprovedAt: Date | null;
+  complianceApprovedBy: string | null;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -53,6 +60,9 @@ export function gateStateFromNurse(nurse: Nurse, prerequisites: GateState["prere
     unlockedBy: nurse.onboardingUnlockedBy ?? null,
     lockedReason: nurse.onboardingLockedReason ?? null,
     stageCompleted: nurse.currentStage === "completed",
+    complianceApproved: !!nurse.complianceApprovedAt,
+    complianceApprovedAt: nurse.complianceApprovedAt ?? null,
+    complianceApprovedBy: nurse.complianceApprovedBy ?? null,
     prerequisites,
   };
 }

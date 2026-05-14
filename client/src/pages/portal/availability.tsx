@@ -267,6 +267,9 @@ export default function PortalAvailabilityPage() {
       selectPolicies: () => navigate(`/portal/policies`),
       selectInduction: () => navigate(`/portal/induction`),
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      selectCompetency: () => navigate(`/portal/page?step=competency`),
+      selectCvUpload: () => navigate(`/portal/page?step=cv`),
+      selectDeclaration: (k) => navigate(`/portal/declaration/${k}`),
     });
   }, [portal, navigate]);
 

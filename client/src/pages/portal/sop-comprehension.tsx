@@ -69,6 +69,7 @@ interface PortalData {
   gate?: {
     unlocked: boolean;
     stageCompleted?: boolean;
+    complianceApproved?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
   } | null;
   token: string;
@@ -296,7 +297,7 @@ export default function PortalSopComprehensionPage() {
     retry: false,
   });
 
-  const stageUnlocked = portal?.gate?.stageCompleted !== false;
+  const stageUnlocked = portal?.gate?.complianceApproved !== false;
   const { data: comprehension, isLoading } = useQuery<ComprehensionResponse>({
     queryKey: [`/api/portal/${token}/sop-comprehension`],
     enabled: !!token && stageUnlocked,
@@ -339,11 +340,14 @@ export default function PortalSopComprehensionPage() {
         ? { totalRequired: comprehension.totalRequired, outstanding: comprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      selectCompetency: () => navigate(`/portal/page?step=competency`),
+      selectCvUpload: () => navigate(`/portal/page?step=profile`),
+      selectDeclaration: (k) => navigate(`/portal/declaration/${k}`),
       gate: portal.gate ?? null,
     });
   }, [portal, token, navigate, policies, inductionSummary, comprehension]);
 
-  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
+  const stageLocked = !!portal?.gate && portal.gate.complianceApproved === false;
 
   const content = (
     <div className="space-y-6" data-testid="portal-sop-comprehension">

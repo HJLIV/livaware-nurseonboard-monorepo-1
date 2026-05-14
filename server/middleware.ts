@@ -223,10 +223,10 @@ export async function requireNurseStageCompleted(req: Request, res: Response, ne
     const { getGateState } = await import("./services/onboarding-gate");
     const state = await getGateState(nurseId);
     if (!state) return res.status(404).json({ message: "Nurse not found" });
-    if (!state.stageCompleted) {
+    if (!state.complianceApproved) {
       return res.status(403).json({
-        error: "stage_not_completed",
-        message: "Available once your onboarding has been completed and approved by your employer.",
+        error: "compliance_not_approved",
+        message: "Available once your employer has approved your compliance file.",
         gate: state,
       });
     }

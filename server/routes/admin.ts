@@ -820,6 +820,48 @@ export function registerNurseRoutes(app: Express) {
     res.json(state);
   });
 
+  // Compliance-approval gate: admin clicks "Approve compliance" once
+  // every Compliance-group questionnaire has been completed and checked.
+  // Setting the timestamp unlocks the Induction & Training group for
+  // the nurse; the DELETE clears it (re-locks).
+  app.post("/api/nurses/:id/compliance-approval", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    if (nurse.complianceApprovedAt) {
+      const state = await getGateState(req.params.id);
+      return res.json(state);
+    }
+    const now = new Date();
+    await db.update(nurses).set({
+      complianceApprovedAt: now,
+      complianceApprovedBy: agentFor(req),
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "compliance_approved", agentFor(req), { note });
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
+  app.delete("/api/nurses/:id/compliance-approval", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    if (!nurse.complianceApprovedAt) {
+      const state = await getGateState(req.params.id);
+      return res.json(state);
+    }
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const now = new Date();
+    await db.update(nurses).set({
+      complianceApprovedAt: null,
+      complianceApprovedBy: null,
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(nurse.id, "admin", "compliance_approval_revoked", agentFor(req), { reason });
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
   app.post("/api/nurses/:id/cv-review", requireAdmin, async (req, res) => {
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
