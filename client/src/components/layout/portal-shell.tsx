@@ -784,7 +784,10 @@ export function buildPortalGroups({
         ...PORTAL_STEPS.filter(
           (step) =>
             !ASSESSMENT_HOISTED_STEP_KEYS.includes(step.key) &&
-            step.key !== "equal_opportunities",
+            step.key !== "equal_opportunities" &&
+            // Mandatory Training is not a Compliance prerequisite — it
+            // belongs in the Induction & Training group below.
+            step.key !== "training",
         ).map((step) => {
           const label = step.key === "identity" ? "Demographics" : step.name;
           const ageDecl = declarationsSummary?.items.find(
@@ -892,11 +895,17 @@ export function buildPortalGroups({
           disabled: isLocked || stageLocked || !selectPolicies,
         },
         {
-          key: "compliance:training_docs",
-          label: "Training documents required",
-          status: "coming_soon",
-          disabled: true,
-          hint: "Coming soon",
+          key: "compliance:training",
+          label: "Mandatory Training",
+          status: isLocked || stageLocked
+            ? ("locked" as PortalItemStatus)
+            : normalizeStatus(stepStatuses.training),
+          hint: isLocked ? lockedHint : stageLocked ? stageLockedHint : undefined,
+          disabled: isLocked || stageLocked,
+          onClick:
+            isLocked || stageLocked
+              ? undefined
+              : () => selectOnboardingStep("training"),
         },
         {
           key: "compliance:livaware_modules",
