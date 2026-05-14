@@ -3,6 +3,13 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    // If the server returned an HTML page (typically the SPA index when an
+    // API route is missing or the request was redirected), surface a much
+    // clearer message instead of dumping `<!DOCTYPE html…` into the UI.
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("text/html") || text.trimStart().startsWith("<!DOCTYPE")) {
+      throw new Error(`${res.status}: API not available at this URL (server returned an HTML page)`);
+    }
     throw new Error(`${res.status}: ${text}`);
   }
 }

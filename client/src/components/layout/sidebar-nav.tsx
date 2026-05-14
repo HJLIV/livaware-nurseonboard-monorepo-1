@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   Activity,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -86,6 +87,7 @@ const sections: NavSectionDef[] = [
       { label: "Training Matrix", href: "/reports/training", icon: GraduationCap, adminOnly: true },
       { label: "Competency Matrix", href: "/reports/competency", icon: Award, adminOnly: true },
       { label: "SOP Comprehension Matrix", href: "/reports/sop-comprehension", icon: Award, adminOnly: true },
+      { label: "Availability Matrix", href: "/reports/availability", icon: CalendarDays, adminOnly: true },
     ],
   },
   {

@@ -15,6 +15,7 @@ import {
   BookOpenCheck,
   LayoutDashboard,
   AlertCircle,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -617,6 +618,10 @@ interface BuildGroupsArgs {
   selectOnboardingStep: (stepKey: string) => void;
   policiesSummary?: { totalRequired: number; outstanding: number } | null;
   selectPolicies?: () => void;
+  // Availability (task 124) — only surfaced when nurse is fully onboarded
+  // (currentStage === "completed"). Caller passes this flag in.
+  availabilityEnabled?: boolean;
+  selectAvailability?: () => void;
   // Induction summary (task 114) — drives the new Induction sidebar
   // group and gates the Skills Arcade item until everything is acked.
   inductionSummary?: { total: number; outstanding: number; unlocked: boolean } | null;
@@ -662,6 +667,8 @@ export function buildPortalGroups({
   selectOnboardingStep,
   policiesSummary,
   selectPolicies,
+  availabilityEnabled,
+  selectAvailability,
   inductionSummary,
   selectInduction,
   sopComprehensionSummary,
@@ -881,6 +888,28 @@ export function buildPortalGroups({
         },
       ],
     },
+    ...(availabilityEnabled
+      ? [
+          {
+            key: "rostering",
+            title: "Rostering",
+            icon: <CalendarDays className="h-3.5 w-3.5" />,
+            defaultOpen: true,
+            items: [
+              {
+                key: "rostering:availability",
+                label: "My Availability",
+                status: "in_progress" as PortalItemStatus,
+                hint: "AM / PM / Night per day",
+                onClick: selectAvailability
+                  ? selectAvailability
+                  : () => { window.location.href = `/portal/availability`; },
+                disabled: !selectAvailability,
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 }
 

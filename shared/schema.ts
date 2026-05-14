@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability"]);
 
 // Onboard enums
 export const onboardingStatusEnum = pgEnum("onboarding_status", [
@@ -1321,6 +1321,47 @@ export const insertNurseDeclarationSchema = createInsertSchema(nurseDeclarations
 });
 export type NurseDeclaration = typeof nurseDeclarations.$inferSelect;
 export type InsertNurseDeclaration = z.infer<typeof insertNurseDeclarationSchema>;
+
+// ==================== NURSE AVAILABILITY (task 124) ====================
+// Per-nurse, per-day, per-shift (AM/PM/Night) availability for the
+// rolling current-month + 6-month-ahead window. Designed for cross-app
+// reads by a future rostering app — keep the table flat and query-friendly.
+export const shiftEnum = pgEnum("shift", ["am", "pm", "night"]);
+export const availabilityStatusEnum = pgEnum("availability_status", [
+  "available",
+  "preferred",
+  "unavailable",
+]);
+
+export const nurseAvailability = pgTable("nurse_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id, { onDelete: "cascade" }),
+  // ISO date (YYYY-MM-DD). Stored as text so cross-app readers don't have to
+  // worry about timezone drift on a calendar-day concept.
+  date: text("date").notNull(),
+  shift: shiftEnum("shift").notNull(),
+  status: availabilityStatusEnum("status").notNull(),
+  updatedBy: text("updated_by"),
+  updatedByRole: text("updated_by_role"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("nurse_availability_nurse_date_shift_unique").on(table.nurseId, table.date, table.shift),
+  index("nurse_availability_nurse_id_idx").on(table.nurseId),
+  index("nurse_availability_date_idx").on(table.date),
+]);
+
+export const insertNurseAvailabilitySchema = createInsertSchema(nurseAvailability).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type NurseAvailability = typeof nurseAvailability.$inferSelect;
+export type InsertNurseAvailability = z.infer<typeof insertNurseAvailabilitySchema>;
+export type Shift = "am" | "pm" | "night";
+export type AvailabilityStatus = "available" | "preferred" | "unavailable";
+export const SHIFTS: Shift[] = ["am", "pm", "night"];
+export const SHIFT_LABELS: Record<Shift, string> = { am: "AM", pm: "PM", night: "Night" };
 
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;

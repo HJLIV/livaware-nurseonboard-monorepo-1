@@ -474,6 +474,8 @@ export default function PortalHub() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
+      availabilityEnabled: portal.nurse.currentStage === "completed",
+      selectAvailability: () => navigate(`/portal/availability`),
       // Cookie-based navigation — no token in the URL.
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) =>

@@ -44,6 +44,23 @@ A full-stack TypeScript monorepo combining three private applications — **Clin
 - Admin UI: `client/src/components/admin/onboarding-access-panel.tsx` is mounted on both `candidate-detail` and `nurse-detail` pages, showing prerequisite checklist, mode toggle, mark-CV-reviewed, unlock and re-lock (with reason dialog).
 - Tests: `tests/23-onboarding-access-gate.test.ts` (7 tests covering gate state, manual unlock/relock, CV review, mode change audit, portal write gating, hub gate field).
 
+### Nurse Availability Calendar (Task #124)
+- New `nurseAvailability` table (`shared/schema.ts`): `(nurseId, date YYYY-MM-DD, shift)` unique. `shift ∈ {am, pm, night}`, `status ∈ {available, preferred, unavailable}` (an "unset" cell means no row). Tracks `updatedBy` + `updatedByRole` for the future rostering app.
+- Editable window: current month → +6 months ahead. Only nurses with `currentStage === "completed"` see / can edit availability.
+- New `availability` value added to `auditModuleEnum` (DB push applied) so all availability edits are logged under their own audit module.
+- Server: `server/routes/availability.ts` exposes:
+  - `GET/PUT /api/portal/:token/availability` (gated to completed; `validatePortalToken`). Bulk upsert via Zod `cells: [{date, shift, status}]`; status `"unset"` deletes the row.
+  - `GET /api/admin/availability/matrix?month=YYYY-MM&search=&stage=` — whole-roster matrix. `stage` defaults to `completed` (only Nurses); pass `stage=all` to include earlier-stage rows.
+  - `GET /api/admin/availability/export.csv?month=YYYY-MM` — normalized one-row-per-(nurse,date,shift) CSV with header `nurse_id,name,email,date,shift,status` for direct ingestion by the future rostering app.
+  - `GET/PUT /api/admin/nurses/:id/availability?month=YYYY-MM` — per-nurse editor.
+- Audit logs: `availability_updated` action, module `availability`, with `detail.source` ∈ {`portal`, `admin`}.
+- Frontend:
+  - Portal page `client/src/pages/portal/availability.tsx` (`/portal/availability`) — month-paged table grouped by ISO week (Mon-start). Each week row carries a **Mark whole week available** button. Month-wide bulk bar: **Copy last week** (true cross-month: for every visible day, copies from `date − 7`, transparently fetching the prior month when the source date falls there) and **Clear month**. Per-cell paint mode + per-day Apply. Optimistic updates via TanStack Query `onMutate` cache patching, rollback on error, "Saved" indicator (`indicator-saving` / `indicator-saved`).
+  - Admin matrix page `client/src/pages/reports/availability.tsx` (`/reports/availability`) — sticky header/column matrix with 3 status dots per day cell, **stage filter** (defaults to "Nurse (completed)", supports "All stages"), search, CSV download, click-row side-panel editor with the same optimistic + Saved UX.
+  - Sidebar: new `Availability Matrix` item under Reports (`sidebar-nav.tsx`).
+  - Portal sidebar: new `Rostering > My Availability` group surfaced only when `nurse.currentStage === "completed"` via `availabilityEnabled` + `selectAvailability` props in `buildPortalGroups` (`portal-shell.tsx`); `portal-hub.tsx` passes both based on stage.
+- Tests: `tests/27-availability.test.ts` (11 tests covering portal gating, read/write, "unset" deletion, window enforcement, admin matrix, normalized CSV row format, admin write + audit, per-week mark-available, clear-month, admin stage filter default + `stage=all`, missing-token rejection).
+
 ### Nurse-Onboard (AI-powered compliance & onboarding)
 - Full NMC PIN verification (`server/nmc-service.ts`) — step-by-step walkthrough with external link
 - DBS certificate checking (`server/dbs-service.ts`) — step-by-step walkthrough with external links to gov.uk

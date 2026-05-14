@@ -187,6 +187,10 @@ export async function registerRoutes(
   const { registerRefereeRoutes } = await import("./routes/referee");
   registerRefereeRoutes(app);
 
+  // === NURSE AVAILABILITY (task 124) ===
+  const { registerAvailabilityRoutes } = await import("./routes/availability");
+  registerAvailabilityRoutes(app);
+
   // === SKILLS ARCADE MODULE ===
   const { registerRoutes: registerArcadeRoutes } = await import("./routes/skills-arcade");
   await registerArcadeRoutes(app);

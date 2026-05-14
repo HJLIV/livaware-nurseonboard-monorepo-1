@@ -71,6 +71,10 @@ const PortalSopComprehensionPage = lazy(() => import("@/pages/portal/sop-compreh
 // Super admin
 const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity"));
 
+// Availability (task 124)
+const PortalAvailabilityPage = lazy(() => import("@/pages/portal/availability"));
+const AvailabilityMatrixPage = lazy(() => import("@/pages/reports/availability"));
+
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -144,6 +148,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
         <Route path="/portal/induction" component={() => <PortalInductionPage />} />
         <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
+        <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
         <Route path="/portal" component={() => <PortalHub />} />
         {/* Legacy tokenized portal routes — kept for back-compat with
@@ -197,6 +202,7 @@ function AuthenticatedRouter() {
               <Route path="/reports/training">{() => <AppLayout><AdminRoute component={TrainingMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/competency">{() => <AppLayout><AdminRoute component={CompetencyMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/sop-comprehension">{() => <AppLayout><AdminRoute component={SopComprehensionMatrixPage} /></AppLayout>}</Route>
+              <Route path="/reports/availability">{() => <AdminRoute component={AvailabilityMatrixPage} />}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
