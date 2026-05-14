@@ -10,6 +10,12 @@ export interface GateState {
   unlockedAt: Date | null;
   unlockedBy: string | null;
   lockedReason: string | null;
+  // True once the candidate has been advanced to the final "Nurse" stage
+  // (current_stage = "completed") by an admin. Drives access to the
+  // employer-facing post-onboarding surfaces (policies, induction pack,
+  // SOP comprehension) which must NOT be visible while the candidate is
+  // still working through assessment / onboarding.
+  stageCompleted: boolean;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -46,6 +52,7 @@ export function gateStateFromNurse(nurse: Nurse, prerequisites: GateState["prere
     unlockedAt: nurse.onboardingUnlockedAt ?? null,
     unlockedBy: nurse.onboardingUnlockedBy ?? null,
     lockedReason: nurse.onboardingLockedReason ?? null,
+    stageCompleted: nurse.currentStage === "completed",
     prerequisites,
   };
 }

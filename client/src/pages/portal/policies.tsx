@@ -12,6 +12,7 @@ import {
   buildPortalGroups,
   type PortalSidebarGroup,
 } from "@/components/layout/portal-shell";
+import { StageLockedCard } from "@/components/portal/stage-locked-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -163,6 +164,11 @@ interface PortalData {
   // gate has been provisioned for this nurse. Optional so older
   // server payloads still type-check.
   induction?: { unlocked: boolean; total: number; outstanding: number };
+  gate?: {
+    unlocked: boolean;
+    stageCompleted?: boolean;
+    prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
+  } | null;
   token: string;
 }
 
@@ -184,14 +190,15 @@ export default function PortalPoliciesPage() {
     enabled: !!token && !!portal,
   });
 
+  const stageUnlocked = portal?.gate?.stageCompleted !== false;
   const { data: policies, isLoading } = useQuery<PoliciesResponse>({
     queryKey: [`/api/portal/${token}/policies`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: sopComprehension } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/sop-comprehension`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
@@ -221,8 +228,11 @@ export default function PortalPoliciesPage() {
         ? { totalRequired: sopComprehension.totalRequired, outstanding: sopComprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      gate: portal.gate ?? null,
     });
   }, [portal, token, stepStatuses, navigate, policies, sopComprehension]);
+
+  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
 
   const acknowledgeMutation = useMutation({
     mutationFn: async ({ policyId, events }: { policyId: string; events: PolicyReadEventPayload[] }) => {
@@ -318,7 +328,7 @@ export default function PortalPoliciesPage() {
       groups={groups}
       activeKey="compliance:policies"
     >
-      {content}
+      {stageLocked ? <StageLockedCard label="Policies to read & sign" /> : content}
     </PortalShell>
   );
 }

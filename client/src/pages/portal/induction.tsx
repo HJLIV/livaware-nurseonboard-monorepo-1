@@ -18,6 +18,7 @@ import {
   buildPortalGroups,
   type PortalSidebarGroup,
 } from "@/components/layout/portal-shell";
+import { StageLockedCard } from "@/components/portal/stage-locked-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,11 @@ interface PortalData {
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
   induction?: { unlocked: boolean; total: number; outstanding: number };
+  gate?: {
+    unlocked: boolean;
+    stageCompleted?: boolean;
+    prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
+  } | null;
   token: string;
 }
 
@@ -336,19 +342,20 @@ export default function PortalInductionPage() {
     enabled: !!token && !!portal,
   });
 
+  const stageUnlocked = portal?.gate?.stageCompleted !== false;
   const { data: induction, isLoading } = useQuery<InductionResponse>({
     queryKey: [`/api/portal/${token}/induction`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: policies } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/policies`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: sopComprehension } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/sop-comprehension`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const stepStatuses = (onboardingState?.stepStatuses as Record<string, string>) || {};
@@ -380,8 +387,11 @@ export default function PortalInductionPage() {
         ? { totalRequired: sopComprehension.totalRequired, outstanding: sopComprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      gate: portal.gate ?? null,
     });
   }, [portal, token, stepStatuses, navigate, policies, inductionSummary, sopComprehension]);
+
+  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
 
   // Slug of the SOP whose comprehension MCQ should pop up. Set after
   // a successful acknowledge of a SOP-tagged induction item; cleared
@@ -520,7 +530,7 @@ export default function PortalInductionPage() {
       groups={groups}
       activeKey="compliance:induction"
     >
-      {content}
+      {stageLocked ? <StageLockedCard label="Induction (Staff Handbook)" /> : content}
       <SopComprehensionDialog
         token={token}
         sopSlug={pendingComprehensionSlug}

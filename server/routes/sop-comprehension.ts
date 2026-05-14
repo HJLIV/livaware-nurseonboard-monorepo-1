@@ -13,7 +13,7 @@ import {
   type SopComprehensionAttempt,
 } from "@shared/schema";
 import { and, eq, desc } from "drizzle-orm";
-import { requireAdmin, validatePortalToken } from "../middleware";
+import { requireAdmin, validatePortalToken, requireNurseStageCompleted } from "../middleware";
 import { logAction } from "../services/audit";
 import {
   SOP_COMPREHENSION_QUESTIONS,
@@ -85,7 +85,7 @@ function buildPortalQuestion(
 
 export function registerSopComprehensionRoutes(app: Express): void {
   // ─── Portal: list questions + per-nurse status ───
-  app.get("/api/portal/:token/sop-comprehension", validatePortalToken, async (req, res) => {
+  app.get("/api/portal/:token/sop-comprehension", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const attempts = await loadAttemptsForNurse(nurseId);
@@ -106,7 +106,7 @@ export function registerSopComprehensionRoutes(app: Express): void {
   });
 
   // ─── Portal: submit answer ───
-  app.post("/api/portal/:token/sop-comprehension/:slug/answer", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/sop-comprehension/:slug/answer", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const slug = String(req.params.slug);

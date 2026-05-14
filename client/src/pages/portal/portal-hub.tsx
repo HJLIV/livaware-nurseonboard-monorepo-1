@@ -415,13 +415,14 @@ export default function PortalHub() {
 
   // Live policies summary so the sidebar item shows accurate progress and
   // the Compliance overview row reflects what's still outstanding.
+  const stageUnlocked = portal?.gate?.stageCompleted !== false;
   const { data: policiesData } = useQuery<{
     policies: Array<unknown>;
     totalRequired: number;
     outstanding: number;
   }>({
     queryKey: [`/api/portal/${token}/policies`],
-    enabled: !!token && !!portal && !chaseStatus?.isChase,
+    enabled: !!token && !!portal && !chaseStatus?.isChase && stageUnlocked,
   });
 
   useEffect(() => {
@@ -455,7 +456,7 @@ export default function PortalHub() {
 
   const { data: sopComprehensionData } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/sop-comprehension`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: declarationsData } = useQuery<{

@@ -23,6 +23,7 @@ import {
   requireAdmin,
   requireSuperAdmin,
   validatePortalToken,
+  requireNurseStageCompleted,
   isSuperAdmin,
 } from "../middleware";
 import { logAction } from "../services/audit";
@@ -347,7 +348,7 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Portal: list policies + per-nurse status ────────────────────
-  app.get("/api/portal/:token/policies", validatePortalToken, async (req, res) => {
+  app.get("/api/portal/:token/policies", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const summary = await buildPolicyListForNurse(nurseId);
@@ -362,7 +363,7 @@ export function registerPolicyRoutes(app: Express) {
   // Same shape as /policies, but only returns the 21 Staff-Handbook
   // items. Nurses use this to read & acknowledge each section before
   // the Skills Arcade unlocks for them.
-  app.get("/api/portal/:token/induction", validatePortalToken, async (req, res) => {
+  app.get("/api/portal/:token/induction", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const summary = await buildPolicyListForNurse(nurseId, { category: "induction" });
@@ -575,7 +576,7 @@ export function registerPolicyRoutes(app: Express) {
   // Used by the portal page to record visible-time, scroll-to-end, and
   // pdf-open signals. The nurse never sees this fire — it's debounced and
   // sent on visibilitychange/pagehide.
-  app.post("/api/portal/:token/policies/:id/read-events", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/policies/:id/read-events", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const policyId = String(req.params.id);
@@ -655,7 +656,7 @@ export function registerPolicyRoutes(app: Express) {
   });
 
   // ─── Portal: acknowledge a policy ────────────────────────────────
-  app.post("/api/portal/:token/policies/:id/acknowledge", validatePortalToken, async (req, res) => {
+  app.post("/api/portal/:token/policies/:id/acknowledge", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     try {
       const nurseId = (req as any).nurseId as string;
       const policyId = String(req.params.id);

@@ -18,6 +18,7 @@ import {
   buildPortalGroups,
   type PortalSidebarGroup,
 } from "@/components/layout/portal-shell";
+import { StageLockedCard } from "@/components/portal/stage-locked-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,11 @@ interface PortalData {
     skillsArcade: { status: string; actionUrl?: string; label: string };
   };
   induction?: { unlocked: boolean; total: number; outstanding: number };
+  gate?: {
+    unlocked: boolean;
+    stageCompleted?: boolean;
+    prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
+  } | null;
   token: string;
 }
 
@@ -290,19 +296,20 @@ export default function PortalSopComprehensionPage() {
     retry: false,
   });
 
+  const stageUnlocked = portal?.gate?.stageCompleted !== false;
   const { data: comprehension, isLoading } = useQuery<ComprehensionResponse>({
     queryKey: [`/api/portal/${token}/sop-comprehension`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: induction } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/induction`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const { data: policies } = useQuery<{ totalRequired: number; outstanding: number }>({
     queryKey: [`/api/portal/${token}/policies`],
-    enabled: !!token,
+    enabled: !!token && stageUnlocked,
   });
 
   const inductionSummary = useMemo(() => {
@@ -332,8 +339,11 @@ export default function PortalSopComprehensionPage() {
         ? { totalRequired: comprehension.totalRequired, outstanding: comprehension.outstanding }
         : null,
       selectSopComprehension: () => navigate(`/portal/sop-comprehension`),
+      gate: portal.gate ?? null,
     });
   }, [portal, token, navigate, policies, inductionSummary, comprehension]);
+
+  const stageLocked = !!portal?.gate && portal.gate.stageCompleted === false;
 
   const content = (
     <div className="space-y-6" data-testid="portal-sop-comprehension">
@@ -403,7 +413,7 @@ export default function PortalSopComprehensionPage() {
       groups={groups}
       activeKey="compliance:sop_comprehension"
     >
-      {content}
+      {stageLocked ? <StageLockedCard label="SOP Comprehension Check" /> : content}
     </PortalShell>
   );
 }

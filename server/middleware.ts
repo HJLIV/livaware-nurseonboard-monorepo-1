@@ -212,6 +212,31 @@ export async function requireInductionAcknowledged(req: Request, res: Response, 
   }
 }
 
+// Gate for employer-facing post-onboarding surfaces (policies, induction
+// pack, SOP comprehension). These must NOT be visible while the nurse is
+// still working through assessment / onboarding — only once an admin has
+// advanced them to the final "Nurse" stage (current_stage = "completed").
+export async function requireNurseStageCompleted(req: Request, res: Response, next: NextFunction) {
+  try {
+    const nurseId = (req as any).nurseId as string | undefined;
+    if (!nurseId) return res.status(401).json({ message: "Not authenticated" });
+    const { getGateState } = await import("./services/onboarding-gate");
+    const state = await getGateState(nurseId);
+    if (!state) return res.status(404).json({ message: "Nurse not found" });
+    if (!state.stageCompleted) {
+      return res.status(403).json({
+        error: "stage_not_completed",
+        message: "Available once your onboarding has been completed and approved by your employer.",
+        gate: state,
+      });
+    }
+    next();
+  } catch (err: any) {
+    console.error("[requireNurseStageCompleted] error:", err.message);
+    return res.status(500).json({ message: "Failed to verify nurse stage" });
+  }
+}
+
 export async function requireOnboardingUnlocked(req: Request, res: Response, next: NextFunction) {
   try {
     const nurseId = (req as any).nurseId as string | undefined;

@@ -6,7 +6,7 @@ import { db } from "../db";
 import { arcadeUsers } from "@shared/schema";
 import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged } from "../middleware";
+import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged, requireNurseStageCompleted } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
@@ -1002,7 +1002,7 @@ export function registerPortalRoutes(app: Express) {
     res.status(201).json({ ...result, emailSent });
   });
 
-  app.get("/api/portal/:token/induction-policies", validatePortalToken, async (req, res) => {
+  app.get("/api/portal/:token/induction-policies", validatePortalToken, requireNurseStageCompleted, async (req, res) => {
     const result = await storage.getInductionPolicies((req as any).nurseId);
     res.json(result);
   });

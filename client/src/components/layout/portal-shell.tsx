@@ -596,6 +596,11 @@ interface JourneyData {
 export interface PortalGateInfo {
   unlocked: boolean;
   mode: "auto" | "manual";
+  // True once an admin has advanced the candidate to the final "Nurse"
+  // stage. Gates the employer-facing post-onboarding surfaces (policies,
+  // induction pack, SOP comprehension) so they aren't visible while the
+  // candidate is still working through assessment / onboarding.
+  stageCompleted?: boolean;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -669,6 +674,11 @@ export function buildPortalGroups({
 }: BuildGroupsArgs): PortalSidebarGroup[] {
   const isLocked = !!gate && gate.unlocked === false;
   const lockedHint = "Locked — finish Assessment first";
+  // A stricter gate that opens only when an admin has advanced the
+  // candidate to the final "Nurse" stage. Drives policies / induction /
+  // SOP comprehension visibility — these are post-onboarding surfaces.
+  const stageLocked = !!gate && gate.stageCompleted === false;
+  const stageLockedHint = "Available once your onboarding has been completed and approved";
 
   // Assessment-group item statuses derive from the gate prerequisites
   // when we have them, otherwise from the existing journey/stepStatus
@@ -802,10 +812,10 @@ export function buildPortalGroups({
         {
           key: "compliance:policies",
           label: "Policies to read & sign",
-          status: isLocked ? ("locked" as PortalItemStatus) : policiesStatus,
-          hint: isLocked ? lockedHint : policiesHint,
-          onClick: isLocked ? undefined : selectPolicies,
-          disabled: isLocked || !selectPolicies,
+          status: isLocked || stageLocked ? ("locked" as PortalItemStatus) : policiesStatus,
+          hint: isLocked ? lockedHint : stageLocked ? stageLockedHint : policiesHint,
+          onClick: isLocked || stageLocked ? undefined : selectPolicies,
+          disabled: isLocked || stageLocked || !selectPolicies,
         },
         {
           key: "compliance:training_docs",
@@ -824,7 +834,7 @@ export function buildPortalGroups({
         {
           key: "compliance:induction",
           label: "Induction (Staff Handbook)",
-          status: isLocked
+          status: isLocked || stageLocked
             ? ("locked" as PortalItemStatus)
             : inductionSummary
               ? inductionSummary.unlocked
@@ -833,13 +843,15 @@ export function buildPortalGroups({
               : "in_progress",
           hint: isLocked
             ? lockedHint
-            : inductionSummary
-              ? inductionSummary.unlocked
-                ? `All ${inductionSummary.total} acknowledged`
-                : `${inductionSummary.outstanding} of ${inductionSummary.total} outstanding`
-              : undefined,
-          disabled: isLocked || !selectInduction,
-          onClick: isLocked ? undefined : selectInduction,
+            : stageLocked
+              ? stageLockedHint
+              : inductionSummary
+                ? inductionSummary.unlocked
+                  ? `All ${inductionSummary.total} acknowledged`
+                  : `${inductionSummary.outstanding} of ${inductionSummary.total} outstanding`
+                : undefined,
+          disabled: isLocked || stageLocked || !selectInduction,
+          onClick: isLocked || stageLocked ? undefined : selectInduction,
         },
         // Task 114 follow-up: SOP comprehension MCQ is no longer a
         // standalone sidebar item. It pops up inline immediately after
