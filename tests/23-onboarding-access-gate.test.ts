@@ -24,7 +24,9 @@ describe("Task 94 — Onboarding access gate", () => {
     const res = await agent.get(`/api/nurses/${nurse.id}/onboarding-access`);
     expect(res.status).toBe(200);
     expect(res.body.unlocked).toBe(false);
-    expect(res.body.mode).toBe("auto");
+    // Re-lock now flips the nurse to manual mode (the only way the gate
+    // stays closed under the post-Task-94 always-open default).
+    expect(res.body.mode).toBe("manual");
     expect(res.body.prerequisites).toEqual({
       examinationCompleted: false,
       competencyDeclared: false,

@@ -766,13 +766,20 @@ export function registerNurseRoutes(app: Express) {
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
     const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
     if (!reason) return res.status(400).json({ message: "A reason is required to re-lock onboarding" });
-    if (!nurse.onboardingUnlockedAt) {
-      return res.status(409).json({ message: "Nurse onboarding is not currently unlocked" });
+    const alreadyLocked =
+      (nurse.onboardingUnlockMode || "auto") === "manual" && !nurse.onboardingUnlockedAt;
+    if (alreadyLocked) {
+      return res.status(409).json({ message: "Nurse onboarding is already locked" });
     }
     const now = new Date();
+    // Re-locking now also flips the nurse to "manual" mode — that's the
+    // only way the gate stays closed under the post-Task-94 always-open
+    // default. Without this, relock would clear unlockedAt but the gate
+    // would immediately be re-evaluated as open.
     await db.update(nurses).set({
       onboardingUnlockedAt: null,
       onboardingUnlockedBy: null,
+      onboardingUnlockMode: "manual",
       onboardingLockedReason: reason,
       updatedAt: now,
     }).where(eq(nurses.id, req.params.id));

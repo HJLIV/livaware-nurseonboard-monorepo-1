@@ -32,11 +32,12 @@ describe("27 — Nurse Availability (task 124)", () => {
     admin = await loginAsAdmin();
   });
 
-  it("T1: portal availability is 403 until nurse is fully onboarded", async () => {
+  it("T1: portal availability is open to nurses at any stage (gate retired)", async () => {
     const nurse = await createTestNurse(admin);
     const link = await createPortalLink(admin, nurse.id, "onboard");
     const res = await anon.get(`/api/portal/${link.token}/availability?month=${thisMonth()}`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.entries).toEqual([]);
   });
 
   it("T2: completed nurse can read window + write cells via portal", async () => {

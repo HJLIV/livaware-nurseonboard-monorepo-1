@@ -1062,17 +1062,17 @@ export interface OnboardingGateNurse {
 
 export function isOnboardingUnlocked(
   nurse: OnboardingGateNurse | null | undefined,
-  ctx: OnboardingGateContext,
+  _ctx: OnboardingGateContext,
 ): boolean {
+  // The Assessment-prerequisite gate has been retired — questionnaires are
+  // open to every nurse by default. The only way the portal can now be
+  // locked is an explicit admin re-lock: switching the nurse to "manual"
+  // mode and clearing onboardingUnlockedAt. The prerequisite checklist is
+  // still surfaced in the admin panel for visibility.
   if (!nurse) return false;
-  // Once the gate has flipped open it stays open until an admin
-  // explicitly re-locks (which clears onboardingUnlockedAt).
-  if (nurse.onboardingUnlockedAt) return true;
-  // Manual mode: only an admin action can flip the gate.
   const mode = nurse.onboardingUnlockMode || "auto";
-  if (mode !== "auto") return false;
-  // Auto mode: all three prerequisites satisfied.
-  return ctx.examinationCompleted && ctx.competencyDeclared && ctx.cvReviewed;
+  if (mode === "manual" && !nurse.onboardingUnlockedAt) return false;
+  return true;
 }
 
 // Step keys whose final "completed" state requires an admin to verify the
