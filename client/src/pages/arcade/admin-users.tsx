@@ -348,7 +348,7 @@ function InviteNurseDialog({ open, onOpenChange }: { open: boolean; onOpenChange
                         <p className="text-xs text-muted-foreground">Temporary password (share securely):</p>
                         <p className="font-mono font-bold text-sm mt-0.5">{result.tempPassword}</p>
                       </div>
-                      <Button size="sm" variant="outline" onClick={copyPassword} data-testid="button-copy-password">
+                      <Button size="sm" variant="outline" onClick={copyPassword} data-testid="button-copy-password" tooltip="Copy the temporary password to your clipboard.">
                         {copied ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
@@ -596,7 +596,7 @@ export default function AdminUsers() {
           <h1 className="font-serif text-2xl font-light tracking-tight" data-testid="text-admin-users-title">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">View user details and training progress</p>
         </div>
-        <SuperAdminGate><Button onClick={() => setShowInviteDialog(true)} data-testid="button-invite-nurse">
+        <SuperAdminGate><Button onClick={() => setShowInviteDialog(true)} data-testid="button-invite-nurse" tooltip="Create a nurse account and email them their login details.">
           <UserPlus className="w-4 h-4 mr-2" />
           Invite Nurse
         </Button></SuperAdminGate>
@@ -686,6 +686,7 @@ export default function AdminUsers() {
                                 e.stopPropagation();
                                 setAssignTarget({ id: user.id, name: user.name });
                               }}
+                              tooltip="Assign training modules to this nurse."
                             >
                               <PlusCircle className="w-3.5 h-3.5" />
                               Assign Modules

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,12 +11,10 @@ import { LayoutGrid, List as ListIcon, ArrowRight } from "lucide-react";
 import type { Candidate } from "@shared/schema";
 
 const PIPELINE_STAGES = [
-  { key: "application",  label: "Application",  dot: "bg-blue-400",    header: "bg-blue-500/10 text-blue-400 border-blue-500/15",   col: "border-blue-500/20",   pillBg: "bg-blue-500/10",    pillText: "text-blue-400" },
-  { key: "verification", label: "Verification", dot: "bg-amber-400",   header: "bg-amber-500/10 text-amber-400 border-amber-500/15", col: "border-amber-500/20",   pillBg: "bg-amber-500/10",   pillText: "text-amber-400" },
-  { key: "competency",   label: "Competency",   dot: "bg-purple-400",  header: "bg-purple-500/10 text-purple-400 border-purple-500/15", col: "border-purple-500/20", pillBg: "bg-purple-500/10",  pillText: "text-purple-400" },
-  { key: "references",   label: "References",   dot: "bg-indigo-400",  header: "bg-indigo-500/10 text-indigo-400 border-indigo-500/15", col: "border-indigo-500/20", pillBg: "bg-indigo-500/10",  pillText: "text-indigo-400" },
-  { key: "induction",    label: "Induction",    dot: "bg-cyan-400",    header: "bg-cyan-500/10 text-cyan-400 border-cyan-500/15",   col: "border-cyan-500/20",   pillBg: "bg-cyan-500/10",    pillText: "text-cyan-400" },
-  { key: "cleared",      label: "Cleared",      dot: "bg-emerald-400", header: "bg-emerald-500/10 text-emerald-400 border-emerald-500/15", col: "border-emerald-500/20", pillBg: "bg-emerald-500/10", pillText: "text-emerald-400" },
+  { key: "preboard",      label: "Pre-assessment", dot: "bg-blue-400",    header: "bg-blue-500/10 text-blue-400 border-blue-500/15",       col: "border-blue-500/20",    pillBg: "bg-blue-500/10",    pillText: "text-blue-400" },
+  { key: "onboard",       label: "Compliance",     dot: "bg-amber-400",   header: "bg-amber-500/10 text-amber-400 border-amber-500/15",    col: "border-amber-500/20",   pillBg: "bg-amber-500/10",   pillText: "text-amber-400" },
+  { key: "skills_arcade", label: "Induction",      dot: "bg-cyan-400",    header: "bg-cyan-500/10 text-cyan-400 border-cyan-500/15",       col: "border-cyan-500/20",    pillBg: "bg-cyan-500/10",    pillText: "text-cyan-400" },
+  { key: "completed",     label: "Training",       dot: "bg-emerald-400", header: "bg-emerald-500/10 text-emerald-400 border-emerald-500/15", col: "border-emerald-500/20", pillBg: "bg-emerald-500/10", pillText: "text-emerald-400" },
 ];
 
 const STAGE_BY_KEY = Object.fromEntries(PIPELINE_STAGES.map(s => [s.key, s])) as Record<string, typeof PIPELINE_STAGES[number]>;
@@ -45,11 +42,6 @@ function KanbanCard({ candidate }: { candidate: Candidate }) {
         {candidate.specialisms && candidate.specialisms.length > 0 && (
           <p className="text-[10px] text-muted-foreground/50 mt-1.5 truncate">{candidate.specialisms.join(", ")}</p>
         )}
-        {(candidate.status === "escalated" || candidate.status === "blocked") && (
-          <div className="mt-2">
-            <StatusBadge status={candidate.status} />
-          </div>
-        )}
       </div>
     </Link>
   );
@@ -59,7 +51,7 @@ function PipelineListRow({ candidate, index }: { candidate: Candidate; index: nu
   const [, navigate] = useLocation();
   const daysInPipeline = Math.floor((Date.now() - new Date(candidate.createdAt).getTime()) / (1000 * 60 * 60 * 24));
   const initials = candidate.fullName.split(" ").map(n => n[0]).join("").slice(0, 2);
-  const stage = STAGE_BY_KEY[candidate.status] ?? null;
+  const stage = STAGE_BY_KEY[candidate.currentStage] ?? null;
   const href = `/candidates/${candidate.id}`;
 
   return (
@@ -94,7 +86,7 @@ function PipelineListRow({ candidate, index }: { candidate: Candidate; index: nu
             <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.pillText}`}>{stage.label}</span>
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground/50">{candidate.status}</span>
+          <span className="text-xs text-muted-foreground/50">{candidate.currentStage}</span>
         )}
       </TableCell>
       <TableCell className="py-2.5">
@@ -114,13 +106,6 @@ function PipelineListRow({ candidate, index }: { candidate: Candidate; index: nu
           </span>
         ) : (
           <span className="text-xs text-muted-foreground/50">—</span>
-        )}
-      </TableCell>
-      <TableCell className="py-2.5">
-        {(candidate.status === "escalated" || candidate.status === "blocked") ? (
-          <StatusBadge status={candidate.status} />
-        ) : (
-          <span className="text-xs text-muted-foreground/40">—</span>
         )}
       </TableCell>
       <TableCell className="py-2.5 w-8">
@@ -154,8 +139,8 @@ export default function PipelinePage() {
   const sortedForList = (candidates || [])
     .slice()
     .sort((a, b) => {
-      const ai = stageOrder.indexOf(a.status);
-      const bi = stageOrder.indexOf(b.status);
+      const ai = stageOrder.indexOf(a.currentStage);
+      const bi = stageOrder.indexOf(b.currentStage);
       const aRank = ai === -1 ? stageOrder.length : ai;
       const bRank = bi === -1 ? stageOrder.length : bi;
       if (aRank !== bRank) return aRank - bRank;
@@ -218,14 +203,13 @@ export default function PipelinePage() {
                     <TableHead>Band</TableHead>
                     <TableHead className="hidden md:table-cell">Days</TableHead>
                     <TableHead className="hidden lg:table-cell">Specialisms</TableHead>
-                    <TableHead>Flag</TableHead>
                     <TableHead className="w-8" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[1, 2, 3, 4, 5].map(i => (
                     <TableRow key={i}>
-                      <TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell>
+                      <TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -264,7 +248,6 @@ export default function PipelinePage() {
                     <TableHead>Band</TableHead>
                     <TableHead className="hidden md:table-cell">Days</TableHead>
                     <TableHead className="hidden lg:table-cell">Specialisms</TableHead>
-                    <TableHead>Flag</TableHead>
                     <TableHead className="w-8" />
                   </TableRow>
                 </TableHeader>
@@ -277,9 +260,9 @@ export default function PipelinePage() {
             </Card>
           )
         ) : (
-          <div className="grid grid-cols-6 gap-4 min-h-[calc(100vh-220px)]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-h-[calc(100vh-220px)]">
             {PIPELINE_STAGES.map((stage, stageIndex) => {
-              const stageCandidates = (candidates || []).filter(c => c.status === stage.key);
+              const stageCandidates = (candidates || []).filter(c => c.currentStage === stage.key);
               return (
                 <div
                   key={stage.key}

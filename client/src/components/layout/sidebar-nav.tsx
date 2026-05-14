@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { useTheme } from "@/components/theme-provider";
@@ -9,7 +9,6 @@ import {
   GitBranch,
   ClipboardCheck,
   ShieldCheck,
-  Gamepad2,
   ScrollText,
   BookOpen,
   Settings,
@@ -31,6 +30,7 @@ import {
   ShieldAlert,
   Activity,
   CalendarDays,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -43,12 +43,14 @@ interface NavItem {
   superAdminOnly?: boolean;
   requiredRoles?: string[];
   badgeKey?: string;
+  variant?: "default" | "action";
 }
 
 interface NavSectionDef {
   key: string;
   title: string;
   items: NavItem[];
+  prominent?: boolean;
 }
 
 const sections: NavSectionDef[] = [
@@ -61,59 +63,104 @@ const sections: NavSectionDef[] = [
     ],
   },
   {
-    key: "journey",
-    title: "Journey",
+    key: "action-needed",
+    title: "Action needed",
+    prominent: true,
     items: [
-      { label: "Applicants", href: "/preboard", icon: ClipboardCheck, badgeKey: "applicants" },
-      { label: "Candidates", href: "/candidates", icon: Users },
-      { label: "Onboarding", href: "/nurses", icon: ShieldCheck },
-      { label: "Skills Arcade", href: "/arcade", icon: Gamepad2 },
+      {
+        label: "Documents to review",
+        href: "/documents/review",
+        icon: AlertTriangle,
+        adminOnly: true,
+        badgeKey: "documentsReview",
+        variant: "action",
+      },
+      {
+        label: "Trainer queue",
+        href: "/arcade/trainer",
+        icon: UserCheck,
+        requiredRoles: ["trainer", "admin"],
+        badgeKey: "trainerQueue",
+        variant: "action",
+      },
     ],
   },
   {
-    key: "clinical",
-    title: "Clinical",
+    key: "people",
+    title: "People",
     items: [
-      { label: "Trainer Queue", href: "/arcade/trainer", icon: UserCheck, badgeKey: "trainerQueue", requiredRoles: ["trainer", "admin"] },
-      { label: "Modules", href: "/arcade/admin/modules", icon: Shield, adminOnly: true },
-      { label: "Reports", href: "/arcade/admin/reports", icon: BarChart3, adminOnly: true },
+      { label: "Nurses", href: "/nurses", icon: Users },
     ],
   },
   {
     key: "reports",
     title: "Reports",
     items: [
-      { label: "Onboarding Matrix", href: "/reports/onboarding", icon: TableProperties, adminOnly: true },
-      { label: "Training Matrix", href: "/reports/training", icon: GraduationCap, adminOnly: true },
-      { label: "Competency Matrix", href: "/reports/competency", icon: Award, adminOnly: true },
-      { label: "SOP Comprehension Matrix", href: "/reports/sop-comprehension", icon: Award, adminOnly: true },
-      { label: "Availability Matrix", href: "/reports/availability", icon: CalendarDays, adminOnly: true },
+      {
+        label: "Onboarding matrix",
+        href: "/reports/onboarding",
+        icon: TableProperties,
+        adminOnly: true,
+      },
+      {
+        label: "Training matrix",
+        href: "/reports/training",
+        icon: GraduationCap,
+        adminOnly: true,
+      },
+      {
+        label: "Competency matrix",
+        href: "/reports/competency",
+        icon: Award,
+        adminOnly: true,
+      },
+      {
+        label: "SOP comprehension",
+        href: "/reports/sop-comprehension",
+        icon: BookOpen,
+        adminOnly: true,
+      },
+      {
+        label: "Availability matrix",
+        href: "/reports/availability",
+        icon: CalendarDays,
+        adminOnly: true,
+      },
+      {
+        label: "Skills Arcade reports",
+        href: "/arcade/admin/reports",
+        icon: BarChart3,
+        adminOnly: true,
+      },
     ],
   },
   {
-    key: "system",
-    title: "System",
+    key: "governance",
+    title: "Governance & system",
     items: [
-      { label: "User Management", href: "/arcade/admin/users", icon: UserCog, adminOnly: true },
+      {
+        label: "Activity dashboard",
+        href: "/super-admin/activity",
+        icon: Activity,
+        superAdminOnly: true,
+      },
       { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },
-      { label: "Documents to Review", href: "/documents/review", icon: AlertTriangle, adminOnly: true, badgeKey: "documentsReview" },
-      { label: "Audit Trail", href: "/audit", icon: ScrollText, adminOnly: true },
+      { label: "Audit trail", href: "/audit", icon: ScrollText, adminOnly: true },
       { label: "Policies", href: "/admin/policies", icon: FileText, adminOnly: true },
-      { label: "Settings", href: "/settings", icon: Settings, adminOnly: true },
-      { label: "Admin Guide", href: "/guide", icon: BookOpen },
-    ],
-  },
-  {
-    key: "super-admin",
-    title: "Super Admin",
-    items: [
-      { label: "Activity Dashboard", href: "/super-admin/activity", icon: Activity, superAdminOnly: true },
-      { label: "Policies", href: "/admin/policies", icon: FileText, superAdminOnly: true },
-      { label: "Platform Settings", href: "/settings", icon: Settings, superAdminOnly: true },
-      { label: "Arcade Modules & Content", href: "/arcade/admin/modules", icon: Shield, superAdminOnly: true },
-      { label: "Chase Email Templates", href: "/reports/training", icon: GraduationCap, superAdminOnly: true },
-      { label: "Admin & Team Users", href: "/arcade/admin/users", icon: UserCog, superAdminOnly: true },
-      { label: "Guide Content", href: "/guide", icon: BookOpen, superAdminOnly: true },
+      {
+        label: "Skills Arcade modules",
+        href: "/arcade/admin/modules",
+        icon: Shield,
+        adminOnly: true,
+      },
+      {
+        label: "User management",
+        href: "/arcade/admin/users",
+        icon: UserCog,
+        adminOnly: true,
+      },
+      { label: "Platform settings", href: "/settings", icon: Settings, adminOnly: true },
+      { label: "Admin guide", href: "/guide", icon: BookOpen },
     ],
   },
 ];
@@ -135,25 +182,50 @@ function saveCollapsed(state: Record<string, boolean>) {
   } catch {}
 }
 
-function isItemActive(item: NavItem, currentPath: string, allFiltered: NavItem[]) {
+function isItemActive(item: NavItem, currentPath: string, currentSearch: string, allFiltered: NavItem[]) {
+  const [itemPath, itemQuery = ""] = item.href.split("?");
+  const itemStage = new URLSearchParams(itemQuery).get("stage");
+
+  if (itemPath === "/nurses") {
+    if (currentPath !== "/nurses" && !currentPath.startsWith("/nurses/")) return false;
+    const currentStage = new URLSearchParams(currentSearch).get("stage");
+    if (itemStage) return currentStage === itemStage;
+    return currentPath === "/nurses" && !currentStage;
+  }
+
   const specificRoutes = ["/arcade/trainer", "/arcade/admin/modules", "/arcade/admin/reports", "/arcade/admin/users"];
-  const longerSiblingMatches = allFiltered.some(
-    (other) =>
+  const longerSiblingMatches = allFiltered.some((other) => {
+    const [otherPath] = other.href.split("?");
+    return (
       other.href !== item.href &&
-      other.href.length > item.href.length &&
-      other.href.startsWith(item.href) &&
-      (currentPath === other.href || currentPath.startsWith(other.href + "/")),
-  );
-  return item.href === "/"
+      otherPath.length > itemPath.length &&
+      otherPath.startsWith(itemPath) &&
+      (currentPath === otherPath || currentPath.startsWith(otherPath + "/"))
+    );
+  });
+  return itemPath === "/"
     ? currentPath === "/"
-    : item.href === "/arcade"
+    : itemPath === "/arcade"
       ? currentPath.startsWith("/arcade") && !specificRoutes.some((r) => currentPath.startsWith(r))
-      : !longerSiblingMatches && currentPath.startsWith(item.href);
+      : !longerSiblingMatches && currentPath.startsWith(itemPath);
+}
+
+function SuperAdminChip() {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-amber-300"
+      title="Super admin only"
+    >
+      <ShieldAlert className="h-2 w-2" />
+      SA
+    </span>
+  );
 }
 
 function NavSection({
   section,
   currentPath,
+  currentSearch,
   role,
   collapsed,
   onToggle,
@@ -161,6 +233,7 @@ function NavSection({
 }: {
   section: NavSectionDef;
   currentPath: string;
+  currentSearch: string;
   role?: string;
   collapsed: boolean;
   onToggle: () => void;
@@ -175,21 +248,36 @@ function NavSection({
   if (filtered.length === 0) return null;
 
   const panelId = `nav-panel-${section.key}`;
+  const prominent = !!section.prominent;
 
   return (
-    <div className="mb-2">
+    <div className={cn("mb-2", prominent && "rounded-lg bg-primary/[0.04] ring-1 ring-primary/15 px-1.5 py-1.5 mb-3")}> 
       <button
         onClick={onToggle}
         aria-expanded={!collapsed}
         aria-controls={panelId}
-        className="w-full flex items-center justify-between px-3 mb-1 py-1 rounded-md hover:bg-sidebar-accent/30 transition-colors duration-150 group"
+        className={cn(
+          "w-full flex items-center justify-between px-2 mb-1 py-1 rounded-md hover:bg-sidebar-accent/30 transition-colors duration-150 group",
+          prominent && "px-1.5",
+        )}
       >
-        <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50 select-none group-hover:text-muted-foreground/70 transition-colors">
+        <span
+          className={cn(
+            "text-[9px] font-bold uppercase tracking-[0.18em] select-none transition-colors flex items-center gap-1.5",
+            prominent
+              ? "text-primary/80 group-hover:text-primary"
+              : "text-muted-foreground/50 group-hover:text-muted-foreground/70",
+          )}
+        >
+          {prominent && <Inbox className="h-3 w-3" />}
           {section.title}
         </span>
         <ChevronDown
           className={cn(
-            "h-3 w-3 text-muted-foreground/40 transition-transform duration-200 group-hover:text-muted-foreground/60",
+            "h-3 w-3 transition-transform duration-200",
+            prominent
+              ? "text-primary/60 group-hover:text-primary"
+              : "text-muted-foreground/40 group-hover:text-muted-foreground/60",
             collapsed && "-rotate-90",
           )}
         />
@@ -200,16 +288,18 @@ function NavSection({
         aria-label={section.title}
         className={cn(
           "overflow-hidden transition-all duration-200 ease-in-out",
-          collapsed ? "max-h-0 opacity-0" : "max-h-[500px] opacity-100",
+          collapsed ? "max-h-0 opacity-0" : "max-h-[600px] opacity-100",
         )}
         aria-hidden={collapsed}
         style={collapsed ? { pointerEvents: "none" as const } : undefined}
       >
         <nav className="flex flex-col gap-0.5">
           {filtered.map((item) => {
-            const isActive = isItemActive(item, currentPath, filtered);
+            const isActive = isItemActive(item, currentPath, currentSearch, filtered);
             const Icon = item.icon;
             const badgeCount = item.badgeKey ? badges[item.badgeKey] : undefined;
+            const isAction = item.variant === "action";
+            const hasOutstanding = badgeCount !== undefined && badgeCount > 0;
 
             return (
               <Link key={item.href} href={item.href} tabIndex={collapsed ? -1 : undefined}>
@@ -218,7 +308,9 @@ function NavSection({
                     "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer",
                     isActive
                       ? "bg-primary/12 text-primary nav-active-indicator"
-                      : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                      : isAction && hasOutstanding
+                        ? "text-foreground hover:bg-primary/10"
+                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                   )}
                 >
                   <Icon
@@ -226,12 +318,22 @@ function NavSection({
                       "h-4 w-4 shrink-0 transition-colors duration-200",
                       isActive
                         ? "text-primary"
-                        : "text-muted-foreground/60 group-hover:text-sidebar-foreground/80",
+                        : isAction && hasOutstanding
+                          ? "text-primary/80"
+                          : "text-muted-foreground/60 group-hover:text-sidebar-foreground/80",
                     )}
                   />
-                  <span className="flex-1 tracking-tight">{item.label}</span>
+                  <span className="flex-1 tracking-tight truncate">{item.label}</span>
+                  {item.superAdminOnly && <SuperAdminChip />}
                   {badgeCount !== undefined && badgeCount > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary/15 text-primary text-[10px] font-semibold leading-none">
+                    <span
+                      className={cn(
+                        "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-semibold leading-none tabular-nums",
+                        isAction
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-primary/15 text-primary",
+                      )}
+                    >
                       {badgeCount > 99 ? "99+" : badgeCount}
                     </span>
                   )}
@@ -248,15 +350,17 @@ function NavSection({
 function CollapsedNavItem({
   item,
   currentPath,
+  currentSearch,
   filteredSiblings,
   badges,
 }: {
   item: NavItem;
   currentPath: string;
+  currentSearch: string;
   filteredSiblings: NavItem[];
   badges: Record<string, number>;
 }) {
-  const isActive = isItemActive(item, currentPath, filteredSiblings);
+  const isActive = isItemActive(item, currentPath, currentSearch, filteredSiblings);
   const Icon = item.icon;
   const badgeCount = item.badgeKey ? badges[item.badgeKey] : undefined;
 
@@ -275,8 +379,15 @@ function CollapsedNavItem({
           >
             <Icon className="h-4 w-4" />
             {badgeCount !== undefined && badgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none ring-2 ring-sidebar">
+              <span
+                className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold leading-none ring-2 ring-sidebar tabular-nums bg-primary text-primary-foreground"
+              >
                 {badgeCount > 9 ? "9+" : badgeCount}
+              </span>
+            )}
+            {item.superAdminOnly && (
+              <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-amber-500 text-[7px] font-bold text-white ring-1 ring-sidebar">
+                <ShieldAlert className="h-2 w-2" />
               </span>
             )}
           </div>
@@ -286,6 +397,9 @@ function CollapsedNavItem({
         {item.label}
         {badgeCount !== undefined && badgeCount > 0 && (
           <span className="ml-1.5 text-muted-foreground">({badgeCount})</span>
+        )}
+        {item.superAdminOnly && (
+          <span className="ml-1.5 text-amber-400 text-[10px] uppercase tracking-wider">SA</span>
         )}
       </TooltipContent>
     </Tooltip>
@@ -300,6 +414,7 @@ export function SidebarNav({
   onToggleCollapsed?: () => void;
 }) {
   const [location] = useLocation();
+  const locationSearch = useSearch();
   const { theme, toggleTheme } = useTheme();
   const [collapsedState, setCollapsedState] = useState<Record<string, boolean>>(loadCollapsed);
 
@@ -339,7 +454,7 @@ export function SidebarNav({
     queryFn: getQueryFn({ on401: "returnNull" }),
     staleTime: 30000,
     retry: false,
-    enabled: authData?.role === "admin" || authData?.role === "trainer",
+    enabled: authData?.role === "trainer" || authData?.role === "admin",
   });
 
   const { data: reviewQueueData } = useQuery<{ total: number } | null>({
@@ -437,6 +552,7 @@ export function SidebarNav({
                       key={`${section.key}-${item.href}-${item.label}`}
                       item={item}
                       currentPath={location}
+                      currentSearch={locationSearch}
                       filteredSiblings={section.items}
                       badges={badges}
                     />
@@ -450,6 +566,7 @@ export function SidebarNav({
                 key={section.key}
                 section={section}
                 currentPath={location}
+                currentSearch={locationSearch}
                 role={role}
                 collapsed={!!collapsedState[section.key]}
                 onToggle={() => toggleSection(section.key)}

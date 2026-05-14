@@ -196,7 +196,7 @@ function AssessmentDetailDialog({
             )}
             {isAdminRole ? (
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => rerunAi.mutate()} disabled={rerunAi.isPending} data-testid="button-rerun-ai">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => rerunAi.mutate()} disabled={rerunAi.isPending} data-testid="button-rerun-ai" tooltip="Re-run the AI analysis on this assessment, replacing the previous result.">
                   {rerunAi.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Re-run AI
                 </Button>
@@ -208,6 +208,7 @@ function AssessmentDetailDialog({
                   disabled={resendEmail.isPending}
                   data-testid="button-resend-email"
                   title={emStatus === "skipped_no_recipient" ? "Set REPORT_EMAIL, then click to send" : undefined}
+                  tooltip="Resend the AI report email for this assessment to the configured recipient."
                 >
                   {resendEmail.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   Resend email
@@ -354,6 +355,7 @@ export default function AdminPreboard() {
                 className="gap-2 font-semibold"
                 onClick={() => backfillMutation.mutate()}
                 disabled={backfillMutation.isPending}
+                tooltip="Advance every applicant who has completed an assessment to the candidate stage."
               >
                 <Zap className="h-4 w-4" />
                 {backfillMutation.isPending ? "Advancing..." : `Advance All Assessed (${assessedPreboardCount})`}
@@ -487,6 +489,7 @@ export default function AdminPreboard() {
                         size="sm"
                         className="flex-1 font-semibold gap-2"
                         onClick={() => { setSelectedAssessment(assessment); setDetailOpen(true); }}
+                        tooltip="Open the full assessment detail with AI analysis and report-delivery status."
                       >
                         <Eye className="h-3.5 w-3.5" />
                         View Detail
@@ -500,6 +503,7 @@ export default function AdminPreboard() {
                             advanceMutation.mutate(String(assessment.nurseId));
                           }}
                           disabled={advanceMutation.isPending}
+                          tooltip="Advance this applicant to the candidate onboarding stage."
                         >
                           <ArrowUpRight className="h-3.5 w-3.5" />
                           Advance

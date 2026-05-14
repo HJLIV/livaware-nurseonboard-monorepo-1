@@ -278,7 +278,7 @@ export default function SuperAdminActivityPage() {
                 data-testid="input-activity-nurse-id"
               />
               {hasFilters && (
-                <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="button-activity-clear">
+                <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="button-activity-clear" tooltip="Reset every filter on this page back to its default.">
                   <X className="h-3 w-3 mr-1" /> Clear filters
                 </Button>
               )}
@@ -393,6 +393,7 @@ export default function SuperAdminActivityPage() {
                   onClick={() => setSelectedActor(null)}
                   className="ml-auto"
                   data-testid="button-close-actor"
+                  tooltip="Close this actor's drill-down panel."
                 >
                   <X className="h-3 w-3 mr-1" /> Close
                 </Button>

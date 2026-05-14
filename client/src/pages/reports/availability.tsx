@@ -154,7 +154,7 @@ function NurseEditor({ nurseId, month, onClose }: { nurseId: string; month: stri
                 </span>
               )}
             </span>
-            <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-editor">
+            <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-close-editor" tooltip="Close the availability editor.">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -279,7 +279,7 @@ export default function AvailabilityMatrixPage() {
               className="h-9 w-56"
               data-testid="input-search-nurses"
             />
-            <Button variant="outline" size="sm" onClick={downloadCsv} data-testid="button-export-csv">
+            <Button variant="outline" size="sm" onClick={downloadCsv} data-testid="button-export-csv" tooltip="Download the current availability view as a CSV file.">
               <Download className="h-4 w-4 mr-1.5" /> CSV
             </Button>
           </div>

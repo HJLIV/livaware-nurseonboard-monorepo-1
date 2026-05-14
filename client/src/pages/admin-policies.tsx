@@ -298,10 +298,11 @@ export default function AdminPoliciesPage() {
             onClick={() => setIncludeInduction((v) => !v)}
             data-testid="button-toggle-induction"
             title="Show or hide the 21 induction handbook sections in this list"
+            tooltip="Show or hide the 21 induction handbook sections in this list."
           >
             {includeInduction ? "Hide induction items" : "Show induction items"}
           </Button>
-          <SuperAdminGate><Button onClick={openCreate} data-testid="button-new-policy">
+          <SuperAdminGate><Button onClick={openCreate} data-testid="button-new-policy" tooltip="Create a new policy nurses must read and acknowledge.">
             <Plus className="h-4 w-4 mr-1.5" />
             New Policy
           </Button></SuperAdminGate>
@@ -363,6 +364,7 @@ export default function AdminPoliciesPage() {
                           onClick={() => setViewingAcks(p)}
                           data-testid={`button-view-acks-${p.id}`}
                           title="View acknowledgements"
+                          tooltip="See which nurses have acknowledged this policy."
                         >
                           <Users className="h-4 w-4" />
                         </Button>
@@ -372,6 +374,7 @@ export default function AdminPoliciesPage() {
                             variant="ghost"
                             onClick={() => openEdit(p)}
                             data-testid={`button-edit-${p.id}`}
+                            tooltip="Edit this policy's title, body, version, or settings."
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -384,6 +387,7 @@ export default function AdminPoliciesPage() {
                               }
                             }}
                             data-testid={`button-delete-${p.id}`}
+                            tooltip="Permanently delete this policy and every acknowledgement of it."
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -426,6 +430,7 @@ export default function AdminPoliciesPage() {
                   onClick={() => importInputRef.current?.click()}
                   disabled={importMutation.isPending}
                   data-testid="button-import-policy"
+                  tooltip="Upload a Word or PDF file to auto-fill the policy title and body."
                 >
                   {importMutation.isPending ? (
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

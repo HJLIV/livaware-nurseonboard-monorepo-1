@@ -185,6 +185,7 @@ export function DeclarationsPanel({ candidateId }: { candidateId: string }) {
                     variant="ghost"
                     onClick={() => setOpenKey(item.key)}
                     data-testid={`button-view-declaration-${item.key}`}
+                    tooltip={item.status === "not_started" ? "Preview the questions the candidate will be asked." : "View the candidate's submitted answers and signature details."}
                   >
                     <Eye className="h-3.5 w-3.5 mr-1" />
                     {item.status === "not_started" ? "Preview" : "View"}
@@ -195,6 +196,7 @@ export function DeclarationsPanel({ candidateId }: { candidateId: string }) {
                       variant="outline"
                       onClick={() => { setReopenKey(item.key); setReopenReason(""); }}
                       data-testid={`button-reopen-declaration-${item.key}`}
+                      tooltip="Let the candidate edit and re-submit. Previous signed version is preserved."
                     >
                       <RotateCcw className="h-3.5 w-3.5 mr-1" /> Re-open
                     </Button>

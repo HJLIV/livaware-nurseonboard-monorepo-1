@@ -213,7 +213,7 @@ export default function DocumentsPage() {
             />
           </div>
           {hasFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-10 gap-1.5 text-muted-foreground">
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-10 gap-1.5 text-muted-foreground" tooltip="Reset every filter on this page back to its default.">
               <X className="h-3.5 w-3.5" />
               Clear
             </Button>

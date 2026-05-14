@@ -211,7 +211,7 @@ function RecentActivity({ logs, isLoading }: { logs?: AuditLog[]; isLoading: boo
           <CardDescription className="text-xs mt-0.5">Latest actions across all modules</CardDescription>
         </div>
         <Link href="/audit">
-          <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground hover:text-foreground" tooltip="Open the full audit trail with all events across the platform.">
             View All
             <ArrowRight className="h-3 w-3" />
           </Button>
@@ -288,21 +288,21 @@ function QuickActions() {
       </CardHeader>
       <CardContent className="space-y-2 pt-4">
         <RegisterNurseDialog trigger={
-          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="default">
+          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="default" tooltip="Register a new applicant and generate their secure portal invitation link.">
             <UserPlus className="h-4 w-4" />
             Register New Applicant
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />
           </Button>
         } />
         <Link href="/preboard">
-          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline">
+          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline" tooltip="Review submitted applicant assessments and advance applicants to candidate stage.">
             <ClipboardCheck className="h-4 w-4" />
             Applicant Admin
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />
           </Button>
         </Link>
         <Link href="/audit">
-          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline">
+          <Button className="w-full justify-start gap-3 h-10 font-medium" variant="outline" tooltip="Browse the full, tamper-evident audit log of every action across the platform.">
             <ScrollText className="h-4 w-4" />
             Audit Trail
             <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-60" />

@@ -202,13 +202,13 @@ export default function ArcadeAdminOverview() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" asChild data-testid="link-modules">
+            <Button variant="outline" asChild data-testid="link-modules" tooltip="Open module management to edit scenarios and content.">
               <Link href="/arcade/admin/modules">
                 <Shield className="w-4 h-4 mr-2" />
                 Manage modules
               </Link>
             </Button>
-            <Button variant="outline" asChild data-testid="link-reports">
+            <Button variant="outline" asChild data-testid="link-reports" tooltip="Open the Skills Arcade reports dashboard.">
               <Link href="/arcade/admin/reports">
                 <BookOpen className="w-4 h-4 mr-2" />
                 Reports
@@ -286,6 +286,7 @@ export default function ArcadeAdminOverview() {
                   size="sm"
                   onClick={() => setAssignTarget(n)}
                   data-testid={`button-assign-${n.nurseId}`}
+                  tooltip="Assign Skills Arcade modules to this nurse."
                 >
                   Assign modules
                   <ArrowRight className="w-3.5 h-3.5 ml-1" />

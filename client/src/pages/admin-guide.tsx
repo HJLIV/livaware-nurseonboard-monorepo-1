@@ -594,7 +594,7 @@ function SOPCard({ section, isExpanded, onToggle }: {
 
           {section.quickLink && (
             <Link href={section.quickLink}>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2" tooltip="Jump straight to this section of the admin platform.">
                 {section.quickLinkLabel} <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
@@ -698,10 +698,10 @@ export default function AdminGuidePage() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs">
+            <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs" tooltip="Open every standard operating procedure on this page.">
               Expand all
             </Button>
-            <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs">
+            <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs" tooltip="Close every standard operating procedure on this page.">
               Collapse all
             </Button>
           </div>

@@ -60,7 +60,7 @@ function AddCandidateDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-add-candidate">
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-add-candidate" tooltip="Skip the applicant stage and add a known nurse straight to onboarding.">
           <Plus className="h-4 w-4" />
           Fast-Track to Onboarding
         </Button>
@@ -159,7 +159,7 @@ export function RunComplianceCheckOnAllButton() {
   return (
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setSummary(null); }}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-compliance-check">
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-compliance-check" tooltip="Run AI document scan across every candidate to extract work history and training.">
           <Sparkles className="h-4 w-4" />
           Run AI Check On All
         </Button>
@@ -190,6 +190,7 @@ export function RunComplianceCheckOnAllButton() {
                 disabled={bulkMutation.isPending}
                 className="gap-2"
                 data-testid="button-confirm-bulk-compliance-check"
+                tooltip="Start the AI document scan across every candidate now."
               >
                 {bulkMutation.isPending ? (
                   <>
@@ -306,7 +307,7 @@ export function SendAllPortalInvitesButton() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-portal-invites">
+        <Button variant="outline" className="gap-2 font-semibold" data-testid="button-bulk-portal-invites" tooltip="Generate and email a stage-scoped portal link to every candidate at once.">
           <Send className="h-4 w-4" />
           Open Portals For All
         </Button>
@@ -351,7 +352,7 @@ export function SendAllPortalInvitesButton() {
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={bulkMutation.isPending} data-testid="button-cancel-bulk">
             Cancel
           </Button>
-          <Button onClick={() => bulkMutation.mutate()} disabled={bulkMutation.isPending} data-testid="button-confirm-bulk">
+          <Button onClick={() => bulkMutation.mutate()} disabled={bulkMutation.isPending} data-testid="button-confirm-bulk" tooltip="Generate (and optionally email) a portal link for every candidate now.">
             {bulkMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Processing...
@@ -639,6 +640,7 @@ function OrphanRecoveryDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                         disabled={!picks[o.filename] || linkMut.isPending}
                         onClick={() => linkMut.mutate({ filename: o.filename, nurseId: picks[o.filename] })}
                         data-testid={`button-link-${o.filename}`}
+                        tooltip="Attach this orphan file to the selected candidate."
                       >
                         <Link2 className="h-3 w-3 mr-1" /> Link
                       </Button>
@@ -648,6 +650,7 @@ function OrphanRecoveryDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                         disabled={discardMut.isPending}
                         onClick={() => discardMut.mutate(o.filename)}
                         data-testid={`button-discard-${o.filename}`}
+                        tooltip="Permanently discard this orphan file. Cannot be undone."
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -718,7 +721,7 @@ function BulkRecoveryDialog({
         {!result && !runMut.isPending && (
           <div className="py-4 flex justify-end gap-2">
             <Button variant="outline" onClick={close}>Cancel</Button>
-            <Button onClick={() => runMut.mutate()} data-testid={`button-run-bulk-${kind}`}>
+            <Button onClick={() => runMut.mutate()} data-testid={`button-run-bulk-${kind}`} tooltip={isSP ? "Pull missing documents from every candidate's SharePoint folder." : "Scan the mailbox and import any candidate attachments not already on file."}>
               <Icon className="h-4 w-4 mr-2" /> Run for all candidates
             </Button>
           </div>
@@ -781,7 +784,7 @@ export function RecoverDocumentsButton() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" data-testid="button-recover-documents">
+          <Button variant="outline" size="sm" data-testid="button-recover-documents" tooltip="Recover missing files from disk, SharePoint or the inbox across all candidates.">
             <FolderSearch className="h-4 w-4 mr-2" />
             Recover Documents
             <ChevronDown className="h-3 w-3 ml-2 opacity-60" />

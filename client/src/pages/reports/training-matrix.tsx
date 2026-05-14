@@ -308,6 +308,7 @@ export default function TrainingMatrixPage() {
                   prepareMutation.mutate({ nurseIds: [c.id], mode: "single" });
                 }}
                 data-testid={`button-notify-${c.id}`}
+                tooltip="Email this nurse about their outstanding training modules."
               >
                 {prepareMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
               </Button>
@@ -501,6 +502,7 @@ function buildToolbarActions(
         onClick={() => prepareMutation.mutate({ nurseIds: bulkIds, mode: "bulk" })}
         title={!outlookConfigured ? "Outlook integration not configured" : "Email every visible candidate with red/amber outstanding training"}
         data-testid="button-notify-all"
+        tooltip="Email every visible nurse with red or amber outstanding training."
       >
         {prepareMutation.isPending ? (
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -516,6 +518,7 @@ function buildToolbarActions(
         onClick={() => scanMutation.mutate()}
         title={!outlookConfigured ? "Outlook integration not configured" : "Scan the shared inbox for replies to chase emails and auto-file confident matches"}
         data-testid="button-scan-replies"
+        tooltip="Scan the shared inbox for chase replies and auto-file matched certificates."
       >
         {scanMutation.isPending ? (
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />

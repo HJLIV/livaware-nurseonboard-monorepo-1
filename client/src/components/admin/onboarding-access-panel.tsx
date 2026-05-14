@@ -195,6 +195,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
                 size="sm"
                 onClick={() => revokeCompliance.mutate()}
                 data-testid="button-revoke-compliance"
+                tooltip="Removes compliance approval and re-locks Induction & Training for this nurse."
               >
                 Revoke approval
               </Button>
@@ -203,6 +204,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
                 size="sm"
                 onClick={() => approveCompliance.mutate()}
                 data-testid="button-approve-compliance"
+                tooltip="Confirms compliance is met and unlocks Induction & Training for this nurse."
               >
                 Approve compliance
               </Button>
@@ -224,6 +226,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
               size="sm"
               onClick={() => reopenCv.mutate()}
               data-testid="button-reopen-cv"
+              tooltip="Marks the CV as not yet reviewed so it returns to the review queue."
             >
               Reopen CV review
             </Button>
@@ -233,6 +236,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
               size="sm"
               onClick={() => markCv.mutate()}
               data-testid="button-mark-cv-reviewed"
+              tooltip="Confirms you've reviewed this candidate's CV — one of the unlock prerequisites."
             >
               Mark CV reviewed
             </Button>
@@ -243,6 +247,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
               size="sm"
               onClick={() => setRelockOpen(true)}
               data-testid="button-relock-onboarding"
+              tooltip="Re-locks onboarding access. Candidate loses Onboarding, Compliance and Skills Arcade until unlocked again."
             >
               Re-lock onboarding
             </Button>
@@ -251,6 +256,7 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
               size="sm"
               onClick={() => unlock.mutate()}
               data-testid="button-unlock-onboarding"
+              tooltip="Manually opens onboarding access for this candidate, bypassing auto-unlock prerequisites."
             >
               Unlock onboarding
             </Button>

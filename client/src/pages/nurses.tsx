@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { AppLayout } from "@/components/layout/app-layout";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +20,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon, ChevronDown, Settings2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -109,7 +110,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetAndClose(); else setOpen(true); }}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="gap-2 font-semibold shadow-md">
+          <Button className="gap-2 font-semibold shadow-md" tooltip="Register a new applicant and generate their assessment invite link.">
             <UserPlus className="h-4 w-4" />
             Register Applicant
           </Button>
@@ -129,7 +130,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Assessment Invite Link</p>
                 <div className="flex items-center gap-2">
                   <Input value={inviteUrl} readOnly className="text-xs font-mono bg-card" />
-                  <Button size="icon" variant="outline" onClick={handleCopy} className="shrink-0">
+                  <Button size="icon" variant="outline" onClick={handleCopy} className="shrink-0" tooltip="Copy the assessment invite link to your clipboard.">
                     {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
@@ -236,6 +237,7 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestor
                       className="h-6 text-[10px] gap-1 px-2"
                       onClick={(e) => { e.stopPropagation(); onAdvance(); }}
                       disabled={isAdvancing}
+                      tooltip="Move this applicant into the Onboarding stage."
                     >
                       {isAdvancing ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ChevronRight className="h-2.5 w-2.5" />}
                       Advance to Onboarding
@@ -249,6 +251,7 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestor
                       onClick={(e) => { e.stopPropagation(); onRestore(); }}
                       disabled={isRestoring}
                       data-testid={`button-restore-nurse-${nurse.id}`}
+                      tooltip="Restore this archived candidate back to the active list."
                     >
                       {isRestoring ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <ArchiveRestore className="h-2.5 w-2.5" />}
                       Restore
@@ -267,6 +270,7 @@ function NurseCard({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRestor
                       }}
                       disabled={isArchiving}
                       data-testid={`button-archive-nurse-${nurse.id}`}
+                      tooltip="Archive this candidate. They can be restored later."
                     >
                       {isArchiving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Archive className="h-2.5 w-2.5" />}
                       Archive
@@ -350,6 +354,7 @@ function NurseListRow({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRes
               className="h-7 text-[11px] gap-1 px-2"
               onClick={(e) => { e.stopPropagation(); onAdvance(); }}
               disabled={isAdvancing}
+              tooltip="Move this applicant into the Onboarding stage."
             >
               {isAdvancing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ChevronRight className="h-3 w-3" />}
               Advance
@@ -363,6 +368,7 @@ function NurseListRow({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRes
               onClick={(e) => { e.stopPropagation(); onRestore(); }}
               disabled={isRestoring}
               data-testid={`button-restore-nurse-${nurse.id}`}
+              tooltip="Restore this archived candidate back to the active list."
             >
               {isRestoring ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArchiveRestore className="h-3 w-3" />}
               Restore
@@ -381,6 +387,7 @@ function NurseListRow({ nurse, onClick, onAdvance, isAdvancing, onArchive, onRes
               }}
               disabled={isArchiving}
               data-testid={`button-archive-nurse-${nurse.id}`}
+              tooltip="Archive this candidate. They can be restored later."
             >
               {isArchiving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Archive className="h-3 w-3" />}
             </Button>
@@ -398,6 +405,14 @@ const NURSE_VIEW_MODE_STORAGE_KEY = "nurses:viewMode";
 export default function NursesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"active" | "archived">("active");
+  const searchString = useSearch();
+  const stageFilter = useMemo(() => {
+    const param = new URLSearchParams(searchString).get("stage");
+    if (param === "preboard" || param === "onboard" || param === "skills_arcade" || param === "completed") {
+      return param;
+    }
+    return "all" as const;
+  }, [searchString]);
   const [, setLocation] = useLocation();
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<NurseViewMode>("cards");
@@ -502,6 +517,7 @@ export default function NursesPage() {
   });
 
   const filtered = nursesList?.filter((nurse) => {
+    if (stageFilter !== "all" && nurse.currentStage !== stageFilter) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -511,6 +527,26 @@ export default function NursesPage() {
   });
 
   const preboardCount = nursesList?.filter(n => n.currentStage === "preboard").length ?? 0;
+
+  const stageCounts = {
+    all: nursesList?.length ?? 0,
+    preboard: preboardCount,
+    onboard: nursesList?.filter(n => n.currentStage === "onboard").length ?? 0,
+    skills_arcade: nursesList?.filter(n => n.currentStage === "skills_arcade" || n.currentStage === "skills-arcade").length ?? 0,
+    completed: nursesList?.filter(n => n.currentStage === "completed").length ?? 0,
+  };
+
+  const setStageFilter = (next: "all" | "preboard" | "onboard" | "skills_arcade" | "completed") => {
+    setLocation(next === "all" ? "/nurses" : `/nurses?stage=${next}`);
+  };
+
+  const stageOptions: Array<{ value: typeof stageFilter; label: string }> = [
+    { value: "all", label: "All" },
+    { value: "preboard", label: "Applicants" },
+    { value: "onboard", label: "Candidates" },
+    { value: "skills_arcade", label: "Skills Arcade" },
+    { value: "completed", label: "Nurses" },
+  ];
 
   return (
     <AppLayout>
@@ -528,21 +564,72 @@ export default function NursesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {preboardCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs"
-                onClick={() => backfillMutation.mutate()}
-                disabled={backfillMutation.isPending}
-              >
-                {backfillMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Advance All Assessed
-              </Button>
-            )}
-            <RunComplianceCheckOnAllButton />
-            <RecoverDocumentsButton />
-            <SendAllPortalInvitesButton />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" data-testid="button-bulk-actions" tooltip="Open bulk actions that apply across every active candidate.">
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Actions
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[420px] p-0">
+                <div className="px-4 py-3 border-b border-border/50">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Bulk actions</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Run platform-wide jobs across all active candidates.</p>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {preboardCount > 0 && (
+                    <div className="flex items-start gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground">Advance all assessed</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Move every applicant who has finished their pre-assessment into the Compliance stage.
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs shrink-0"
+                        onClick={() => backfillMutation.mutate()}
+                        disabled={backfillMutation.isPending}
+                        data-testid="button-advance-all-assessed"
+                        tooltip="Move every applicant who finished their pre-assessment into the Onboarding stage."
+                      >
+                        {backfillMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        Run
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Run AI check on all</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Re-scan every candidate's documents, refresh AI compliance flags and update extracted CV / training data.
+                      </p>
+                    </div>
+                    <RunComplianceCheckOnAllButton />
+                  </div>
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Recover documents</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Re-link orphaned files in SharePoint back to their candidate records.
+                      </p>
+                    </div>
+                    <RecoverDocumentsButton />
+                  </div>
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Open portals for all</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Email a fresh secure portal link to every active candidate who doesn't have a current invite.
+                      </p>
+                    </div>
+                    <SendAllPortalInvitesButton />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <RegisterNurseDialog />
           </div>
         </div>
@@ -560,6 +647,23 @@ export default function NursesPage() {
                   </Badge>
                 )}
               </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Tabs value={stageFilter} onValueChange={(v) => setStageFilter(v as typeof stageFilter)}>
+            <TabsList data-testid="tabs-nurse-stage">
+              {stageOptions.map((opt) => (
+                <TabsTrigger
+                  key={opt.value}
+                  value={opt.value}
+                  data-testid={`tab-stage-${opt.value}`}
+                  className="gap-1.5"
+                >
+                  {opt.label}
+                  <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-semibold tabular-nums ml-0.5">
+                    {stageCounts[opt.value]}
+                  </Badge>
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
           <div className="relative flex-1 max-w-sm">

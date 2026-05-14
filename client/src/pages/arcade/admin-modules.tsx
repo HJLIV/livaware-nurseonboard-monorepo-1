@@ -378,7 +378,7 @@ export default function AdminModules() {
           <p className="text-sm text-muted-foreground mt-1">Manage clinical competency modules and scenarios</p>
         </div>
         <SuperAdminGate>
-          <Button onClick={() => setShowImport(true)} data-testid="button-import-json">
+          <Button onClick={() => setShowImport(true)} data-testid="button-import-json" tooltip="Import a scenario JSON file to create or update modules.">
             <Upload className="w-4 h-4 mr-1" /> Import JSON
           </Button>
         </SuperAdminGate>
@@ -441,6 +441,7 @@ export default function AdminModules() {
                     variant={isExpanded ? "default" : "outline"}
                     onClick={() => setExpandedModuleId(isExpanded ? null : mod.id)}
                     data-testid={`button-view-content-${mod.id}`}
+                    tooltip="Show or hide the scenarios and tasks inside this module."
                   >
                     {isExpanded ? <ChevronUp className="w-3.5 h-3.5 mr-1" /> : <ChevronDown className="w-3.5 h-3.5 mr-1" />}
                     {isExpanded ? "Hide Content" : "View Content"}
@@ -454,6 +455,7 @@ export default function AdminModules() {
                         setShowAssign(true);
                       }}
                       data-testid={`button-assign-${mod.id}`}
+                      tooltip="Assign this module to selected nurses."
                     >
                       <Users className="w-3.5 h-3.5 mr-1" /> Assign to Nurses
                     </Button>

@@ -128,7 +128,7 @@ export default function TrainerRemediation() {
 
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-        <Button variant="ghost" size="sm" onClick={() => setSelectedCaseId(null)} data-testid="button-back-queue">
+        <Button variant="ghost" size="sm" onClick={() => setSelectedCaseId(null)} data-testid="button-back-queue" tooltip="Return to the remediation queue list.">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to queue
         </Button>
 
@@ -285,6 +285,7 @@ export default function TrainerRemediation() {
                     setShowNoteDialog(true);
                   }}
                   data-testid="button-add-note"
+                  tooltip="Record a training note on this remediation case."
                 >
                   <FileText className="w-4 h-4 mr-1" /> Add Training Note
                 </Button>
@@ -294,6 +295,7 @@ export default function TrainerRemediation() {
                     setShowCompleteDialog(true);
                   }}
                   data-testid="button-record-signoff"
+                  tooltip="Record competency sign-off and close this remediation case."
                 >
                   <ClipboardCheck className="w-4 h-4 mr-1" /> Record Sign-off
                 </Button>
@@ -444,7 +446,7 @@ export default function TrainerRemediation() {
               <span>Locked {new Date(c.lockedAt).toLocaleDateString()}</span>
             </div>
             <div className="flex items-center justify-end mt-2">
-              <Button size="sm" variant="ghost" data-testid={`button-view-${c.id}`}>
+              <Button size="sm" variant="ghost" data-testid={`button-view-${c.id}`} tooltip="Open this case to see attempts and add training notes.">
                 View details
               </Button>
             </div>

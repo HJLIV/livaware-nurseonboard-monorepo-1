@@ -699,6 +699,7 @@ function PreboardIntegrityCard() {
                     saveMutation.mutate({ suspectBurstCharThreshold: parsed })
                   }
                   data-testid="button-save-suspect-burst-threshold"
+                  tooltip="Save the new suspect-typing burst threshold for all future preboard assessments."
                 >
                   {saveMutation.isPending ? (
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
@@ -773,7 +774,7 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setPreviewOpen(true)} data-testid="button-preview-announcement">
+          <Button variant="outline" onClick={() => setPreviewOpen(true)} data-testid="button-preview-announcement" tooltip="Preview the announcement email before sending it to anyone.">
             <Mail className="h-4 w-4 mr-2" /> Preview email
           </Button>
           <SuperAdminGate>
@@ -781,6 +782,7 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
               onClick={() => setConfirmOpen(true)}
               disabled={!outlookConfigured || sendMutation.isPending}
               data-testid="button-send-announcement"
+              tooltip="Open the confirmation dialog to broadcast this announcement to every active nurse."
             >
               <Send className="h-4 w-4 mr-2" /> Send to all nurses…
             </Button>
@@ -851,6 +853,7 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
                 onClick={() => sendMutation.mutate()}
                 disabled={sendMutation.isPending}
                 data-testid="button-confirm-send-announcement"
+                tooltip="Send the announcement email to every active nurse right now. Cannot be undone."
               >
                 {sendMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
@@ -1147,6 +1150,7 @@ export default function AdminSettingsPage() {
                 disabled={runNowMutation.isPending || !outlookConfigured}
                 onClick={() => runNowMutation.mutate()}
                 data-testid="button-run-weekly-now"
+                tooltip="Run the weekly training chase now across every nurse with outstanding modules."
               >
                 {runNowMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
@@ -1327,6 +1331,7 @@ export default function AdminSettingsPage() {
         <SuperAdminGate>
           <Button
             disabled={!dirty || !recipientsValid || saveMutation.isPending}
+            tooltip="Save all scheduled-job and recipient changes on this page."
             onClick={() =>
               saveMutation.mutate({
                 weeklyChaseEnabled: draft.weeklyChaseEnabled,

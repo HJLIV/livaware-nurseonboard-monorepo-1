@@ -186,6 +186,7 @@ function PreboardDeliveryPanel({
               onClick={onRerunAi}
               disabled={rerunPending}
               data-testid="button-rerun-ai"
+              tooltip="Re-run the AI analysis on this candidate's preboard answers."
             >
               {rerunPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Re-run AI analysis
@@ -198,6 +199,7 @@ function PreboardDeliveryPanel({
               disabled={resendPending}
               data-testid="button-resend-email"
               title={em === "skipped_no_recipient" ? "Set REPORT_EMAIL, then click to send" : undefined}
+              tooltip="Resend the preboard report email to the configured recipient."
             >
               {resendPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               Resend report email
@@ -277,10 +279,10 @@ function PassportPhotoUpload({ candidate }: { candidate: Candidate }) {
             className="h-32 w-auto rounded-lg border border-border object-cover"
           />
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center gap-2">
-            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()}>
+            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => fileInputRef.current?.click()} tooltip="Upload a new passport photo to replace the existing one.">
               <Upload className="h-3 w-3 mr-1" /> Replace
             </Button>
-            <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => removeMutation.mutate()} disabled={removeMutation.isPending}>
+            <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => removeMutation.mutate()} disabled={removeMutation.isPending} tooltip="Permanently remove this passport photo from the candidate's record.">
               <X className="h-3 w-3 mr-1" /> Remove
             </Button>
           </div>
@@ -479,7 +481,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
       <div data-testid="tab-identity">
         <div className="flex items-center justify-between mb-4">
           <div />
-          <Button variant="outline" size="sm" onClick={startEditing} data-testid="button-edit-identity">
+          <Button variant="outline" size="sm" onClick={startEditing} data-testid="button-edit-identity" tooltip="Edit this candidate's identity and professional details. Changes are audit-logged.">
             <Pencil className="h-3.5 w-3.5 mr-1.5" />
             Edit Details
           </Button>
@@ -540,7 +542,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
             <X className="h-3.5 w-3.5 mr-1.5" />
             Cancel
           </Button>
-          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-edit">
+          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-edit" tooltip="Save your changes to this candidate's identity details.">
             <Save className="h-3.5 w-3.5 mr-1.5" />
             {saveMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
@@ -623,7 +625,7 @@ function LockedInput({ label, value, onChange, locked, onUnlock, type, placehold
             <span className="truncate">{value}</span>
             <LockIcon className="h-3 w-3 text-emerald-500/60 shrink-0 ml-auto" />
           </div>
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={onUnlock} data-testid={testId ? `${testId}-unlock` : undefined}>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-amber-400" onClick={onUnlock} data-testid={testId ? `${testId}-unlock` : undefined} tooltip="Unlock this verified field so you can edit its value.">
             <Unlock className="h-3 w-3 mr-1" />
             Unlock
           </Button>
@@ -893,6 +895,7 @@ function NmcTab({ candidateId }: { candidateId: string }) {
           variant="outline"
           onClick={() => setShowRecheck(true)}
           data-testid="button-recheck-nmc"
+          tooltip="Re-verify this nurse against the NMC register with a fresh PDF upload."
         >
           <Stethoscope className="h-4 w-4 mr-2" />
           Re-verify Registration
@@ -983,6 +986,7 @@ function NmcTab({ candidateId }: { candidateId: string }) {
             })}
             disabled={confirmMutation.isPending || !parsedData.registrationStatus}
             data-testid="button-confirm-nmc"
+            tooltip="Save the parsed NMC verification details to this candidate's record."
           >
             <CheckCircle className="h-4 w-4 mr-2" />
             {confirmMutation.isPending ? "Confirming..." : "Confirm & Save Verification"}
@@ -1026,6 +1030,7 @@ function NmcTab({ candidateId }: { candidateId: string }) {
           size="sm"
           onClick={() => window.open(NMC_URL, "_blank")}
           data-testid="button-open-nmc-register"
+          tooltip="Open the NMC online register in a new tab to verify the PIN."
         >
           <ExternalLink className="h-4 w-4 mr-2" />
           Open NMC Register
@@ -1052,6 +1057,7 @@ function NmcTab({ candidateId }: { candidateId: string }) {
               onClick={() => savePinMutation.mutate()}
               disabled={!pinInput || !!pinError || savePinMutation.isPending || pinInput === resolvedPin}
               data-testid="button-save-nmc-pin"
+              tooltip="Save this NMC PIN to the candidate's record."
             >
               {savePinMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             </Button>
@@ -1224,6 +1230,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
                 })}
                 disabled={!(surname || candidate?.fullName) || !dateOfBirth || liveCheckMutation.isPending}
                 data-testid="button-recheck-dbs"
+                tooltip="Run a live re-check against the DBS Update Service to confirm the certificate is still current."
               >
                 <Shield className="h-4 w-4 mr-2" />
                 {liveCheckMutation.isPending ? "Checking..." : "Run Live DBS Check"}
@@ -1276,6 +1283,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
             size="sm"
             onClick={() => window.open(DBS_UPDATE_URL, "_blank")}
             data-testid="button-open-dbs-update"
+            tooltip="Open the DBS Update Service in a new tab to check the certificate online."
           >
             <ExternalLink className="h-4 w-4 mr-2" />
             DBS Update Service
@@ -1285,6 +1293,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
             size="sm"
             onClick={() => window.open(DBS_URL, "_blank")}
             data-testid="button-open-dbs-info"
+            tooltip="Open the gov.uk DBS certificate guidance in a new tab."
           >
             <ExternalLink className="h-4 w-4 mr-2" />
             DBS Certificate Info
@@ -1338,7 +1347,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
           </>
         )}
         <div className="flex gap-2">
-          <Button onClick={() => verifyMutation.mutate()} disabled={!certNum || verifyMutation.isPending} data-testid="button-verify-dbs">
+          <Button onClick={() => verifyMutation.mutate()} disabled={!certNum || verifyMutation.isPending} data-testid="button-verify-dbs" tooltip="Save these DBS certificate details against the candidate's record.">
             {verifyMutation.isPending ? "Verifying..." : "Record DBS Verification"}
           </Button>
           {updateService && dbsStatus?.configured && (
@@ -1351,6 +1360,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
               })}
               disabled={!certNum || !(surname || candidate?.fullName) || !dateOfBirth || liveCheckMutation.isPending}
               data-testid="button-live-dbs-check"
+              tooltip="Run a live check against the DBS Update Service to confirm certificate status."
             >
               <Shield className="h-4 w-4 mr-2" />
               {liveCheckMutation.isPending ? "Checking..." : "Live DBS Check"}
@@ -1520,7 +1530,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                     )}
                     <DocumentAiIndicator status={doc.aiStatus} />
                     {doc.filePath && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild tooltip="Open this document in a new tab.">
                         <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
@@ -1581,6 +1591,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
               disabled={rtwUploadMutation.isPending}
               className="gap-1.5"
               data-testid="button-upload-rtw"
+              tooltip="Upload a new photo ID or right-to-work document for this candidate."
             >
               {rtwUploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {rtwUploadMutation.isPending ? "Uploading..." : "Choose File & Upload"}
@@ -1635,7 +1646,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                     <div className="flex items-center gap-1 shrink-0">
                       <DocumentAiIndicator status={doc.aiStatus} />
                       {doc.filePath && (
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild tooltip="Open this proof-of-address document in a new tab.">
                           <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
                         </Button>
                       )}
@@ -1683,6 +1694,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                 className="h-8 text-xs gap-1"
                 onClick={() => poaFileRef.current?.click()}
                 disabled={!poaDocDate || poaUploadMutation.isPending}
+                tooltip="Upload a proof-of-address document dated within the last 3 months."
               >
                 {poaUploadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                 Upload Proof
@@ -1827,7 +1839,7 @@ function ProfileTab({ candidate, candidateId }: { candidate: Candidate; candidat
               <Input value={candidate.band?.toString() || ""} disabled className="bg-muted" />
             </div>
           </div>
-          <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} data-testid="button-update-profile">
+          <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} data-testid="button-update-profile" tooltip="Save changes to this candidate's employment, specialisms and band.">
             {updateMutation.isPending ? "Saving..." : "Update Profile"}
           </Button>
         </div>
@@ -2079,7 +2091,7 @@ function TrainingTab({ candidateId, candidateName }: { candidateId: string; cand
         <div className="flex items-center gap-2">
           <label className="cursor-pointer">
             <input type="file" accept=".pdf" className="hidden" onChange={handleCertUpload} disabled={certUploading} data-testid="input-training-cert-upload" />
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={certUploading}>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={certUploading} tooltip="Upload a training certificate PDF — modules will be auto-detected and recorded.">
               <span>
                 {certUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                 Upload Certificate PDF
@@ -2150,7 +2162,7 @@ function TrainingTab({ candidateId, candidateName }: { candidateId: string; cand
                   <td className="px-3 py-2 text-center text-xs text-muted-foreground">{record?.expiryDate || "-"}</td>
                   <td className="px-3 py-2 text-center">
                     {!record && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => addMutation.mutate(mod)} disabled={addMutation.isPending}>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => addMutation.mutate(mod)} disabled={addMutation.isPending} tooltip="Manually record this mandatory training module as completed.">
                         Record
                       </Button>
                     )}
@@ -2573,7 +2585,7 @@ function HealthTab({ candidateId }: { candidateId: string }) {
             data-testid="input-health-conditions"
           />
         </div>
-        <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending} data-testid="button-submit-health">
+        <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending} data-testid="button-submit-health" tooltip="Save the occupational health declaration to this candidate's record.">
           {submitMutation.isPending ? "Submitting..." : "Submit Declaration"}
         </Button>
       </div>
@@ -2732,6 +2744,7 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
                         onClick={() => remindMutation.mutate(ref.id)}
                         disabled={remindMutation.isPending && remindMutation.variables === ref.id}
                         data-testid={`button-resend-reminder-${ref.id}`}
+                        tooltip="Send another reminder email to this referee."
                       >
                         {remindMutation.isPending && remindMutation.variables === ref.id ? (
                           <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Sending...</>
@@ -2884,7 +2897,7 @@ function ReferencesTab({ candidateId }: { candidateId: string }) {
               <Input value={relationship} onChange={e => setRelationship(e.target.value)} placeholder="Line Manager" />
             </div>
           </div>
-          <Button onClick={() => draftMutation.mutate()} disabled={!name || !email || draftMutation.isPending} data-testid="button-draft-reference">
+          <Button onClick={() => draftMutation.mutate()} disabled={!name || !email || draftMutation.isPending} data-testid="button-draft-reference" tooltip="Generate an AI-drafted reference request email for review before sending.">
             {draftMutation.isPending ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Drafting Email...</>
             ) : (
@@ -3073,6 +3086,7 @@ function UploadExistingReferenceCard({ candidateId }: { candidateId: string }) {
             disabled={uploading}
             onClick={() => document.getElementById(`ref-upload-${candidateId}`)?.click()}
             data-testid="button-upload-existing-reference"
+            tooltip="Upload an existing reference letter — AI extracts referee details and answers."
           >
             {uploading ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading & reading...</>
@@ -3217,7 +3231,7 @@ function IndemnityTab({ candidateId, candidateName }: { candidateId: string; can
             <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
         </div>
-        <Button onClick={() => submitMutation.mutate()} disabled={!provider || submitMutation.isPending} data-testid="button-submit-indemnity">
+        <Button onClick={() => submitMutation.mutate()} disabled={!provider || submitMutation.isPending} data-testid="button-submit-indemnity" tooltip="Save these professional indemnity insurance details to the candidate's record.">
           {submitMutation.isPending ? "Recording..." : "Record Indemnity"}
         </Button>
       </div>
@@ -3436,6 +3450,7 @@ function DocumentDeleteButton({ docId, filename, candidateName, onDelete, isDele
         }
       }}
       data-testid={`button-delete-doc-${docId}`}
+      tooltip="Permanently delete this document from the record and disk. Cannot be undone."
     >
       <Trash2 className="h-3.5 w-3.5" />
     </Button>
@@ -3523,6 +3538,7 @@ function DocumentAiIssues({
                       disabled={isConfirming}
                       onClick={() => onConfirmNameMatch(documentId)}
                       data-testid={`button-confirm-name-${documentId}`}
+                      tooltip="Override the name-mismatch flag and confirm this document belongs to the candidate."
                     >
                       <UserCheck className="h-3 w-3" />
                       {isConfirming ? "Confirming..." : "Confirm it's correct"}
@@ -3542,6 +3558,7 @@ function DocumentAiIssues({
                         }
                       }}
                       data-testid={`button-delete-doc-mismatch-${documentId}`}
+                      tooltip="Permanently delete this mismatched document from the record and disk. Cannot be undone."
                     >
                       <Trash2 className="h-3 w-3" />
                       {isDeleting ? "Deleting..." : "Delete document"}
@@ -3714,7 +3731,7 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
             disabled={uploading}
             data-testid="input-smart-upload"
           />
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={uploading}>
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild disabled={uploading} tooltip="Upload any document — AI auto-classifies it and matches training requirements.">
             <span>
               {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {uploading ? "Analysing document..." : "Upload Document"}
@@ -3829,14 +3846,14 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
                     <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
                   )}
                   {doc.sharepointUrl && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild data-testid={`btn-sharepoint-${doc.id}`}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild data-testid={`btn-sharepoint-${doc.id}`} tooltip="Open this document in SharePoint.">
                       <a href={doc.sharepointUrl} target="_blank" rel="noopener noreferrer" title="Open in SharePoint">
                         <Globe className="h-3.5 w-3.5 text-blue-400" />
                       </a>
                     </Button>
                   )}
                   {doc.filePath && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" asChild tooltip="Open this document in a new tab.">
                       <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
@@ -3860,6 +3877,7 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
                     disabled={deleteDocMutation.isPending}
                     data-testid={`button-delete-doc-${doc.id}`}
                     title="Delete document"
+                    tooltip="Permanently delete this document from the record and disk. Cannot be undone."
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -3926,6 +3944,7 @@ function AuditSummaryPanel({ candidateId }: { candidateId: string }) {
           variant="outline"
           size="sm"
           data-testid="button-generate-summary"
+          tooltip="Generate an AI summary of this candidate's audit history."
         >
           {summaryMutation.isPending ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating Summary…</>
@@ -3939,10 +3958,10 @@ function AuditSummaryPanel({ candidateId }: { candidateId: string }) {
           <div className="flex items-center justify-between p-4 pb-2">
             <p className="text-sm font-medium">AI Audit Summary</p>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={handleCopy} data-testid="button-copy-summary">
+              <Button variant="ghost" size="sm" onClick={handleCopy} data-testid="button-copy-summary" tooltip="Copy this AI summary to your clipboard.">
                 {copied ? <><CheckCircle className="h-3.5 w-3.5 mr-1" />Copied</> : <><Copy className="h-3.5 w-3.5 mr-1" />Copy</>}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => { setSummary(null); }} data-testid="button-clear-summary">
+              <Button variant="ghost" size="sm" onClick={() => { setSummary(null); }} data-testid="button-clear-summary" tooltip="Hide this AI summary panel.">
                 Dismiss
               </Button>
             </div>
@@ -4171,6 +4190,7 @@ export default function CandidateDetail() {
                     restoreMutation.isPending ||
                     refillPersonalInfoMutation.isPending
                   }
+                  tooltip="Open candidate actions menu (portal link, archive, restore, refill)."
                 >
                   {(generateLinkMutation.isPending || archiveMutation.isPending || restoreMutation.isPending || refillPersonalInfoMutation.isPending)
                     ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
@@ -4347,6 +4367,7 @@ function CqcComplianceCheck({ candidateId, candidateName }: { candidateId: strin
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
             data-testid="button-run-compliance-check"
+            tooltip="Run an AI CQC Regulation 19 / Schedule 3 compliance check across this candidate's record."
           >
             {mutation.isPending ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" />Analysing…</>
@@ -4564,6 +4585,7 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
                       size="sm"
                       onClick={() => saveReasonMutation.mutate(fastTrackReason)}
                       disabled={saveReasonMutation.isPending || !fastTrackReason.trim()}
+                      tooltip="Save the fast-track reason for this candidate."
                     >
                       {saveReasonMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                     </Button>
@@ -4571,6 +4593,7 @@ function PreboardTab({ candidateId, candidate }: { candidateId: string; candidat
                       size="sm"
                       variant="ghost"
                       onClick={() => { setFastTrackReason(candidate.fastTrackReason || ""); setIsEditingReason(false); }}
+                      tooltip="Discard your changes to the fast-track reason."
                     >
                       <X className="h-3 w-3" />
                     </Button>

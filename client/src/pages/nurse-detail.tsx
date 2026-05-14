@@ -248,6 +248,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
                 className="w-full gap-2"
                 onClick={() => advanceMutation.mutate()}
                 disabled={advanceMutation.isPending}
+                tooltip="Moves this nurse forward to the next lifecycle stage."
               >
                 {advanceMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 Advance to Next Stage
@@ -259,6 +260,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
               className="w-full gap-2"
               onClick={() => portalLinkMutation.mutate(nurse.currentStage === "preboard" ? "preboard" : nurse.currentStage === "onboard" ? "onboard" : "hub")}
               disabled={portalLinkMutation.isPending}
+              tooltip="Creates a secure portal link for this nurse's current stage that you can share."
             >
               {portalLinkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
               Generate Portal Link
@@ -269,7 +271,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">Portal Link</p>
               <div className="flex items-center gap-2">
                 <Input value={portalUrl} readOnly className="text-xs font-mono h-8 bg-card" />
-                <Button size="icon" variant="ghost" onClick={handleCopy} className="shrink-0 h-8 w-8">
+                <Button size="icon" variant="ghost" onClick={handleCopy} className="shrink-0 h-8 w-8" tooltip="Copy this portal link to the clipboard.">
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                 </Button>
               </div>
