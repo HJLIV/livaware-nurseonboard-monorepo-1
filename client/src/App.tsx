@@ -115,6 +115,37 @@ function SuperAdminRoute({ component: Component }: { component: React.ComponentT
   return <Component />;
 }
 
+// Root-only portal session check: when a nurse with an active portal
+// session lands on "/", send them to /portal — even if they happen to
+// also have an admin cookie. Per the task brief, portal redirect takes
+// precedence on the bare landing page only; deeper admin routes are
+// untouched. Returns null while probing so we don't briefly flash the
+// dashboard before redirecting.
+function RootRedirectGate({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useQuery<{ authenticated: boolean } | null>({
+    queryKey: ["/api/portal/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 0,
+    retry: false,
+  });
+  // Re-resolve the per-nurse portal URL each time we land on "/" with a
+  // portal session, so the nurse follows whatever their freshest portal
+  // link points at (admin invites and chase emails can rotate it).
+  const { data: portalUrl, isLoading: urlLoading } = useQuery<{ url: string } | null>({
+    queryKey: ["/api/portal/auth/portal-url"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: !!data?.authenticated,
+    staleTime: 0,
+    retry: false,
+  });
+  if (isLoading) return <LoadingSpinner />;
+  if (data?.authenticated) {
+    if (urlLoading) return <LoadingSpinner />;
+    return <Redirect to={portalUrl?.url || "/portal"} />;
+  }
+  return <>{children}</>;
+}
+
 function AuthenticatedRouter() {
   const queryClient = useQueryClient();
   const { data: authData, isLoading } = useQuery<{ authenticated: boolean; username: string; role?: string } | null>({
@@ -174,8 +205,10 @@ function AuthenticatedRouter() {
         <Route>
           {isAuthenticated ? (
             <Switch>
-              {/* Core dashboard */}
-              <Route path="/" component={Dashboard} />
+              {/* Core dashboard — gated so a nurse with an active portal
+                  session is redirected to /portal even if they also have
+                  an admin cookie (per task #131). */}
+              <Route path="/">{() => <RootRedirectGate><Dashboard /></RootRedirectGate>}</Route>
 
               {/* Nurse management */}
               <Route path="/nurses" component={NursesPage} />

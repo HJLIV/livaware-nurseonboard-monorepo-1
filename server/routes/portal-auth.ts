@@ -1,8 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
-import { and, eq, isNull } from "drizzle-orm";
+import crypto from "crypto";
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { portalSessions } from "@shared/schema";
+import { portalLinks, portalSessions } from "@shared/schema";
 import { logAction } from "../services/audit";
 import {
   PORTAL_SESSION_COOKIE,
@@ -37,6 +38,40 @@ const verifyCodeIpLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many code attempts, please try again later" },
 });
+
+// Resolve the canonical, per-nurse portal URL. We prefer the nurse's
+// freshest non-expired, non-claimed portalLinks token (so the URL keeps
+// matching whatever the most recent admin invite / chase email handed
+// out). If none exists, mint a fresh one good for 30 days. Always
+// returns a relative URL so it works across whichever live domain the
+// app happens to be served from at the moment.
+async function resolveNursePortalUrl(nurseId: string): Promise<string> {
+  const now = new Date();
+  const [fresh] = await db
+    .select()
+    .from(portalLinks)
+    .where(
+      and(
+        eq(portalLinks.nurseId, nurseId),
+        gt(portalLinks.expiresAt, now),
+        isNull(portalLinks.claimedAt),
+      ),
+    )
+    .orderBy(desc(portalLinks.createdAt))
+    .limit(1);
+  if (fresh) return `/portal/${fresh.token}`;
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  await db.insert(portalLinks).values({
+    nurseId,
+    token,
+    module: "hub",
+    expiresAt,
+    createdBy: "portal_auth",
+  });
+  return `/portal/${token}`;
+}
 
 export function registerPortalAuthRoutes(app: Express) {
   // POST /api/portal/auth/request-code { email }
@@ -130,11 +165,23 @@ export function registerPortalAuthRoutes(app: Express) {
       sessionId: session.id,
       ip: getRequestIp(req),
     });
+    const portalUrl = await resolveNursePortalUrl(nurse.id);
     return res.json({
       ok: true,
       nurse: { id: nurse.id, fullName: nurse.fullName, email: nurse.email },
       sessionExpiresAt: session.expiresAt.toISOString(),
+      portalUrl,
     });
+  });
+
+  // GET /api/portal/auth/portal-url — returns the canonical portal URL
+  // for the currently signed-in nurse. Re-resolved on every call so a
+  // newer admin invite / chase-email link is picked up automatically.
+  app.get("/api/portal/auth/portal-url", async (req, res) => {
+    const loaded = await loadPortalSessionFromRequest(req);
+    if (!loaded) return res.status(401).json({ message: "Portal sign-in required" });
+    const url = await resolveNursePortalUrl(loaded.nurse.id);
+    return res.json({ url });
   });
 
   // GET /api/portal/auth/me — returns the current portal session's nurse.

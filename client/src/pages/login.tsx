@@ -4,24 +4,57 @@ import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { LogIn, ArrowRight, Activity, ShieldCheck, Gamepad2, ClipboardCheck } from "lucide-react";
+import { LogIn, ArrowRight, Activity, ShieldCheck, Gamepad2, ClipboardCheck, GraduationCap, CalendarCheck, FileCheck2 } from "lucide-react";
+import { NurseSignIn } from "@/components/auth/nurse-sign-in";
 
 interface LoginPageProps {
   onLogin: () => void;
 }
 
-const features = [
+const adminFeatures = [
   { icon: ClipboardCheck, label: "Applicant Assessment", desc: "AI-powered credential verification" },
   { icon: ShieldCheck,   label: "Candidate Onboarding", desc: "Document checks & compliance tracking" },
   { icon: Gamepad2,      label: "Skills Arcade",          desc: "Clinical competency assessments" },
   { icon: Activity,      label: "Audit Trail",           desc: "Full lifecycle activity logging" },
 ];
 
+const nurseFeatures = [
+  { icon: FileCheck2,    label: "Compliance",     desc: "Upload your documents & track what's outstanding" },
+  { icon: GraduationCap, label: "Training",        desc: "Complete your mandatory modules at your own pace" },
+  { icon: Gamepad2,      label: "Skills Arcade",   desc: "Practise clinical scenarios and earn competencies" },
+  { icon: CalendarCheck, label: "Availability",    desc: "Tell us when you're free to work, week by week" },
+];
+
+const adminHero = {
+  eyebrow: "Clinical Workforce Platform",
+  title: (
+    <>
+      Every nurse's<br />
+      <em className="text-shimmer not-italic">journey,</em><br />
+      perfected.
+    </>
+  ),
+  blurb: "From first application to full competency — a single platform that guides, tracks, and elevates your clinical workforce.",
+};
+
+const nurseHero = {
+  eyebrow: "Your nurse portal",
+  title: (
+    <>
+      Your career,<br />
+      <em className="text-shimmer not-italic">all in</em><br />
+      one place.
+    </>
+  ),
+  blurb: "Stay on top of your compliance, finish your training, sharpen your clinical skills, and share your availability — all from one secure portal.",
+};
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [tab, setTab] = useState<"admin" | "nurse">("admin");
   const { toast } = useToast();
 
   const { data: ssoStatus } = useQuery<{ enabled: boolean }>({
@@ -31,6 +64,32 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   });
 
   const ssoEnabled = ssoStatus?.enabled ?? false;
+
+  // If a nurse already has an active portal session, send them straight
+  // to their portal instead of showing the unified login screen. We check
+  // here (rather than at App.tsx) so the standalone /portal/sign-in page
+  // keeps its own existing redirect behaviour.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/portal/auth/me", { credentials: "include" });
+        if (cancelled || !r.ok) return;
+        // Re-resolve the nurse's personal portal URL on each visit so
+        // we follow whatever their freshest portal link points at.
+        let target = "/portal";
+        try {
+          const r2 = await fetch("/api/portal/auth/portal-url", { credentials: "include" });
+          if (r2.ok) {
+            const j2 = await r2.json().catch(() => ({}));
+            if (typeof j2?.url === "string" && j2.url) target = j2.url;
+          }
+        } catch { /* ignore — fall back to /portal */ }
+        if (!cancelled) window.location.assign(target);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -93,24 +152,22 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         {/* Hero text */}
-        <div className="relative space-y-6 animate-fade-in-up animate-delay-100">
+        <div key={tab} className="relative space-y-6 animate-fade-in-up animate-delay-100">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[hsl(39_45%_61%)] mb-4">
-              Clinical Workforce Platform
+              {(tab === "nurse" ? nurseHero : adminHero).eyebrow}
             </p>
             <h1 className="font-serif text-5xl font-light text-white leading-[1.1] tracking-tight">
-              Every nurse's<br />
-              <em className="text-shimmer not-italic">journey,</em><br />
-              perfected.
+              {(tab === "nurse" ? nurseHero : adminHero).title}
             </h1>
           </div>
           <p className="text-base text-white/50 max-w-sm leading-relaxed font-light">
-            From first application to full competency — a single platform that guides, tracks, and elevates your clinical workforce.
+            {(tab === "nurse" ? nurseHero : adminHero).blurb}
           </p>
 
           {/* Feature list */}
           <div className="grid grid-cols-1 gap-3 pt-2">
-            {features.map((f, i) => (
+            {(tab === "nurse" ? nurseFeatures : adminFeatures).map((f, i) => (
               <div
                 key={f.label}
                 className={`flex items-center gap-3 animate-fade-in-up animate-delay-${(i + 2) * 100}`}
@@ -146,95 +203,114 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="w-full max-w-sm animate-fade-in-up animate-delay-100">
 
           {/* Heading */}
-          <div className="mb-8">
+          <div className="mb-6">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-2">Livaware</p>
             <h2 className="font-serif text-3xl font-light text-foreground tracking-tight mb-2">
-              Welcome back
+              {tab === "nurse" ? "Welcome, nurse" : "Welcome back"}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Sign in to access your dashboard
+              {tab === "nurse"
+                ? "Sign in to your portal to keep your record up to date"
+                : "Choose how you sign in"}
             </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="username" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Username
-              </Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                autoFocus
-                className="h-11 bg-background border-border/80 focus:border-primary transition-colors"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                className="h-11 bg-background border-border/80 focus:border-primary transition-colors"
-              />
-            </div>
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "admin" | "nurse")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="admin" data-testid="tab-admin">Admin / staff</TabsTrigger>
+              <TabsTrigger value="nurse" data-testid="tab-nurse">I'm a nurse</TabsTrigger>
+            </TabsList>
 
-            <Button
-              type="submit"
-              className="w-full h-11 gap-2 font-semibold tracking-wide mt-2"
-              disabled={loginMutation.isPending || !username.trim() || !password.trim()}
-            >
-              {loginMutation.isPending ? (
-                <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-              ) : (
+            <TabsContent value="admin" className="mt-0">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="username" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    Username
+                  </Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Enter your username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    className="h-11 bg-background border-border/80 focus:border-primary transition-colors"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="h-11 bg-background border-border/80 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-11 gap-2 font-semibold tracking-wide mt-2"
+                  disabled={loginMutation.isPending || !username.trim() || !password.trim()}
+                >
+                  {loginMutation.isPending ? (
+                    <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Sign In
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              {ssoEnabled && (
                 <>
-                  Sign In
-                  <ArrowRight className="h-4 w-4" />
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-border/50" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-11 gap-3 font-medium"
+                    onClick={() => {
+                      // Navigate the current tab so that, after Microsoft redirects
+                      // back to "/", the user lands on the authenticated app
+                      // instead of being left on the login screen in a stale tab.
+                      window.location.assign("/api/auth/microsoft/login");
+                    }}
+                  >
+                    <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                      <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                      <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                      <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+                    </svg>
+                    Sign in with Microsoft 365
+                  </Button>
                 </>
               )}
-            </Button>
-          </form>
+            </TabsContent>
 
-          {ssoEnabled && (
-            <>
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border/50" />
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
-                </div>
+            <TabsContent value="nurse" className="mt-0">
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Sign in with your email — we'll send you a 6-digit code.
+                </p>
               </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-11 gap-3 font-medium"
-                onClick={() => {
-                  // Navigate the current tab so that, after Microsoft redirects
-                  // back to "/", the user lands on the authenticated app
-                  // instead of being left on the login screen in a stale tab.
-                  window.location.assign("/api/auth/microsoft/login");
-                }}
-              >
-                <svg viewBox="0 0 21 21" className="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
-                  <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
-                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
-                  <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
-                </svg>
-                Sign in with Microsoft 365
-              </Button>
-            </>
-          )}
+              <NurseSignIn onSuccess={(url) => window.location.assign(url || "/portal")} />
+            </TabsContent>
+          </Tabs>
 
           {/* Divider */}
           <div className="relative my-8">
