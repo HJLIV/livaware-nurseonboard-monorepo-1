@@ -27,6 +27,7 @@ Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) com
 - **Training chase** (`server/training-notifications.ts`, `server/training-chase-scheduler.ts`) — Outstanding-module computation, editable subject/body templates with tokens (`{{NAME}} {{MODULES_LIST}} {{COUNT}} {{PORTAL_URL}} {{PORTAL_EXPIRY}}`), per-recipient secure 30-day portal link, mailbox auto-ingest of replies (high-confidence → auto-attach; low-confidence → flagged review queue). Scheduled weekly bulk + 30-min reply scan (toggleable via `/settings`).
 - **Policies** (`server/routes/policies.ts`) — Admin CRUD; bumping version forces re-acknowledgement. Nurse page: `/portal/policies/:token`.
 - **Super-admin Activity Dashboard** (`server/routes/super-admin.ts`) — Live audit feed + per-actor leaderboard at `/super-admin/activity`.
+- **Announcements** (`server/announcements.ts`, `server/routes/announcements.ts`) — Two one-off broadcast emails the Super Admin can fire from `/settings`: the **Platform update announcement** (heads-up that Skills Arcade / Policies / Availability / Invoicing are all live) and the **Platform launch & invoicing announcement** (introduces the portal, embeds the explainer video link when `PLATFORM_VIDEO_URL` is set, hard CTA to `https://onboard.livaware.co.uk`, informs nurses that all invoices must be submitted via the portal from 1 June 2026 because the legacy invoicing system is deprecated end of May 2026). Subject + HTML + plain-text body are stored in the **`emailTemplates`** table (key, subject, bodyHtml, bodyText, updatedBy/At) and seeded on first read. SAs edit them in `/settings` via `EmailTemplateEditor` (PUT `/api/admin/email-templates/:key`, super-admin only); preview/send always render through `renderAnnouncement(key, tokens)` with mustache-lite tokens (`{{NAME}}`, `{{PORTAL_URL}}`, `{{VIDEO_URL}}`) and conditional `{{#VIDEO_URL}}…{{/VIDEO_URL}}` blocks. Both share the same recipient filter (`!!email && !!fullName && currentStage !== "withdrawn"`), Microsoft Graph sender, per-recipient try/catch, and write per-recipient + summary audit rows under module `announcements` (actions `platform_update_announcement_sent`, `launch_announcement_sent`, `launch_announcement_run`, `email_template_updated`).
 
 ## Frontend Pages
 
@@ -52,6 +53,7 @@ Sidebar groups (admin) live in `client/src/components/layout/sidebar-nav.tsx`. P
 - `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` / `SUPER_ADMIN_EMAIL`
 - `OPENAI_API_KEY` (or `AI_INTEGRATIONS_OPENAI_API_KEY`), `ANTHROPIC_API_KEY`
 - `REPORT_EMAIL` (preboard reports), `INVOICE_RECIPIENT_EMAIL` (default `invoices@livaware.co.uk`)
+- `PLATFORM_VIDEO_URL` (optional — explainer video URL embedded in the launch announcement; block hidden when unset), `PORTAL_PUBLIC_URL` (optional, defaults to `https://onboard.livaware.co.uk`)
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `TEAM_USERNAME`, `TEAM_PASSWORD`
 
 ## Design System

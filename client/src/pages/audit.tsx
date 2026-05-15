@@ -35,6 +35,7 @@ const moduleStyles: Record<string, { badge: string; dot: string }> = {
   onboard:        { badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/15", dot: "bg-emerald-400" },
   skills_arcade: { badge: "bg-amber-500/10 text-amber-400 border-amber-500/15",   dot: "bg-amber-400" },
   portal:         { badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/15",       dot: "bg-cyan-400" },
+  announcements:  { badge: "bg-pink-500/10 text-pink-400 border-pink-500/15",       dot: "bg-pink-400" },
 };
 
 const moduleOptions = [
@@ -44,6 +45,7 @@ const moduleOptions = [
   { value: "onboard", label: "Candidate" },
   { value: "skills_arcade", label: "Skills Arcade" },
   { value: "portal", label: "Portal" },
+  { value: "announcements", label: "Announcements" },
 ];
 
 const actionOptions = [

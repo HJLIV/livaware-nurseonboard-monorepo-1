@@ -28,6 +28,7 @@ import {
   type EmploymentHistory, type InsertEmploymentHistory,
   type EducationHistory, type InsertEducationHistory,
   type EqualOpportunities, type InsertEqualOpportunities,
+  emailTemplates, type EmailTemplate, type InsertEmailTemplate,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -80,6 +81,9 @@ export interface IStorage {
 
   getAuditLogs(candidateId?: string): Promise<AuditLog[]>;
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+
+  getEmailTemplate(key: string): Promise<EmailTemplate | undefined>;
+  upsertEmailTemplate(data: InsertEmailTemplate): Promise<EmailTemplate>;
 
   getDashboardStats(): Promise<{
     total: number;
@@ -391,6 +395,29 @@ export class DatabaseStorage implements IStorage {
   async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
     const [result] = await db.insert(auditLogs).values(data).returning();
     return result;
+  }
+
+  async getEmailTemplate(key: string): Promise<EmailTemplate | undefined> {
+    const [row] = await db.select().from(emailTemplates).where(eq(emailTemplates.key, key)).limit(1);
+    return row;
+  }
+
+  async upsertEmailTemplate(data: InsertEmailTemplate): Promise<EmailTemplate> {
+    const [row] = await db
+      .insert(emailTemplates)
+      .values({ ...data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: emailTemplates.key,
+        set: {
+          subject: data.subject,
+          bodyHtml: data.bodyHtml,
+          bodyText: data.bodyText,
+          updatedBy: data.updatedBy ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
   }
 
   async getDashboardStats() {

@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
 // Onboard enums
@@ -1530,6 +1530,24 @@ export const invoiceSubmissionSchema = z.object({
 });
 
 export type InvoiceSubmission = z.infer<typeof invoiceSubmissionSchema>;
+
+// ==================== EMAIL TEMPLATES ====================
+// Editable subject + HTML/text bodies for one-off broadcast announcements
+// (and any future templated email). Tokens supported by the renderer:
+//   {{NAME}}, {{PORTAL_URL}}, {{VIDEO_URL}}
+// Conditional block: {{#VIDEO_URL}}...{{/VIDEO_URL}} is removed when the
+// VIDEO_URL token is empty.
+export const emailTemplates = pgTable("email_templates", {
+  key: varchar("key").primaryKey(),
+  subject: text("subject").notNull(),
+  bodyHtml: text("body_html").notNull(),
+  bodyText: text("body_text").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: text("updated_by"),
+});
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ updatedAt: true });
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;

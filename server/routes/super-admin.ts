@@ -25,7 +25,7 @@ const groupKeySql = sql<string>`
   END
 `;
 
-type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "portal_auth" | "system" | "availability" | "invoices";
+type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "portal_auth" | "system" | "availability" | "invoices" | "announcements";
 const VALID_MODULES: ReadonlySet<AuditModule> = new Set<AuditModule>([
   "preboard",
   "onboard",
@@ -36,6 +36,7 @@ const VALID_MODULES: ReadonlySet<AuditModule> = new Set<AuditModule>([
   "system",
   "availability",
   "invoices",
+  "announcements",
 ]);
 function isAuditModule(value: string): value is AuditModule {
   return (VALID_MODULES as ReadonlySet<string>).has(value);

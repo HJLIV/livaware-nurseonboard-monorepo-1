@@ -70,6 +70,7 @@ const MODULE_OPTIONS = [
   { value: "skills_arcade", label: "Skills Arcade" },
   { value: "portal", label: "Portal" },
   { value: "system", label: "System" },
+  { value: "announcements", label: "Announcements" },
 ];
 
 const moduleStyles: Record<string, { badge: string; dot: string }> = {
@@ -79,6 +80,7 @@ const moduleStyles: Record<string, { badge: string; dot: string }> = {
   skills_arcade: { badge: "bg-amber-500/10 text-amber-400 border-amber-500/15", dot: "bg-amber-400" },
   portal: { badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/15", dot: "bg-cyan-400" },
   system: { badge: "bg-rose-500/10 text-rose-400 border-rose-500/15", dot: "bg-rose-400" },
+  announcements: { badge: "bg-pink-500/10 text-pink-400 border-pink-500/15", dot: "bg-pink-400" },
 };
 
 function timeAgo(iso: string) {

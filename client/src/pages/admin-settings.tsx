@@ -721,6 +721,12 @@ interface AnnouncementPreview {
   html: string;
   text: string;
   recipientCount: number;
+  portalUrl?: string;
+}
+
+interface LaunchAnnouncementPreview extends AnnouncementPreview {
+  videoUrl: string | null;
+  portalUrl: string;
 }
 
 interface AnnouncementSendResult {
@@ -729,15 +735,167 @@ interface AnnouncementSendResult {
   failed: { nurseId: string; email: string; error: string }[];
 }
 
+interface EmailTemplateRow {
+  key: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+  updatedAt: string;
+  updatedBy: string | null;
+  defaults: { subject: string; bodyHtml: string; bodyText: string };
+}
+
+function EmailTemplateEditor({
+  templateKey,
+  open,
+  onOpenChange,
+  previewQueryKey,
+  tokensHelp,
+}: {
+  templateKey: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  previewQueryKey: string;
+  tokensHelp: string;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: tpl, isLoading } = useQuery<EmailTemplateRow>({
+    queryKey: [`/api/admin/email-templates/${templateKey}`],
+    enabled: open,
+  });
+  const [subject, setSubject] = useState("");
+  const [bodyHtml, setBodyHtml] = useState("");
+  const [bodyText, setBodyText] = useState("");
+
+  useEffect(() => {
+    if (tpl) {
+      setSubject(tpl.subject);
+      setBodyHtml(tpl.bodyHtml);
+      setBodyText(tpl.bodyText);
+    }
+  }, [tpl]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/admin/email-templates/${templateKey}`, {
+        subject,
+        bodyHtml,
+        bodyText,
+      });
+      return (await res.json()) as EmailTemplateRow;
+    },
+    onSuccess: () => {
+      toast({ title: "Template saved", description: "Future sends will use the updated copy." });
+      qc.invalidateQueries({ queryKey: [`/api/admin/email-templates/${templateKey}`] });
+      qc.invalidateQueries({ queryKey: [previewQueryKey] });
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const resetToDefault = () => {
+    if (!tpl) return;
+    setSubject(tpl.defaults.subject);
+    setBodyHtml(tpl.defaults.bodyHtml);
+    setBodyText(tpl.defaults.bodyText);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit email template</DialogTitle>
+          <DialogDescription>{tokensHelp}</DialogDescription>
+        </DialogHeader>
+        {isLoading || !tpl ? (
+          <div className="py-12 flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-subject">Subject</Label>
+              <Input
+                id="tpl-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                data-testid="input-template-subject"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-html">HTML body</Label>
+              <Textarea
+                id="tpl-html"
+                value={bodyHtml}
+                onChange={(e) => setBodyHtml(e.target.value)}
+                rows={18}
+                className="font-mono text-xs"
+                data-testid="textarea-template-html"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-text">Plain-text body</Label>
+              <Textarea
+                id="tpl-text"
+                value={bodyText}
+                onChange={(e) => setBodyText(e.target.value)}
+                rows={10}
+                className="font-mono text-xs"
+                data-testid="textarea-template-text"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Last updated by <strong>{tpl.updatedBy || "—"}</strong>{" "}
+              {tpl.updatedAt ? `at ${new Date(tpl.updatedAt).toLocaleString()}` : ""}
+            </p>
+            <div className="flex justify-between gap-2 pt-2">
+              <Button
+                variant="ghost"
+                onClick={resetToDefault}
+                disabled={save.isPending}
+                tooltip="Reload the built-in default copy into these fields (does not save until you press Save)."
+              >
+                Reset to default
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={save.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => save.mutate()}
+                  disabled={save.isPending || !subject || !bodyHtml || !bodyText}
+                  data-testid="button-save-template"
+                >
+                  {save.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-2" /> Save template</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: boolean }) {
   const { toast } = useToast();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [lastResult, setLastResult] = useState<AnnouncementSendResult | null>(null);
 
+  const previewQueryKey = "/api/admin/announcements/platform-update/preview";
   const { data: preview, isLoading: previewLoading } = useQuery<AnnouncementPreview>({
-    queryKey: ["/api/admin/announcements/platform-update/preview"],
+    queryKey: [previewQueryKey],
     enabled: previewOpen,
+    refetchOnMount: "always",
   });
 
   const sendMutation = useMutation({
@@ -766,8 +924,7 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
             <CardTitle>Platform update announcement</CardTitle>
             <CardDescription className="mt-1">
               Broadcast a one-off email to every active nurse explaining the recent changes
-              (Skills Arcade, Policies &amp; SOPs, Availability coming soon, and the new
-              stage-completed gating).
+              (Skills Arcade, Policies &amp; SOPs, Availability, and the new invoicing flow).
             </CardDescription>
           </div>
         </div>
@@ -779,6 +936,16 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
           </Button>
           <SuperAdminGate>
             <Button
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+              data-testid="button-edit-platform-update-template"
+              tooltip="Edit the subject and body of this email. Changes are saved and used the next time you send."
+            >
+              <Save className="h-4 w-4 mr-2" /> Edit template
+            </Button>
+          </SuperAdminGate>
+          <SuperAdminGate>
+            <Button
               onClick={() => setConfirmOpen(true)}
               disabled={!outlookConfigured || sendMutation.isPending}
               data-testid="button-send-announcement"
@@ -788,6 +955,13 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
             </Button>
           </SuperAdminGate>
         </div>
+        <EmailTemplateEditor
+          templateKey="platform_update_announcement"
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          previewQueryKey={previewQueryKey}
+          tokensHelp="You can use {{NAME}} anywhere you want the nurse's full name to appear, and {{PORTAL_URL}} for the portal sign-in link. Save your changes and the next send will use the new wording."
+        />
         {!outlookConfigured && (
           <p className="text-xs text-amber-300">
             Outlook is not configured — connect Microsoft Graph credentials before sending.
@@ -854,6 +1028,199 @@ function PlatformAnnouncementCard({ outlookConfigured }: { outlookConfigured: bo
                 disabled={sendMutation.isPending}
                 data-testid="button-confirm-send-announcement"
                 tooltip="Send the announcement email to every active nurse right now. Cannot be undone."
+              >
+                {sendMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
+                ) : (
+                  <><Send className="h-4 w-4 mr-2" /> Send now</>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LaunchAnnouncementCard({ outlookConfigured }: { outlookConfigured: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [lastResult, setLastResult] = useState<AnnouncementSendResult | null>(null);
+
+  const previewQueryKey = "/api/admin/announcements/launch/preview";
+  const { data: preview, isLoading: previewLoading } = useQuery<LaunchAnnouncementPreview>({
+    queryKey: [previewQueryKey],
+    refetchOnMount: "always",
+    staleTime: 0,
+  });
+
+  const openPreview = () => {
+    qc.invalidateQueries({ queryKey: [previewQueryKey] });
+    setPreviewOpen(true);
+  };
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/announcements/launch/send");
+      return (await res.json()) as AnnouncementSendResult;
+    },
+    onSuccess: (r) => {
+      setLastResult(r);
+      setConfirmOpen(false);
+      toast({
+        title: "Launch announcement broadcast",
+        description: `${r.sent}/${r.attempted} sent · ${r.failed.length} failed`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Send failed", description: err?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Platform launch &amp; invoicing announcement</CardTitle>
+            <CardDescription className="mt-1">
+              One-off launch email introducing every active nurse to the new NurseOnboard portal,
+              embedding the explainer video, and informing them that all invoices must be submitted
+              through this platform from <strong>1 June 2026</strong>.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs space-y-1">
+          <p>
+            <strong>Recipients:</strong>{" "}
+            {preview?.recipientCount ?? "…"} active nurse(s) with email
+          </p>
+          <p>
+            <strong>Portal URL:</strong>{" "}
+            <a href={preview?.portalUrl} className="text-primary underline" target="_blank" rel="noreferrer">
+              {preview?.portalUrl ?? "…"}
+            </a>
+          </p>
+          <p>
+            <strong>Video URL:</strong>{" "}
+            {preview?.videoUrl ? (
+              <a href={preview.videoUrl} className="text-primary underline" target="_blank" rel="noreferrer">
+                {preview.videoUrl}
+              </a>
+            ) : (
+              <span className="text-amber-300">Not configured (PLATFORM_VIDEO_URL) — video block will be hidden.</span>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={openPreview}
+            data-testid="button-preview-launch-announcement"
+            tooltip="Preview the launch &amp; invoicing email before sending it to anyone."
+          >
+            <Mail className="h-4 w-4 mr-2" /> Preview email
+          </Button>
+          <SuperAdminGate>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+              data-testid="button-edit-launch-template"
+              tooltip="Edit the subject and body of the launch announcement. Changes are saved and used the next time you send."
+            >
+              <Save className="h-4 w-4 mr-2" /> Edit template
+            </Button>
+          </SuperAdminGate>
+          <SuperAdminGate>
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={!outlookConfigured || sendMutation.isPending}
+              data-testid="button-send-launch-announcement"
+              tooltip="Open the confirmation dialog to broadcast the launch announcement to every active nurse."
+            >
+              <Send className="h-4 w-4 mr-2" /> Send to all nurses…
+            </Button>
+          </SuperAdminGate>
+        </div>
+        <EmailTemplateEditor
+          templateKey="launch_announcement"
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          previewQueryKey={previewQueryKey}
+          tokensHelp="You can use {{NAME}} anywhere you want the nurse's full name to appear, {{PORTAL_URL}} for the portal sign-in link, and {{VIDEO_URL}} for the explainer video link (when one's been set up). To make a section that only shows up when there is a video link, wrap it in {{#VIDEO_URL}} … {{/VIDEO_URL}}. Save your changes and the next send will use the new wording."
+        />
+        {!outlookConfigured && (
+          <p className="text-xs text-amber-300">
+            Outlook is not configured — connect Microsoft Graph credentials before sending.
+          </p>
+        )}
+        {lastResult && (
+          <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-sm">
+            <p>
+              Last broadcast: <strong>{lastResult.sent}</strong> sent of {lastResult.attempted} ·{" "}
+              <strong>{lastResult.failed.length}</strong> failed
+            </p>
+            {lastResult.failed.length > 0 && (
+              <ul className="mt-2 list-disc list-inside text-xs text-muted-foreground space-y-1">
+                {lastResult.failed.slice(0, 5).map((f) => (
+                  <li key={f.nurseId}>
+                    {f.email}: {f.error}
+                  </li>
+                ))}
+                {lastResult.failed.length > 5 && <li>… and {lastResult.failed.length - 5} more</li>}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{preview?.subject || "Platform launch & invoicing announcement"}</DialogTitle>
+              <DialogDescription>
+                Will be sent to {preview?.recipientCount ?? "…"} active nurse(s) via the system mailbox.
+              </DialogDescription>
+            </DialogHeader>
+            {previewLoading || !preview ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="rounded border border-border/60 overflow-hidden">
+                <iframe
+                  title="Launch email preview"
+                  srcDoc={preview.html}
+                  className="w-full h-[55vh] bg-white"
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send launch &amp; invoicing announcement to all nurses?</DialogTitle>
+              <DialogDescription>
+                This will email {preview?.recipientCount ?? "every"} active nurse on file using the system
+                mailbox. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={sendMutation.isPending}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => sendMutation.mutate()}
+                disabled={sendMutation.isPending}
+                data-testid="button-confirm-send-launch-announcement"
+                tooltip="Send the launch announcement email to every active nurse right now. Cannot be undone."
               >
                 {sendMutation.isPending ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
@@ -973,6 +1340,8 @@ export default function AdminSettingsPage() {
       <SuperAdminViewOnlyBanner />
 
       <PlatformAnnouncementCard outlookConfigured={outlookConfigured} />
+
+      <LaunchAnnouncementCard outlookConfigured={outlookConfigured} />
 
       {!outlookConfigured && (
         <Card className="border-amber-500/30 bg-amber-500/5">
