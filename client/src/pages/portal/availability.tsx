@@ -27,6 +27,7 @@ const STATUSES: { key: CellStatus; label: string; cls: string }[] = [
   { key: "available", label: "Available", cls: "bg-emerald-500 text-white" },
   { key: "preferred", label: "Preferred", cls: "bg-primary text-primary-foreground" },
   { key: "unavailable", label: "Unavailable", cls: "bg-rose-500 text-white" },
+  { key: "working_elsewhere", label: "Working elsewhere", cls: "bg-violet-500 text-white" },
   { key: "unset", label: "Clear", cls: "bg-muted text-muted-foreground" },
 ];
 
@@ -267,6 +268,8 @@ export default function PortalAvailabilityPage() {
       stepStatuses: {},
       gate: portal.gate ?? null,
       availabilityEnabled: portal.nurse.currentStage === "completed",
+      invoicesEnabled: portal.nurse.currentStage === "completed",
+      selectInvoices: () => navigate(`/portal/invoices`),
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (k) => navigate(`/portal/page?step=${k}`),
       selectAvailability: () => {},
@@ -308,7 +311,8 @@ export default function PortalAvailabilityPage() {
                 If you hold a substantive role elsewhere — a full-time NHS post,
                 care-home contract, regular shifts with another agency, or
                 self-employed work — please mark those days as{" "}
-                <span className="font-medium text-foreground">Unavailable</span>.
+                <span className="font-medium text-foreground">Working elsewhere</span>{" "}
+                (use <span className="font-medium text-foreground">Unavailable</span> for personal time off).
                 We use this to comply with the European Working Time Directive
                 (max 48 hrs/week averaged) and to make sure we don't roster you
                 into unsafe back-to-back shifts.

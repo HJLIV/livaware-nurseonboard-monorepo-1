@@ -137,6 +137,126 @@ function JourneyStepper({ currentStage }: { currentStage: string }) {
   );
 }
 
+interface AdminInvoiceRow {
+  id: string;
+  status: string;
+  totalAmount: number;
+  totalHours: number;
+  additionalCostsTotal: number;
+  submittedAt: string;
+}
+
+function SubmitOnBehalfForm({ nurseId, nurseName, nurseEmail, onDone }: {
+  nurseId: string; nurseName: string; nurseEmail: string; onDone: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [hourlyRate, setHourlyRate] = useState("25.00");
+  const [patientInitials, setPatientInitials] = useState("");
+  const [location, setLocation] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [sortCode, setSortCode] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [address, setAddress] = useState("");
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      const body = {
+        personalDetails: { fullName: nurseName, address, email: nurseEmail, phoneNumber: "" },
+        bankDetails: { accountType: "personal", accountName, bankName, sortCode, accountNumber },
+        timesheetEntries: [{ date, startTime, endTime, patientInitials, location }],
+        hourlyRatePence: Math.round(parseFloat(hourlyRate || "0") * 100),
+        additionalCosts: [],
+        paymentNotes: "Submitted on behalf by admin",
+      };
+      const res = await apiRequest("POST", `/api/admin/invoices/by-nurse/${nurseId}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Invoice submitted on behalf" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/invoices/by-nurse/${nurseId}`] });
+      onDone();
+    },
+    onError: (e: Error) => toast({ title: "Submission failed", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <Card data-testid="card-submit-on-behalf">
+      <CardHeader><CardTitle className="text-base">Submit invoice on behalf</CardTitle><CardDescription>For nurses who can't access the portal. Reuses the same submit endpoint as the nurse wizard.</CardDescription></CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div><label className="text-[10px] uppercase text-muted-foreground">Date</label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-onbehalf-date" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Hourly rate (£)</label><Input type="number" step="0.01" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} data-testid="input-onbehalf-rate" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Start</label><Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} data-testid="input-onbehalf-start" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">End</label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} data-testid="input-onbehalf-end" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Patient initials</label><Input value={patientInitials} onChange={(e) => setPatientInitials(e.target.value)} data-testid="input-onbehalf-initials" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Location</label><Input value={location} onChange={(e) => setLocation(e.target.value)} data-testid="input-onbehalf-location" /></div>
+          <div className="col-span-2"><label className="text-[10px] uppercase text-muted-foreground">Address</label><Input value={address} onChange={(e) => setAddress(e.target.value)} data-testid="input-onbehalf-address" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Account name</label><Input value={accountName} onChange={(e) => setAccountName(e.target.value)} data-testid="input-onbehalf-account-name" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Bank name</label><Input value={bankName} onChange={(e) => setBankName(e.target.value)} data-testid="input-onbehalf-bank-name" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Sort code</label><Input value={sortCode} onChange={(e) => setSortCode(e.target.value)} data-testid="input-onbehalf-sort-code" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Account number</label><Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} data-testid="input-onbehalf-account-number" /></div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t">
+          <Button variant="outline" size="sm" onClick={onDone} data-testid="button-onbehalf-cancel">Cancel</Button>
+          <Button size="sm" onClick={() => submit.mutate()} disabled={submit.isPending || !date || !startTime || !endTime} data-testid="button-onbehalf-submit">
+            {submit.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />} Submit
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NurseInvoicesTab({ nurseId, nurseName, nurseEmail, currentStage }: { nurseId: string; nurseName: string; nurseEmail: string; currentStage: string }) {
+  const { data, isLoading } = useQuery<{ invoices: AdminInvoiceRow[]; nurse: { currentStage: string } }>({
+    queryKey: [`/api/admin/invoices/by-nurse/${nurseId}`],
+    queryFn: async () => (await apiRequest("GET", `/api/admin/invoices/by-nurse/${nurseId}`)).json(),
+  });
+  const [showSubmit, setShowSubmit] = useState(false);
+  if (isLoading || !data) return <Skeleton className="h-32 w-full" />;
+  const fmtPence = (p: number) => `£${(p / 100).toFixed(2)}`;
+  const fmtMins = (m: number) => `${(m / 60).toFixed(2)} h`;
+  const isCompleted = currentStage === "completed";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Link href="/reports/invoices" className="text-xs underline text-primary" data-testid="link-invoices-matrix">Open in invoices matrix →</Link>
+        {isCompleted && !showSubmit && (
+          <Button size="sm" variant="outline" onClick={() => setShowSubmit(true)} data-testid="button-show-submit-onbehalf">Submit on behalf</Button>
+        )}
+      </div>
+      {showSubmit && isCompleted && (
+        <SubmitOnBehalfForm nurseId={nurseId} nurseName={nurseName} nurseEmail={nurseEmail} onDone={() => setShowSubmit(false)} />
+      )}
+      <Card><CardContent className="p-0">
+        {data.invoices.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">
+            {isCompleted ? "No invoices submitted by this nurse." : "Invoices become available once the nurse reaches the Nurse stage."}
+          </div>
+        ) : (
+          <div className="divide-y" data-testid="list-nurse-invoices">
+            {data.invoices.map((inv) => (
+              <div key={inv.id} className="p-3 flex items-center gap-3 text-sm">
+                <div className="flex-1">
+                  <div className="font-medium">{fmtPence(inv.totalAmount + inv.additionalCostsTotal)} · {fmtMins(inv.totalHours)}</div>
+                  <div className="text-[11px] text-muted-foreground">Submitted {new Date(inv.submittedAt).toLocaleDateString("en-GB")}</div>
+                </div>
+                <Badge variant="outline" data-testid={`badge-nurse-invoice-${inv.id}`}>{inv.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent></Card>
+    </div>
+  );
+}
+
 function OverviewTab({ nurse }: { nurse: NurseDetail }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -793,6 +913,7 @@ export default function NurseDetail() {
             <TabsTrigger value="arcade">Skills Arcade</TabsTrigger>
             <TabsTrigger value="policies">Policies</TabsTrigger>
             <TabsTrigger value="induction">Induction</TabsTrigger>
+            <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
           </TabsList>
 
@@ -819,6 +940,10 @@ export default function NurseDetail() {
           <TabsContent value="induction" className="mt-6 space-y-4">
             <InductionProgressPanel candidateId={nurseId} />
             <SopComprehensionPanel candidateId={nurseId} />
+          </TabsContent>
+
+          <TabsContent value="invoices" className="mt-6">
+            <NurseInvoicesTab nurseId={nurseId} nurseName={nurse.fullName} nurseEmail={nurse.email} currentStage={nurse.currentStage} />
           </TabsContent>
 
           <TabsContent value="audit" className="mt-6">

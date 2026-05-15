@@ -6,7 +6,7 @@ import { StepProgress } from "@/components/shared/step-progress";
 import { SpecialismSelector } from "@/components/specialism-selector";
 import { AIMarkdown } from "@/components/ai-markdown";
 import { renderEmailMarkdown } from "@shared/email-markdown";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
 import { DeclarationsPanel } from "@/components/admin/declarations-panel";
 import { InductionProgressPanel } from "@/components/admin/induction-progress-panel";
@@ -4805,13 +4805,67 @@ const VALID_ONBOARDING_TABS = new Set([
 ]);
 const VALID_COMPLIANCE_TABS = new Set(["induction", "training_compliance", "documents", "audit"]);
 
+interface CandidateInvoiceRow {
+  id: string;
+  status: string;
+  totalAmount: number;
+  totalHours: number;
+  additionalCostsTotal: number;
+  submittedAt: string;
+}
+
+function CandidateInvoicesSection({ candidateId, candidate }: { candidateId: string; candidate: Candidate }) {
+  const isCompleted = candidate.currentStage === "completed";
+  const { data, isLoading } = useQuery<{ invoices: CandidateInvoiceRow[] }>({
+    queryKey: [`/api/admin/invoices/by-nurse/${candidateId}`],
+    queryFn: async () => (await apiRequest("GET", `/api/admin/invoices/by-nurse/${candidateId}`)).json(),
+  });
+  const fmtPence = (p: number) => `£${(p / 100).toFixed(2)}`;
+  const fmtMins = (m: number) => `${(m / 60).toFixed(2)} h`;
+  return (
+    <Card data-testid="card-candidate-invoices">
+      <CardHeader>
+        <CardTitle className="text-base">Invoices</CardTitle>
+        <CardDescription>
+          {isCompleted
+            ? "Invoices submitted by this nurse. Use the per-nurse view on the Nurses page to submit on behalf."
+            : "Invoices unlock once this candidate reaches the Nurse stage. Read-only view."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="p-4"><Skeleton className="h-20 w-full" /></div>
+        ) : !data || data.invoices.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">No invoices yet.</div>
+        ) : (
+          <div className="divide-y" data-testid="list-candidate-invoices">
+            {data.invoices.map((inv) => (
+              <div key={inv.id} className="p-3 flex items-center gap-3 text-sm">
+                <div className="flex-1">
+                  <div className="font-medium">{fmtPence(inv.totalAmount + inv.additionalCostsTotal)} · {fmtMins(inv.totalHours)}</div>
+                  <div className="text-[11px] text-muted-foreground">Submitted {new Date(inv.submittedAt).toLocaleDateString("en-GB")}</div>
+                </div>
+                <Badge variant="outline" data-testid={`badge-candidate-invoice-${inv.id}`}>{inv.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="p-3 border-t text-right">
+          <a href="/reports/invoices" className="text-xs underline text-primary" data-testid="link-candidate-invoices-report">Open in invoices matrix →</a>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { candidateId: string; candidate: Candidate; stepStatuses: Record<string, string>; currentStep: number }) {
   const initialParams = readQueryParams();
   const initialSection: "preboard" | "onboarding" | "compliance" =
     initialParams.section === "preboard" || initialParams.section === "compliance" || initialParams.section === "onboarding"
       ? initialParams.section
       : "onboarding";
-  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance">(initialSection);
+  const initialSectionAny = (initialParams.section === "invoices" ? "invoices" : initialSection) as "preboard" | "onboarding" | "compliance" | "invoices";
+  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance" | "invoices">(initialSectionAny);
   const { isSuperAdmin } = useAuthRole();
   const initialOnboardingTab = initialParams.tab && VALID_ONBOARDING_TABS.has(initialParams.tab) ? initialParams.tab : "identity";
   const initialComplianceTab = initialParams.tab && VALID_COMPLIANCE_TABS.has(initialParams.tab) ? initialParams.tab : "induction";
@@ -4858,6 +4912,16 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
           <ClipboardCheck className="h-3.5 w-3.5" />
           Compliance
         </Button>
+        <Button
+          variant={section === "invoices" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setSection("invoices")}
+          data-testid="button-section-invoices"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Invoices
+        </Button>
       </div>
 
       {section === "onboarding" && (
@@ -4902,6 +4966,10 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
 
       {section === "preboard" && (
         <PreboardTab candidateId={candidateId} candidate={candidate} />
+      )}
+
+      {section === "invoices" && (
+        <CandidateInvoicesSection candidateId={candidateId} candidate={candidate} />
       )}
 
       {section === "compliance" && (

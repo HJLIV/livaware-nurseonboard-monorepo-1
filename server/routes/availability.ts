@@ -76,7 +76,7 @@ function isDateInWindow(dateIso: string): boolean {
 const cellSchema = z.object({
   date: z.string().regex(ISO_DATE_RE, "date must be YYYY-MM-DD"),
   shift: z.enum(["am", "pm", "night"]),
-  status: z.enum(["available", "preferred", "unavailable", "unset"]),
+  status: z.enum(["available", "preferred", "unavailable", "working_elsewhere", "unset"]),
 });
 
 const bulkSchema = z.object({

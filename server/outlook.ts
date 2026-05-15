@@ -260,6 +260,55 @@ export async function sendDocumentUploadNotification(
   });
 }
 
+// ─── Invoice submission email (task #134) ─────────────────────────────
+// Sent whenever a nurse (or admin on behalf) submits a timesheet invoice.
+// The PDF is attached and a copy of the email is dropped in Sent Items
+// so the audit trail in Outlook matches the in-app audit log.
+export async function sendInvoiceSubmittedEmail(opts: {
+  invoiceNumber: string;
+  nurseName: string;
+  nurseEmail: string;
+  totalAmountGbp: string;
+  totalHours: string;
+  pdfBuffer: Buffer;
+  recipientEmail?: string;
+}): Promise<void> {
+  const client = await getGraphClient();
+  const recipient = opts.recipientEmail || process.env.INVOICE_RECIPIENT_EMAIL || "invoices@livaware.co.uk";
+  const html = `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #020121; padding: 20px 28px; border-bottom: 3px solid #C8A96E;">
+        <h1 style="color:#F0ECE4; font-family: Georgia, serif; font-weight: 400; font-size: 22px; margin: 0;">Invoice ${opts.invoiceNumber}</h1>
+        <p style="color:#8A8A94; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; margin: 4px 0 0;">Livaware NurseOnboard — New submission</p>
+      </div>
+      <div style="padding: 24px 28px;">
+        <p style="font-size:14px; color:#222; margin: 0 0 16px;">A new nurse timesheet invoice has been submitted.</p>
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <tr><td style="padding:6px 0; color:#666;">Invoice</td><td style="padding:6px 0; font-weight:600;">${opts.invoiceNumber}</td></tr>
+          <tr><td style="padding:6px 0; color:#666;">Nurse</td><td style="padding:6px 0;">${opts.nurseName} &lt;${opts.nurseEmail}&gt;</td></tr>
+          <tr><td style="padding:6px 0; color:#666;">Total hours</td><td style="padding:6px 0;">${opts.totalHours} h</td></tr>
+          <tr><td style="padding:6px 0; color:#666;">Total amount</td><td style="padding:6px 0; font-weight:600; color:#020121;">${opts.totalAmountGbp}</td></tr>
+        </table>
+        <p style="font-size:12px; color:#888; margin:18px 0 0;">The full invoice is attached as a PDF and is also available in the admin platform under Reports → Invoices.</p>
+      </div>
+    </div>
+  `;
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: `Invoice ${opts.invoiceNumber} — ${opts.nurseName}`,
+      body: { contentType: "HTML", content: html },
+      toRecipients: [{ emailAddress: { address: recipient, name: "Livaware Invoices" } }],
+      attachments: [{
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: `${opts.invoiceNumber}.pdf`,
+        contentType: "application/pdf",
+        contentBytes: opts.pdfBuffer.toString("base64"),
+      }],
+    },
+    saveToSentItems: true,
+  });
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")

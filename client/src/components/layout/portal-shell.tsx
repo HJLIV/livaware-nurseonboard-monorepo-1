@@ -13,6 +13,7 @@ import {
   Home,
   AlertCircle,
   CalendarDays,
+  FileText,
   LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -233,6 +234,15 @@ const PRIMARY_NAV: PrimaryNavDef[] = [
     href: "/portal/availability",
     matches: (k) => k.startsWith("rostering:") || k === "roster",
   },
+  {
+    key: "finance",
+    groupKey: "finance",
+    label: "Finance",
+    shortLabel: "Finance",
+    icon: FileText,
+    href: "/portal/invoices",
+    matches: (k) => k.startsWith("finance:") || k === "finance",
+  },
 ];
 
 function countOutstanding(items: PortalSidebarItem[]): number {
@@ -269,6 +279,8 @@ function resolveActiveNav(
     return { tabKey: "training", group: groups.find((g) => g.key === "training") };
   if (pathname.startsWith("/portal/availability"))
     return { tabKey: "roster", group: groups.find((g) => g.key === "rostering") };
+  if (pathname.startsWith("/portal/invoices"))
+    return { tabKey: "finance", group: groups.find((g) => g.key === "finance") };
 
   // Otherwise, infer from the activeKey using the prefix matcher.
   const def = PRIMARY_NAV.find((d) => d.matches(activeKey));
@@ -315,17 +327,16 @@ export function PortalShell({
         active: activeNav.tabKey === def.key,
       };
     });
-    // Cap at 5 tabs total. The active tab and Home are always kept;
-    // beyond that we drop fully-completed tabs first (still reachable
-    // via /portal/section/:section + the Home journey cards).
-    if (all.length <= 5) return all;
-    // Cap at 5 visible tabs. Always keep Home, Roster (when present)
-    // and the active tab so the user never loses a critical surface.
-    // Beyond that, drop fully-completed sections first; remaining
-    // sections stay reachable via /portal/section/:section + Home.
+    // Cap at 6 visible tabs. Always keep Home, Roster + Finance (when
+    // present, they are post-completion essentials) and the active tab
+    // so the user never loses a critical surface. Beyond that, drop
+    // fully-completed sections first; remaining sections stay reachable
+    // via /portal/section/:section + the Home journey cards.
+    if (all.length <= 6) return all;
     const keep = new Set<string>();
     keep.add("home");
     if (all.some((d) => d.key === "roster")) keep.add("roster");
+    if (all.some((d) => d.key === "finance")) keep.add("finance");
     const activeKey = all.find((d) => d.active)?.key;
     if (activeKey) keep.add(activeKey);
     const ordered = [
@@ -333,7 +344,7 @@ export function PortalShell({
       ...all.filter((d) => d.allDone),
     ];
     for (const d of ordered) {
-      if (keep.size >= 5) break;
+      if (keep.size >= 6) break;
       keep.add(d.key);
     }
     return all.filter((d) => keep.has(d.key));
@@ -604,7 +615,7 @@ export function PortalSectionChecklist({
 
 // ─── Helpers for building groups ────────────────────────────────────────
 
-interface JourneyData {
+export interface JourneyData {
   preboard: { status: string; actionUrl?: string; label: string };
   onboard: { status: string; actionUrl?: string; label: string };
   skillsArcade: { status: string; actionUrl?: string; label: string };
@@ -633,6 +644,8 @@ interface BuildGroupsArgs {
   selectPolicies?: () => void;
   availabilityEnabled?: boolean;
   selectAvailability?: () => void;
+  invoicesEnabled?: boolean;
+  selectInvoices?: () => void;
   inductionSummary?: { total: number; outstanding: number; unlocked: boolean } | null;
   selectInduction?: () => void;
   sopComprehensionSummary?: { totalRequired: number; outstanding: number } | null;
@@ -667,6 +680,8 @@ export function buildPortalGroups({
   selectPolicies,
   availabilityEnabled,
   selectAvailability,
+  invoicesEnabled,
+  selectInvoices,
   inductionSummary,
   selectInduction,
   sopComprehensionSummary,
@@ -1012,6 +1027,28 @@ export function buildPortalGroups({
                   ? selectAvailability
                   : () => { window.location.href = `/portal/availability`; },
                 disabled: !selectAvailability,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(invoicesEnabled
+      ? [
+          {
+            key: "finance",
+            title: "Finance",
+            icon: <FileText className="h-3.5 w-3.5" />,
+            defaultOpen: true,
+            items: [
+              {
+                key: "finance:invoices",
+                label: "Invoices",
+                status: "in_progress" as PortalItemStatus,
+                hint: "Submit timesheets & track payment",
+                onClick: selectInvoices
+                  ? selectInvoices
+                  : () => { window.location.href = `/portal/invoices`; },
+                disabled: !selectInvoices,
               },
             ],
           },

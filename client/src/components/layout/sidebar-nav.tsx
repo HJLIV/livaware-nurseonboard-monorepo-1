@@ -87,9 +87,10 @@ const sections: NavSectionDef[] = [
   },
   {
     key: "people",
-    title: "People",
+    title: "People & Invoicing",
     items: [
       { label: "Nurses", href: "/nurses", icon: Users },
+      { label: "Invoices", href: "/reports/invoices", icon: FileText, adminOnly: true },
     ],
   },
   {

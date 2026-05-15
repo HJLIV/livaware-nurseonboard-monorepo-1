@@ -10,14 +10,17 @@ import { auditLogs } from "@shared/schema";
 import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { requireSuperAdmin } from "../middleware";
 
-type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "system";
+type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "portal_auth" | "system" | "availability" | "invoices";
 const VALID_MODULES: ReadonlySet<AuditModule> = new Set<AuditModule>([
   "preboard",
   "onboard",
   "skills_arcade",
   "admin",
   "portal",
+  "portal_auth",
   "system",
+  "availability",
+  "invoices",
 ]);
 function isAuditModule(value: string): value is AuditModule {
   return (VALID_MODULES as ReadonlySet<string>).has(value);

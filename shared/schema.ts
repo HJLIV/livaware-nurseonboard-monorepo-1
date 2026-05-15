@@ -13,7 +13,8 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices"]);
+export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
 // Onboard enums
 export const onboardingStatusEnum = pgEnum("onboarding_status", [
@@ -84,9 +85,35 @@ export const nurses = pgTable("nurses", {
   // re-locks them.
   complianceApprovedAt: timestamp("compliance_approved_at"),
   complianceApprovedBy: text("compliance_approved_by"),
+  // ─── Invoice billing profile (task 134) ───────────────────────────
+  // Last-used personal + bank details + hourly rate captured from any
+  // invoice the nurse submits. Used to prefill the new-invoice wizard
+  // so they don't re-enter the same details for each timesheet.
+  invoiceBillingProfile: jsonb("invoice_billing_profile").$type<{
+    personalDetails?: {
+      fullName?: string;
+      ltdCompany?: string | null;
+      utr?: string | null;
+      address?: string;
+      email?: string;
+      phoneNumber?: string;
+    };
+    bankDetails?: {
+      accountType?: "personal" | "business";
+      accountName?: string;
+      bankName?: string;
+      sortCode?: string;
+      accountNumber?: string;
+    };
+    hourlyRatePence?: number;
+    paymentNotes?: string | null;
+    updatedAt?: string;
+  } | null>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export type NurseInvoiceBillingProfile = NonNullable<typeof nurses.$inferSelect.invoiceBillingProfile>;
 
 export const portalLinks = pgTable("portal_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1340,6 +1367,7 @@ export const availabilityStatusEnum = pgEnum("availability_status", [
   "available",
   "preferred",
   "unavailable",
+  "working_elsewhere",
 ]);
 
 export const nurseAvailability = pgTable("nurse_availability", {
@@ -1368,13 +1396,140 @@ export const insertNurseAvailabilitySchema = createInsertSchema(nurseAvailabilit
 export type NurseAvailability = typeof nurseAvailability.$inferSelect;
 export type InsertNurseAvailability = z.infer<typeof insertNurseAvailabilitySchema>;
 export type Shift = "am" | "pm" | "night";
-export type AvailabilityStatus = "available" | "preferred" | "unavailable";
+export type AvailabilityStatus = "available" | "preferred" | "unavailable" | "working_elsewhere";
 export const SHIFTS: Shift[] = ["am", "pm", "night"];
 // UI shows a 2-shift Day / Night pattern. The legacy "pm" enum value is
 // kept in the DB so historic rows are preserved, but it's no longer
 // surfaced in either the portal or admin matrix.
 export const VISIBLE_SHIFTS: Shift[] = ["am", "night"];
 export const SHIFT_LABELS: Record<Shift, string> = { am: "Day", pm: "PM", night: "Night" };
+
+// ==================== INVOICES (Task #134) ====================
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Sequential per-platform invoice number. Auto-assigned on insert
+  // via Postgres SERIAL so it is monotonic, gap-free in normal use,
+  // and safe under concurrent submissions. Surfaced in the UI / CSV /
+  // payment-reference suggestion as `INV-{padStart(6, "0")}`.
+  invoiceNumberSeq: serial("invoice_number_seq").notNull(),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id, { onDelete: "cascade" }),
+  // Personal details (snapshotted at submission, editable per-invoice)
+  fullName: text("full_name").notNull(),
+  ltdCompany: text("ltd_company"),
+  utr: text("utr"),
+  address: text("address").notNull(),
+  email: text("email").notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  // Bank details
+  accountType: text("account_type").notNull(), // personal | business
+  accountName: text("account_name").notNull(),
+  bankName: text("bank_name").notNull(),
+  sortCode: text("sort_code").notNull(),
+  accountNumber: text("account_number").notNull(),
+  // Totals
+  hourlyRate: integer("hourly_rate_pence").notNull(), // pence
+  totalHours: integer("total_hours_minutes").notNull(), // minutes (avoids float)
+  totalAmount: integer("total_amount_pence").notNull(), // pence
+  additionalCostsTotal: integer("additional_costs_total_pence").default(0).notNull(),
+  paymentNotes: text("payment_notes"),
+  // Status & lifecycle
+  status: invoiceStatusEnum("status").default("submitted").notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  paidAt: timestamp("paid_at"),
+  paidBy: text("paid_by"),
+  reconciledAt: timestamp("reconciled_at"),
+  reconciledBy: text("reconciled_by"),
+  paymentReference: text("payment_reference"),
+  paymentDate: text("payment_date"), // YYYY-MM-DD
+  rejectedAt: timestamp("rejected_at"),
+  rejectedBy: text("rejected_by"),
+  rejectedReason: text("rejected_reason"),
+  attachmentUrl: text("attachment_url"),
+  attachmentFilename: text("attachment_filename"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("invoices_nurse_id_idx").on(table.nurseId),
+  index("invoices_status_idx").on(table.status),
+  index("invoices_submitted_at_idx").on(table.submittedAt),
+]);
+
+export const invoiceTimesheetEntries = pgTable("invoice_timesheet_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD
+  startTime: text("start_time").notNull(), // HH:MM
+  endTime: text("end_time").notNull(),
+  patientInitials: text("patient_initials").notNull(),
+  location: text("location").notNull(),
+  hoursMinutes: integer("hours_minutes").notNull(),
+  amountPence: integer("amount_pence").notNull(),
+  position: integer("position").default(0).notNull(),
+}, (table) => [
+  index("invoice_timesheet_entries_invoice_idx").on(table.invoiceId),
+]);
+
+export const invoiceAdditionalCosts = pgTable("invoice_additional_costs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amountPence: integer("amount_pence").notNull(),
+  receiptImageUrl: text("receipt_image_url"),
+  position: integer("position").default(0).notNull(),
+}, (table) => [
+  index("invoice_additional_costs_invoice_idx").on(table.invoiceId),
+]);
+
+export type InvoiceRecord = typeof invoices.$inferSelect;
+export type InvoiceTimesheetEntryRecord = typeof invoiceTimesheetEntries.$inferSelect;
+export type InvoiceAdditionalCostRecord = typeof invoiceAdditionalCosts.$inferSelect;
+export type InvoiceStatus = "submitted" | "approved" | "paid" | "reconciled" | "rejected";
+export const INVOICE_STATUSES: InvoiceStatus[] = ["submitted", "approved", "paid", "reconciled", "rejected"];
+
+export const personalDetailsSchema = z.object({
+  fullName: z.string().min(1, "Full name is required"),
+  ltdCompany: z.string().optional().nullable(),
+  utr: z.string().optional().nullable(),
+  address: z.string().min(1, "Address is required"),
+  email: z.string().email("Valid email is required"),
+  phoneNumber: z.string().min(1, "Phone number is required"),
+});
+
+export const bankDetailsSchema = z.object({
+  accountType: z.enum(["personal", "business"]),
+  accountName: z.string().min(1, "Account name is required"),
+  bankName: z.string().min(1, "Bank name is required"),
+  sortCode: z.string().min(1, "Sort code is required"),
+  accountNumber: z.string().min(1, "Account number is required"),
+});
+
+export const timesheetEntrySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+  patientInitials: z.string().min(1),
+  location: z.string().min(1),
+});
+
+export const additionalCostItemSchema = z.object({
+  description: z.string().min(1),
+  amountPence: z.number().int().nonnegative(),
+  receiptImageUrl: z.string().optional().nullable(),
+});
+
+export const invoiceSubmissionSchema = z.object({
+  personalDetails: personalDetailsSchema,
+  bankDetails: bankDetailsSchema,
+  timesheetEntries: z.array(timesheetEntrySchema).min(1, "At least one timesheet entry is required"),
+  hourlyRatePence: z.number().int().positive("Hourly rate is required"),
+  additionalCosts: z.array(additionalCostItemSchema).default([]),
+  paymentNotes: z.string().optional().nullable(),
+});
+
+export type InvoiceSubmission = z.infer<typeof invoiceSubmissionSchema>;
 
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;

@@ -76,6 +76,8 @@ const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity")
 // Availability (task 124)
 const PortalAvailabilityPage = lazy(() => import("@/pages/portal/availability"));
 const AvailabilityMatrixPage = lazy(() => import("@/pages/reports/availability"));
+const PortalInvoicesPage = lazy(() => import("@/pages/portal/invoices"));
+const InvoicesReportPage = lazy(() => import("@/pages/reports/invoices"));
 
 function LoadingSpinner() {
   return (
@@ -182,6 +184,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/induction" component={() => <PortalInductionPage />} />
         <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
+        <Route path="/portal/invoices" component={() => <PortalInvoicesPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
         <Route path="/portal/section/:section" component={() => <PortalSectionPage />} />
         {import.meta.env.DEV && (
@@ -242,6 +245,7 @@ function AuthenticatedRouter() {
               <Route path="/reports/competency">{() => <AppLayout><AdminRoute component={CompetencyMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/sop-comprehension">{() => <AppLayout><AdminRoute component={SopComprehensionMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/availability">{() => <AdminRoute component={AvailabilityMatrixPage} />}</Route>
+              <Route path="/reports/invoices">{() => <AdminRoute component={InvoicesReportPage} />}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
