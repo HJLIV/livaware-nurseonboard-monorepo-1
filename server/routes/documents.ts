@@ -26,6 +26,79 @@ function isNameMismatchEntry(entry: unknown): boolean {
   return false;
 }
 
+// Document download by id. MUST be registered BEFORE the global
+// `app.use("/api/documents", requireAdmin)` guard in routes.ts so that
+// portal sessions (nurse signed into their own portal) can fetch their
+// own documents — the requireAdmin guard would otherwise 401 them.
+export function registerDocumentDownloadRoute(app: Express) {
+  app.get("/api/documents/:id/download", async (req, res) => {
+    const { resolveUploadAccessor, setNoCacheHeaders } = await import(
+      "../services/file-access"
+    );
+    const docId = String(req.params.id);
+    const doc = await storage.getDocument(docId);
+    if (!doc) {
+      setNoCacheHeaders(res);
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    const accessor = await resolveUploadAccessor(req);
+    if (!accessor) {
+      setNoCacheHeaders(res);
+      return res.status(401).json({ message: "Authentication required" });
+    }
+
+    const refereeMismatch =
+      accessor.kind === "referee" &&
+      (!accessor.allowedDocumentId || accessor.allowedDocumentId !== doc.id);
+    if (
+      accessor.kind !== "admin" &&
+      (accessor.nurseId !== doc.nurseId || refereeMismatch)
+    ) {
+      await storage
+        .createAuditLog({
+          nurseId: doc.nurseId,
+          module: "documents",
+          action: "document_fetch_denied",
+          agentName: `${accessor.kind}:${accessor.nurseId}`,
+          detail: {
+            documentId: docId,
+            filename: doc.filename,
+            requestedByNurseId: accessor.nurseId,
+            ownerNurseId: doc.nurseId,
+            accessorKind: accessor.kind,
+            reason: "owner_mismatch",
+          },
+        })
+        .catch((err) =>
+          console.error("[documents/download] audit write failed:", (err as Error)?.message || err),
+        );
+      setNoCacheHeaders(res);
+      return res.status(403).json({ message: "Document not available" });
+    }
+
+    if (!doc.filePath) {
+      setNoCacheHeaders(res);
+      return res.status(404).json({ message: "Document has no stored file" });
+    }
+    const basename = path.basename(doc.filePath);
+    const absolute = path.join(uploadsDir, basename);
+    if (!absolute.startsWith(uploadsDir) || !fs.existsSync(absolute)) {
+      setNoCacheHeaders(res);
+      return res.status(404).json({ message: "File not found on server" });
+    }
+    setNoCacheHeaders(res);
+    if (doc.mimeType) res.setHeader("Content-Type", doc.mimeType);
+    if (doc.originalFilename) {
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${doc.originalFilename.replace(/[^\w. -]+/g, "_")}"`,
+      );
+    }
+    res.sendFile(absolute);
+  });
+}
+
 export function registerDocumentRoutes(app: Express) {
   app.get("/api/admin/documents", async (req, res) => {
     const search = req.query.search as string | undefined;

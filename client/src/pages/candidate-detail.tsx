@@ -4313,9 +4313,7 @@ function AuditTimeline({ candidateId }: { candidateId: string }) {
   );
 }
 
-export default function CandidateDetail() {
-  const params = useParams<{ id: string }>();
-  const candidateId = params.id!;
+function CandidateDetailInner({ candidateId }: { candidateId: string }) {
   const { toast } = useToast();
 
   const { data: candidate, isLoading: candidateLoading } = useQuery<Candidate>({
@@ -5301,4 +5299,13 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
       )}
     </div>
   );
+}
+
+// Wrapper that forces a full remount on candidateId change so per-candidate
+// useQuery results (documents, declarations, audit) cannot bleed across
+// candidates while the new query is still loading. (Task 151.)
+export default function CandidateDetail() {
+  const params = useParams<{ id: string }>();
+  const candidateId = params.id!;
+  return <CandidateDetailInner key={candidateId} candidateId={candidateId} />;
 }

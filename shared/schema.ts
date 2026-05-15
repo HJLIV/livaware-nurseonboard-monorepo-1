@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
 // Onboard enums

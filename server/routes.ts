@@ -129,6 +129,13 @@ export async function registerRoutes(
   // === PROTECTED ROUTE MIDDLEWARE ===
   app.use("/api/nurses", requireAuth);
   app.use("/api/candidates", requireAuth);
+  // Document download is ownership-checked internally (admin OR owning
+  // portal session), so it must bypass the broad requireAdmin guard
+  // below. Register it first.
+  {
+    const { registerDocumentDownloadRoute } = await import("./routes/documents");
+    registerDocumentDownloadRoute(app);
+  }
   app.use("/api/documents", requireAdmin);
   app.use("/api/dashboard", requireAuth);
   app.use("/api/pipeline", requireAuth);

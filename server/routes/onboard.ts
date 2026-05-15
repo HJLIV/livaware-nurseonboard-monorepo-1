@@ -1306,10 +1306,14 @@ export function registerAdminRoutes(app: Express) {
     });
   });
 
-  app.get("/api/uploads/:filename", (req, res) => {
+  app.get("/api/uploads/:filename", async (req, res) => {
+    const { resolveUploadAccessor, lookupFileOwnerNurseId, setNoCacheHeaders } =
+      await import("../services/file-access");
     const filename = param(req, "filename");
     const acceptsHtml = (req.headers.accept || "").includes("text/html");
+
     const renderUnavailable = (status: number, title: string, message: string) => {
+      setNoCacheHeaders(res);
       if (acceptsHtml) {
         res.status(status).type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>${title}</title>
@@ -1324,19 +1328,87 @@ export function registerAdminRoutes(app: Express) {
         res.status(status).json({ message: title });
       }
     };
+
     if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
       return renderUnavailable(400, "Invalid filename", "The requested file path is invalid.");
     }
-    const isAdmin = req.session?.isAuthenticated === true;
-    const referer = req.headers.referer || req.headers.referrer || "";
-    const isPortalAccess = referer.includes("/portal/") || referer.includes("/referee/");
-    if (!isAdmin && !isPortalAccess) {
-      return renderUnavailable(401, "Authentication required", "You need to sign in to view this file.");
+
+    const accessor = await resolveUploadAccessor(req);
+    if (!accessor) {
+      return renderUnavailable(
+        401,
+        "Authentication required",
+        "You need to sign in to view this file.",
+      );
     }
+
+    const lookup = await lookupFileOwnerNurseId(filename);
+    if (lookup === "error") {
+      return renderUnavailable(
+        500,
+        "File unavailable",
+        "We couldn't verify access to this file just now.",
+      );
+    }
+    if (!lookup) {
+      // Nothing on file references this name. Treat as 404 — but never
+      // leak whether the file exists on disk.
+      return renderUnavailable(
+        404,
+        "File unavailable",
+        "This file is no longer available on the server. It may have been removed or never finished uploading.",
+      );
+    }
+
+    const { ownerNurseId, documentId } = lookup;
+    // Referee tokens are scoped to a single document — even when the
+    // referee's nurseId matches the file's owner, deny unless the
+    // looked-up document matches the referee's allowed documentId.
+    const refereeMismatch =
+      accessor.kind === "referee" &&
+      (!accessor.allowedDocumentId ||
+        documentId !== accessor.allowedDocumentId);
+    if (
+      accessor.kind !== "admin" &&
+      (accessor.nurseId !== ownerNurseId || refereeMismatch)
+    ) {
+      // Caller authenticated to a different nurse than the file's
+      // owner. Audit-log so the gate firing is observable in prod logs,
+      // then 403.
+      await storage
+        .createAuditLog({
+          nurseId: ownerNurseId,
+          module: "documents",
+          action: "document_fetch_denied",
+          agentName: `${accessor.kind}:${accessor.nurseId}`,
+          detail: {
+            filename,
+            documentId,
+            requestedByNurseId: accessor.nurseId,
+            ownerNurseId,
+            accessorKind: accessor.kind,
+            reason: "owner_mismatch",
+          },
+        })
+        .catch((err) =>
+          console.error("[uploads] audit write failed:", (err as Error)?.message || err),
+        );
+      return renderUnavailable(
+        403,
+        "File unavailable",
+        "This file is not available on your portal.",
+      );
+    }
+
     const filePath = path.join(uploadsDir, filename);
     if (!fs.existsSync(filePath)) {
-      return renderUnavailable(404, "File unavailable", "This file is no longer available on the server. It may have been removed or never finished uploading.");
+      return renderUnavailable(
+        404,
+        "File unavailable",
+        "This file is no longer available on the server. It may have been removed or never finished uploading.",
+      );
     }
+    setNoCacheHeaders(res);
     res.sendFile(filePath);
   });
 
