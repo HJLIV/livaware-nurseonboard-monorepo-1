@@ -1,0 +1,49 @@
+{
+  "voiceId": "Fahco4VZzobUeiPqni1S",
+  "model": "eleven_turbo_v2_5",
+  "totalDurationSec": 110,
+  "scenes": [
+    {
+      "key": "welcome",
+      "startSec": 0,
+      "durationSec": 16,
+      "text": "Welcome to Livaware NurseOnboard. Sign in with your magic link or with Microsoft three sixty five, and your personal portal will open straight to your onboarding hub."
+    },
+    {
+      "key": "compliance",
+      "startSec": 12,
+      "durationSec": 20,
+      "text": "First, compliance. Upload your N M C pin, your D B S, your passport and your certificates. Our A I screens each document in seconds, flags anything missing, and files the verified copies straight to SharePoint."
+    },
+    {
+      "key": "declarations",
+      "startSec": 28,
+      "durationSec": 16,
+      "text": "Next, your competency declarations. Confirm the clinical skills you can safely practise, and we'll automatically email two of your professional referees on your behalf."
+    },
+    {
+      "key": "arcade",
+      "startSec": 42,
+      "durationSec": 22,
+      "text": "Then it's the Clinical Skills Arcade. Work through interactive scenarios and pick up a score. If you slip below the pass mark, a trainer reviews your answers, leaves remediation notes, and unlocks a focused retake just for you."
+    },
+    {
+      "key": "availability",
+      "startSec": 62,
+      "durationSec": 22,
+      "text": "Once you're cleared, your availability calendar opens. Left-click to paint Day or Night shifts. Right-click any cell for the status menu — available, unavailable, or booked. Built-in safety checks warn you about double shifts and rest periods."
+    },
+    {
+      "key": "invoicing",
+      "startSec": 80,
+      "durationSec": 22,
+      "text": "When you've worked, submit your timesheet from the portal. A P D F invoice is generated and emailed to our accounts team automatically. Once approved, you can re-download the P D F from your portal at any time."
+    },
+    {
+      "key": "wrapup",
+      "startSec": 98,
+      "durationSec": 12,
+      "text": "That's your Livaware journey, end to end — compliance, competency, arcade, availability and invoicing, all in one calm portal. Welcome aboard."
+    }
+  ]
+}

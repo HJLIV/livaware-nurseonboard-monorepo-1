@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "JVQ7cTN5o78X9kBVslZHC"
+uri = "file://attached_assets/videos/nurse-explainer.mp4"
+type = "video"
+title = "Nurse explainer — narrated MP4"
+
+[[outputs]]
+id = "64vW84AtWmryPnIEoj17Q"
+uri = "file://scripts/explainer-script.json"
+type = "unspecified"
+title = "Narration script (timed by scene)"

@@ -29,6 +29,8 @@ function ArcadeRouteSwitch() {
   return isAdmin ? <ArcadeAdminOverview /> : <ArcadeNurseDashboard />;
 }
 
+import VideoTemplate from "@/components/video/VideoTemplate";
+
 // Lazy-load heavier pages for better initial load
 const CandidateDetail = lazy(() => import("@/pages/candidate-detail"));
 const CandidatesPage = lazy(() => import("@/pages/candidates"));
@@ -172,6 +174,7 @@ function AuthenticatedRouter() {
       <Switch>
         {/* Public portal & referee routes - no auth required */}
         <Route path="/portal/sign-in" component={PortalSignIn} />
+        <Route path="/video" component={VideoTemplate} />
         {/* Tokenless canonical portal routes (cookie-session auth).
             Order matters with wouter <Switch>: more-specific paths
             MUST come before the catch-all /portal/:token below, or

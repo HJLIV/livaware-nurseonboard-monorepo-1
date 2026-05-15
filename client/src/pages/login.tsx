@@ -133,10 +133,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
 
       {/* ── Left Panel: Brand + Features ── */}
-      <div className="login-panel-bg noise-overlay relative hidden lg:flex lg:w-[52%] flex-col justify-between p-12 overflow-hidden">
+      <div className="login-panel-bg noise-overlay relative hidden lg:flex lg:w-[52%] flex-col justify-between p-10 overflow-hidden">
 
         {/* Decorative circles */}
         <div className="pointer-events-none absolute inset-0">
@@ -152,36 +152,56 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         {/* Hero text */}
-        <div key={tab} className="relative space-y-6 animate-fade-in-up animate-delay-100">
+        <div key={tab} className="relative min-h-0 flex-1 flex flex-col justify-center space-y-4 animate-fade-in-up animate-delay-100">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[hsl(39_45%_61%)] mb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[hsl(39_45%_61%)] mb-3">
               {(tab === "nurse" ? nurseHero : adminHero).eyebrow}
             </p>
-            <h1 className="font-serif text-5xl font-light text-white leading-[1.1] tracking-tight">
+            <h1 className={`font-serif font-light text-white leading-[1.1] tracking-tight ${tab === "nurse" ? "text-3xl xl:text-4xl" : "text-5xl"}`}>
               {(tab === "nurse" ? nurseHero : adminHero).title}
             </h1>
           </div>
-          <p className="text-base text-white/50 max-w-sm leading-relaxed font-light">
+          <p className="text-sm text-white/50 max-w-sm leading-relaxed font-light">
             {(tab === "nurse" ? nurseHero : adminHero).blurb}
           </p>
 
-          {/* Feature list */}
-          <div className="grid grid-cols-1 gap-3 pt-2">
-            {(tab === "nurse" ? nurseFeatures : adminFeatures).map((f, i) => (
-              <div
-                key={f.label}
-                className={`flex items-center gap-3 animate-fade-in-up animate-delay-${(i + 2) * 100}`}
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10">
-                  <f.icon className="h-3.5 w-3.5 text-[hsl(39_45%_65%)]" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white/80">{f.label}</p>
-                  <p className="text-xs text-white/35">{f.desc}</p>
-                </div>
+          {tab === "nurse" ? (
+            /* Nurse explainer video — replaces the feature list on the nurse tab */
+            <div className="max-w-md animate-fade-in-up animate-delay-200">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[hsl(39_45%_61%)] mb-2">
+                A two-minute tour
+              </p>
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-lg">
+                <video
+                  src="/videos/nurse-explainer.mp4"
+                  controls
+                  controlsList="nodownload"
+                  disablePictureInPicture
+                  playsInline
+                  preload="metadata"
+                  className="w-full aspect-video bg-black"
+                />
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            /* Feature list */
+            <div className="grid grid-cols-1 gap-3 pt-2">
+              {adminFeatures.map((f, i) => (
+                <div
+                  key={f.label}
+                  className={`flex items-center gap-3 animate-fade-in-up animate-delay-${(i + 2) * 100}`}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10">
+                    <f.icon className="h-3.5 w-3.5 text-[hsl(39_45%_65%)]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white/80">{f.label}</p>
+                    <p className="text-xs text-white/35">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -193,19 +213,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       </div>
 
       {/* ── Right Panel: Sign In Form ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 bg-background">
+      <div className="flex flex-1 flex-col items-center justify-center px-8 py-8 bg-background overflow-y-auto">
 
         {/* Mobile logo */}
-        <div className="mb-10 flex items-center gap-3 lg:hidden animate-fade-in-up">
+        <div className="mb-6 flex items-center gap-3 lg:hidden animate-fade-in-up">
           <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
         </div>
 
         <div className="w-full max-w-sm animate-fade-in-up animate-delay-100">
 
           {/* Heading */}
-          <div className="mb-6">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-2">Livaware</p>
-            <h2 className="font-serif text-3xl font-light text-foreground tracking-tight mb-2">
+          <div className="mb-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-1.5">Livaware</p>
+            <h2 className="font-serif text-2xl font-light text-foreground tracking-tight mb-1">
               {tab === "nurse" ? "Welcome, nurse" : "Welcome back"}
             </h2>
             <p className="text-sm text-muted-foreground">

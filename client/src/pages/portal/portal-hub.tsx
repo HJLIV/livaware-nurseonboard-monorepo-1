@@ -90,6 +90,31 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
   return (
     <div data-testid="portal-welcome-intro">
       <div className="mx-auto max-w-2xl py-2">
+        <div className="mb-10 animate-fade-in-up" data-testid="portal-welcome-video">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50 mb-3 text-center">
+            Watch first — your 2 minute tour
+          </p>
+          <div className="overflow-hidden rounded-2xl ring-1 ring-primary/20 bg-black shadow-lg">
+            <video
+              src="/videos/nurse-explainer.mp4"
+              controls
+              playsInline
+              preload="metadata"
+              poster=""
+              className="w-full h-auto block"
+            >
+              Your browser does not support embedded video.
+              <a href="/videos/nurse-explainer.mp4" className="underline">Download the explainer video</a>
+            </video>
+          </div>
+          <p className="text-[11px] text-muted-foreground/70 mt-2 text-center">
+            A quick walkthrough of every part of your portal.{" "}
+            <a href="/videos/nurse-explainer.mp4" download className="underline hover:text-primary">
+              Download MP4
+            </a>
+          </p>
+        </div>
+
         <div className="text-center mb-10 animate-fade-in-up">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 ring-1 ring-primary/20 mb-5">
             <Sparkles className="w-8 h-8 text-primary" />
