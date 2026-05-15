@@ -135,6 +135,7 @@ export function triggerDocumentAnalysis(
       await storage.updateDocument(documentId, {
         aiStatus: status,
         aiIssues: issues,
+        aiExtractedFields: result.extractedFields || {},
         aiAnalyzedAt: new Date(),
       } as any);
       console.log(

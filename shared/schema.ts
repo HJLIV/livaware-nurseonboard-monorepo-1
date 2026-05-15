@@ -283,6 +283,11 @@ export const dbsVerifications = pgTable("dbs_verifications", {
   checkResult: text("check_result"),
   status: verificationStatusEnum("status").default("pending").notNull(),
   verifiedAt: timestamp("verified_at"),
+  // The uploaded DBS certificate (if any) this verification was
+  // recorded against — set when an admin clicks "Verify this
+  // certificate" from the DBS tab so we can later show "verified
+  // from <file>".
+  sourceDocumentId: varchar("source_document_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("dbs_verifications_nurse_id_idx").on(table.nurseId),
@@ -322,6 +327,12 @@ export const documents = pgTable("documents", {
   sharepointUrl: text("sharepoint_url"),
   aiStatus: text("ai_status"),
   aiIssues: jsonb("ai_issues"),
+  // Structured fields the document AI extracted from the file (e.g.
+  // certificateNumber/issueDate/certificateType for a DBS certificate,
+  // policyNumber/coverEndDate for an indemnity certificate). Stored as
+  // a key/value map so admin tabs can pre-fill verification forms
+  // straight from the upload.
+  aiExtractedFields: jsonb("ai_extracted_fields").$type<Record<string, string | null>>(),
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
 }, (table) => [

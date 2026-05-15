@@ -344,6 +344,22 @@ export function registerAdminRoutes(app: Express) {
     const data = { ...req.body, nurseId: param(req, "id") };
     if (typeof data.verifiedAt === "string") data.verifiedAt = new Date(data.verifiedAt);
     if (!data.verifiedAt && data.status === "verified") data.verifiedAt = new Date();
+
+    // If the admin verified from a specific uploaded DBS certificate,
+    // validate it belongs to this candidate before linking. Defensive
+    // — the FE only ever sends documents fetched for this nurse, but
+    // we don't trust the client.
+    let sourceDocument: any = null;
+    if (data.sourceDocumentId) {
+      sourceDocument = await storage.getDocument(String(data.sourceDocumentId));
+      if (!sourceDocument || sourceDocument.nurseId !== param(req, "id")) {
+        return res.status(400).json({ message: "sourceDocumentId does not belong to this candidate" });
+      }
+      if (sourceDocument.category !== "dbs") {
+        return res.status(400).json({ message: "sourceDocumentId must reference a DBS-category document" });
+      }
+    }
+
     const result = await storage.createDbsVerification(data);
     const state = await storage.getOnboardingState(param(req, "id"));
     if (state) {
@@ -351,7 +367,21 @@ export function registerAdminRoutes(app: Express) {
       statuses.dbs = result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress";
       await storage.updateOnboardingState(state.id, { stepStatuses: statuses });
     }
-    await storage.createAuditLog({ nurseId: param(req, "id"), action: "dbs_verification_created", agentName: agentFor(req), detail: { certificateNumber: result.certificateNumber, status: result.status } });
+    await storage.createAuditLog({
+      nurseId: param(req, "id"),
+      action: sourceDocument ? "dbs_verified_from_upload" : "dbs_verification_created",
+      agentName: agentFor(req),
+      detail: {
+        certificateNumber: result.certificateNumber,
+        status: result.status,
+        ...(sourceDocument
+          ? {
+              sourceDocumentId: sourceDocument.id,
+              sourceFilename: sourceDocument.originalFilename || sourceDocument.filename,
+            }
+          : {}),
+      },
+    });
     res.status(201).json(result);
   });
 

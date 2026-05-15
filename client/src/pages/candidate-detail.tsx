@@ -1120,7 +1120,7 @@ function NmcTab({ candidateId }: { candidateId: string }) {
 }
 
 function DbsTab({ candidateId }: { candidateId: string }) {
-  const { data: verification, isLoading } = useQuery<DbsVerification | null>({
+  const { data: verification, isLoading } = useQuery<(DbsVerification & { sourceDocumentId?: string | null }) | null>({
     queryKey: ["/api/candidates", candidateId, "dbs-verification"],
   });
   const { data: candidate } = useQuery<Candidate>({
@@ -1129,6 +1129,20 @@ function DbsTab({ candidateId }: { candidateId: string }) {
   const { data: dbsStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/dbs/status"],
   });
+  const { data: allDocs } = useQuery<Document[]>({
+    queryKey: [`/api/candidates/${candidateId}/documents`],
+  });
+  const dbsDocs = (allDocs || [])
+    .filter((d) => d.category === "dbs")
+    .sort((a, b) => new Date(b.uploadedAt as any).getTime() - new Date(a.uploadedAt as any).getTime());
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const selectedDoc = selectedDocId
+    ? dbsDocs.find((d) => d.id === selectedDocId)
+    : dbsDocs[0];
+  const verificationSourceDoc = verification?.sourceDocumentId
+    ? (allDocs || []).find((d) => d.id === verification.sourceDocumentId)
+    : undefined;
+
   const [certNum, setCertNum] = useState("");
   const [issueDate, setIssueDate] = useState("");
   const [certType, setCertType] = useState("Enhanced with Barred List");
@@ -1137,6 +1151,37 @@ function DbsTab({ candidateId }: { candidateId: string }) {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [liveResult, setLiveResult] = useState<any>(null);
   const { toast } = useToast();
+
+  const prefillFromDoc = useCallback((doc: Document | undefined) => {
+    if (!doc) return;
+    setSelectedDocId(doc.id);
+    const fields = (doc.aiExtractedFields as Record<string, string | null> | undefined) || {};
+    // Always overwrite (including clearing) so switching between docs
+    // with partial extraction doesn't leave stale values from a
+    // previously selected upload.
+    setCertNum(fields.certificateNumber ? String(fields.certificateNumber) : "");
+    let isoIssueDate = "";
+    if (fields.issueDate) {
+      // Accept either ISO (YYYY-MM-DD) or DD/MM/YYYY style; normalise to ISO for the date input.
+      const raw = String(fields.issueDate).trim();
+      isoIssueDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
+        ? raw.slice(0, 10)
+        : (() => {
+            const m = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+            if (!m) return "";
+            const [, d, mo, y] = m;
+            const yyyy = y.length === 2 ? `20${y}` : y;
+            return `${yyyy}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+          })();
+    }
+    setIssueDate(isoIssueDate);
+    const t = (fields.certificateType || "").toString().toLowerCase();
+    if (t.includes("enhanced") && t.includes("barred")) setCertType("Enhanced with Barred List");
+    else if (t.includes("enhanced")) setCertType("Enhanced");
+    else if (t.includes("standard")) setCertType("Standard");
+    else setCertType("Enhanced with Barred List");
+    toast({ title: "Form pre-filled", description: "Confirm or correct the values, then save." });
+  }, [toast]);
 
   const verifyMutation = useMutation({
     mutationFn: async () => {
@@ -1148,6 +1193,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
         checkResult: "No new information",
         status: "verified",
         verifiedAt: new Date().toISOString(),
+        sourceDocumentId: selectedDocId || undefined,
       });
       return res.json();
     },
@@ -1198,6 +1244,22 @@ function DbsTab({ candidateId }: { candidateId: string }) {
           <InfoRow label="Update Service" value={verification.updateServiceSubscribed ? "Subscribed" : "Not subscribed"} />
           <InfoRow label="Check Result" value={verification.checkResult} />
         </div>
+        {verificationSourceDoc && verificationSourceDoc.filePath && (
+          <div className="rounded-md border border-emerald-900/40 bg-emerald-950/20 p-3 text-xs text-muted-foreground flex items-center gap-2" data-testid="dbs-verified-source-doc">
+            <FileCheck className="h-4 w-4 text-emerald-400" />
+            <span>Verified from</span>
+            <a
+              href={verificationSourceDoc.filePath}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+              data-testid="link-dbs-source-doc"
+            >
+              <ExternalLink className="h-3 w-3" />
+              {verificationSourceDoc.originalFilename || verificationSourceDoc.filename}
+            </a>
+          </div>
+        )}
         {verification.updateServiceSubscribed && dbsStatus?.configured && (
           <>
             <Separator />
@@ -1256,6 +1318,84 @@ function DbsTab({ candidateId }: { candidateId: string }) {
 
   return (
     <div className="space-y-4" data-testid="tab-dbs">
+      {dbsDocs.length > 0 && (
+        <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-4 space-y-3" data-testid="dbs-uploaded-files-panel">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Uploaded DBS certificate{dbsDocs.length > 1 ? "s" : ""}</p>
+            <span className="text-[11px] text-muted-foreground">{dbsDocs.length} on file</span>
+          </div>
+          {dbsDocs.length > 1 && (
+            <div className="space-y-1">
+              <Label className="text-xs">Verifying against</Label>
+              <Select value={selectedDoc?.id || ""} onValueChange={(v) => setSelectedDocId(v)}>
+                <SelectTrigger data-testid="select-dbs-source-doc">
+                  <SelectValue placeholder="Pick an uploaded file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dbsDocs.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {(d.originalFilename || d.filename)} — uploaded {new Date(d.uploadedAt as any).toLocaleDateString("en-GB")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {selectedDoc && (
+            <div className="rounded-md border border-emerald-900/30 bg-background/60 p-3 space-y-2" data-testid={`dbs-doc-card-${selectedDoc.id}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span className="truncate font-medium">{selectedDoc.originalFilename || selectedDoc.filename}</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Uploaded {new Date(selectedDoc.uploadedAt as any).toLocaleString("en-GB")}
+                  </div>
+                  {(() => {
+                    const f = (selectedDoc.aiExtractedFields as Record<string, string | null> | undefined) || {};
+                    const hasAny = f.certificateNumber || f.issueDate || f.certificateType;
+                    if (!hasAny) {
+                      return (
+                        <div className="text-[11px] text-amber-400/80">
+                          No fields auto-extracted — fill the form manually below.
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="text-[11px] text-muted-foreground space-y-0.5 pt-1">
+                        {f.certificateNumber && <div>AI cert no.: <span className="font-mono text-foreground/80">{f.certificateNumber}</span></div>}
+                        {f.issueDate && <div>AI issue date: <span className="text-foreground/80">{f.issueDate}</span></div>}
+                        {f.certificateType && <div>AI cert type: <span className="text-foreground/80">{f.certificateType}</span></div>}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  {selectedDoc.filePath && (
+                    <Button asChild variant="outline" size="sm" data-testid={`button-open-dbs-doc-${selectedDoc.id}`}>
+                      <a href={selectedDoc.filePath} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                        Open
+                      </a>
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => prefillFromDoc(selectedDoc)}
+                    data-testid={`button-verify-from-upload-${selectedDoc.id}`}
+                    tooltip="Pre-fill the form below using the AI-extracted fields from this upload."
+                  >
+                    <Sparkles className="h-3.5 w-3.5 mr-1" />
+                    Verify this certificate
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-4 space-y-3">
         <p className="text-sm font-medium">DBS Certificate Verification</p>
         <div className="space-y-2">
