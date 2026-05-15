@@ -227,7 +227,14 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/candidates/:id/nmc-verification", async (req, res) => {
     const result = await storage.getNmcVerification(param(req, "id"));
-    res.json(result || null);
+    if (!result) return res.json(null);
+    let document: { id: string; filename: string; originalFilename: string | null; filePath: string | null } | null = null;
+    const raw = (result.rawResponse || {}) as Record<string, any>;
+    if (raw.documentId) {
+      const doc = await storage.getDocument(raw.documentId);
+      if (doc) document = { id: doc.id, filename: doc.filename, originalFilename: doc.originalFilename, filePath: doc.filePath };
+    }
+    res.json({ ...result, document });
   });
 
   app.post("/api/candidates/:id/nmc-verification", async (req, res) => {
@@ -287,6 +294,18 @@ export function registerAdminRoutes(app: Express) {
       }
     }
 
+    // If a pending verification already exists (e.g. nurse uploaded via the
+    // portal), update it in-place rather than appending a new row. Reuse the
+    // linked document only when the admin is confirming WITHOUT supplying a
+    // fresh upload — otherwise the new file should be persisted as its own
+    // document and replace the old link.
+    const existing = await storage.getNmcVerification(param(req, "id"));
+    const existingRaw = (existing?.rawResponse || {}) as Record<string, any>;
+    const adminUploadedNewFile = !!(uploadedFilename && resolvedFilePath);
+    const reuseDocumentId: string | undefined = adminUploadedNewFile ? undefined : existingRaw.documentId;
+    const evidenceFilename = uploadedFilename || (adminUploadedNewFile ? null : existingRaw.evidenceFilename || null);
+    const evidenceOriginalFilename = originalFilename || (adminUploadedNewFile ? null : existingRaw.originalFilename || null);
+
     const nmcData = {
       nurseId: param(req, "id"),
       pin: pin.trim().toUpperCase(),
@@ -298,12 +317,24 @@ export function registerAdminRoutes(app: Express) {
       renewalDate: renewalDate || null,
       status: verificationStatus,
       verifiedAt: new Date(),
-      rawResponse: { pdfVerification: true, evidenceFilename: uploadedFilename || null, extractionMethod: extractionMethod === "ai-extracted" ? "ai-extracted" : "parsed" },
+      rawResponse: {
+        pdfVerification: true,
+        evidenceFilename,
+        originalFilename: evidenceOriginalFilename,
+        documentId: reuseDocumentId,
+        extractionMethod: extractionMethod === "ai-extracted" ? "ai-extracted" : "parsed",
+        confirmedBy: "admin",
+      },
     };
 
-    const result = await storage.createNmcVerification(nmcData);
+    let result;
+    if (existing && existing.status === "pending") {
+      result = await storage.updateNmcVerification(existing.id, nmcData) || existing;
+    } else {
+      result = await storage.createNmcVerification(nmcData);
+    }
 
-    if (resolvedFilePath && uploadedFilename) {
+    if (adminUploadedNewFile && resolvedFilePath && uploadedFilename) {
       const nmcDoc = await storage.createDocument({
         nurseId: param(req, "id"),
         type: "nmc_register_check",
@@ -316,6 +347,10 @@ export function registerAdminRoutes(app: Express) {
       });
       triggerSharePointUpload(nmcDoc.id, nmcDoc.nurseId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc');
       triggerEmailNotification(nmcDoc.nurseId, resolvedFilePath, originalFilename || "nmc-register-check.pdf", 'nmc', 'admin', 'application/pdf');
+      // Persist the new document reference back onto the verification.
+      await storage.updateNmcVerification(result.id, {
+        rawResponse: { ...(result.rawResponse as Record<string, any>), documentId: nmcDoc.id },
+      });
     }
 
     const state = await storage.getOnboardingState(param(req, "id"));

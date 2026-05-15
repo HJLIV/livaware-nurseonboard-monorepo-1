@@ -742,12 +742,217 @@ function VerificationBanner({
 interface NmcRawResponse {
   pdfVerification?: boolean;
   evidenceFilename?: string | null;
+  originalFilename?: string | null;
+  documentId?: string | null;
   extractionMethod?: "parsed" | "ai-extracted";
+  source?: string;
 }
 
 function getNmcExtractionMethod(verification: NmcVerification): string | undefined {
   const raw = verification.rawResponse as NmcRawResponse | null;
   return raw?.extractionMethod;
+}
+
+const NMC_PIN_REGEX_GLOBAL = /^\d{2}[A-Z]\d{4}[A-Z]$/;
+
+interface NmcReviewSource {
+  pin?: string;
+  registeredName?: string;
+  registrationStatus?: string;
+  fieldOfPractice?: string;
+  effectiveDate?: string | null;
+  renewalDate?: string | null;
+  conditions?: string[];
+  extractionMethod?: "parsed" | "ai-extracted";
+  uploadedFilename?: string;
+  originalFilename?: string;
+  source?: string;
+}
+
+interface NmcDocumentSummary {
+  id: string;
+  filename: string;
+  originalFilename: string | null;
+  filePath: string | null;
+}
+
+type NmcVerificationWithDocument = NmcVerification & { document?: NmcDocumentSummary | null };
+
+interface NmcConfirmPayload {
+  pin: string;
+  registeredName: string;
+  registrationStatus: string;
+  fieldOfPractice: string;
+  effectiveDate: string | null;
+  renewalDate: string | null;
+  conditions: string[];
+  uploadedFilename?: string;
+  originalFilename?: string;
+  extractionMethod: "parsed" | "ai-extracted";
+}
+
+interface NmcConfirmMutation {
+  mutate: (data: NmcConfirmPayload) => void;
+  isPending: boolean;
+}
+
+function NmcReviewPanel({
+  source,
+  verification,
+  resolvedPin,
+  confirmMutation,
+  onCancel,
+}: {
+  source: NmcReviewSource;
+  verification: NmcVerificationWithDocument | null;
+  resolvedPin: string;
+  confirmMutation: NmcConfirmMutation;
+  onCancel?: () => void;
+}) {
+  const [pinField, setPinField] = useState<string>(source.pin || resolvedPin || "");
+  const [registeredName, setRegisteredName] = useState<string>(source.registeredName || "");
+  const [registrationStatus, setRegistrationStatus] = useState<string>(source.registrationStatus || "");
+  const [fieldOfPractice, setFieldOfPractice] = useState<string>(source.fieldOfPractice || "");
+  const [effectiveDate, setEffectiveDate] = useState<string>(source.effectiveDate || "");
+  const [renewalDate, setRenewalDate] = useState<string>(source.renewalDate || "");
+  const [conditionsText, setConditionsText] = useState<string>(((source.conditions as string[] | undefined) || []).join("\n"));
+
+  const pinUpper = (pinField || "").toUpperCase().trim();
+  const pinMissing = !pinUpper;
+  const pinInvalid = !pinMissing && !NMC_PIN_REGEX_GLOBAL.test(pinUpper);
+  const statusMissing = !registrationStatus.trim();
+
+  const validationMessages: string[] = [];
+  if (pinMissing) validationMessages.push("Enter the nurse's NMC PIN to enable confirm.");
+  else if (pinInvalid) validationMessages.push("PIN must be 2 digits, 1 letter, 4 digits, 1 letter (e.g. 18A1234C).");
+  if (statusMissing) validationMessages.push("Enter the registration status (e.g. Registered).");
+
+  const canSubmit = !pinMissing && !pinInvalid && !statusMissing && !confirmMutation.isPending;
+
+  const statusLower = registrationStatus.toLowerCase();
+  const isRegistered = statusLower.includes("registered") && !statusLower.includes("condition") && !statusLower.includes("caution") && !statusLower.includes("suspend");
+
+  const document = verification?.document ?? null;
+  const docFilename = document?.originalFilename || document?.filename || source.originalFilename || source.uploadedFilename;
+  const docPath = document?.filePath || (source.uploadedFilename ? `/api/uploads/${source.uploadedFilename}` : null);
+  const isPortalSubmission = !!verification && (verification.rawResponse as NmcRawResponse | null)?.source === "portal_upload";
+
+  return (
+    <div className="space-y-4" data-testid="tab-nmc">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-4 space-y-1">
+        <div className="flex items-center gap-2">
+          <FileCheck className="h-4 w-4 text-blue-400" />
+          <p className="text-sm font-medium">
+            {isPortalSubmission ? "Submitted by nurse — Review & confirm" : "PDF Parsed — Review Details"}
+          </p>
+          {source.extractionMethod === "ai-extracted" && (
+            <Badge variant="outline" className="text-[10px] bg-purple-950/60 text-purple-300 border-purple-800/50" data-testid="badge-ai-extracted">
+              <Sparkles className="h-3 w-3 mr-1" />
+              AI-extracted
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {isPortalSubmission
+            ? "The nurse uploaded their NMC register PDF via the portal. Review the parsed details below, edit any field if needed, and confirm to save the verification."
+            : source.extractionMethod === "ai-extracted"
+              ? "Standard parsing returned incomplete results. These details were extracted using AI. Please review carefully and confirm."
+              : "These details were extracted from the uploaded NMC register PDF. Please review and confirm."}
+        </p>
+        {docPath && (
+          <p className="text-xs mt-2">
+            <a href={docPath} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300" data-testid="link-nmc-pdf">
+              View uploaded PDF{docFilename ? ` (${docFilename})` : ""}
+            </a>
+          </p>
+        )}
+      </div>
+
+      <div className={`rounded-lg border p-4 space-y-3 ${isRegistered ? "border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-950/20" : "border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20"}`}>
+        <div className="flex items-center gap-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${isRegistered ? "bg-green-500" : "bg-amber-500"}`} />
+          <span className="text-sm font-semibold">{registrationStatus || "Status not extracted — enter below"}</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-pin" className="text-muted-foreground text-xs">NMC PIN</Label>
+            <Input
+              id="nmc-confirm-pin"
+              value={pinField}
+              onChange={(e) => setPinField(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+              placeholder="e.g. 18A1234C"
+              data-testid="input-confirm-pin"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-name" className="text-muted-foreground text-xs">Registered Name</Label>
+            <Input id="nmc-confirm-name" value={registeredName} onChange={(e) => setRegisteredName(e.target.value)} data-testid="input-confirm-name" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-status" className="text-muted-foreground text-xs">Registration Status</Label>
+            <Input id="nmc-confirm-status" value={registrationStatus} onChange={(e) => setRegistrationStatus(e.target.value)} placeholder="e.g. Registered" data-testid="input-confirm-status" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-field" className="text-muted-foreground text-xs">Field of Practice</Label>
+            <Input id="nmc-confirm-field" value={fieldOfPractice} onChange={(e) => setFieldOfPractice(e.target.value)} data-testid="input-confirm-field" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-effective" className="text-muted-foreground text-xs">Effective Date</Label>
+            <Input id="nmc-confirm-effective" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} placeholder="DD/MM/YYYY" data-testid="input-confirm-effective" />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="nmc-confirm-renewal" className="text-muted-foreground text-xs">Renewal Date</Label>
+            <Input id="nmc-confirm-renewal" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)} placeholder="DD/MM/YYYY" data-testid="input-confirm-renewal" />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Label htmlFor="nmc-confirm-conditions" className="text-muted-foreground text-xs">Conditions / Cautions (one per line)</Label>
+            <Textarea
+              id="nmc-confirm-conditions"
+              value={conditionsText}
+              onChange={(e) => setConditionsText(e.target.value)}
+              placeholder="Leave empty if none"
+              rows={2}
+              data-testid="input-confirm-conditions"
+            />
+          </div>
+        </div>
+      </div>
+
+      {validationMessages.length > 0 && (
+        <div className="rounded-md border border-amber-300/40 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/20 p-3 text-xs text-amber-700 dark:text-amber-300 space-y-1" data-testid="nmc-validation-messages">
+          {validationMessages.map((m, i) => <p key={i}>• {m}</p>)}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button
+          onClick={() => confirmMutation.mutate({
+            pin: pinUpper,
+            registeredName,
+            registrationStatus,
+            fieldOfPractice,
+            effectiveDate: effectiveDate || null,
+            renewalDate: renewalDate || null,
+            conditions: conditionsText.split("\n").map(s => s.trim()).filter(Boolean),
+            uploadedFilename: source.uploadedFilename,
+            originalFilename: source.originalFilename,
+            extractionMethod: source.extractionMethod || "parsed",
+          })}
+          disabled={!canSubmit}
+          data-testid="button-confirm-nmc"
+          tooltip="Save the parsed NMC verification details to this candidate's record."
+        >
+          <CheckCircle className="h-4 w-4 mr-2" />
+          {confirmMutation.isPending ? "Confirming..." : "Confirm & Save Verification"}
+        </Button>
+        {onCancel && (
+          <Button variant="outline" onClick={onCancel} data-testid="button-cancel-nmc">
+            Cancel
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function NmcTab({ candidateId }: { candidateId: string }) {
@@ -846,13 +1051,64 @@ function NmcTab({ candidateId }: { candidateId: string }) {
       toast({ title: "NMC Verification Confirmed", description: "Registration verified and evidence saved." });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message || "Could not save NMC verification.", variant: "destructive" });
+      // err.message looks like `400: {"message":"Invalid NMC PIN format..."}` —
+      // unwrap the JSON to surface the real server reason instead of the raw status line.
+      let description: string = err?.message || "Could not save NMC verification.";
+      const match = typeof err?.message === "string" ? err.message.match(/^\d+:\s*([\s\S]*)$/) : null;
+      if (match) {
+        const tail = match[1].trim();
+        try {
+          const parsed = JSON.parse(tail);
+          if (parsed && typeof parsed.message === "string") description = parsed.message;
+          else description = tail;
+        } catch {
+          description = tail;
+        }
+      }
+      toast({ title: "Could not confirm NMC verification", description, variant: "destructive" });
     },
   });
 
+  // Pending verifications (e.g. created by a portal nurse upload) should
+  // surface in the same review/confirm panel as a fresh admin-side upload.
+  const pendingVerification = verification && verification.status === "pending"
+    ? (verification as NmcVerificationWithDocument)
+    : null;
+  const parsedSource: NmcReviewSource | null = parsedData
+    ? {
+        pin: parsedData.pin || undefined,
+        registeredName: parsedData.registeredName || "",
+        registrationStatus: parsedData.registrationStatus || "",
+        fieldOfPractice: parsedData.fieldOfPractice || "",
+        effectiveDate: parsedData.effectiveDate || null,
+        renewalDate: parsedData.renewalDate || null,
+        conditions: Array.isArray(parsedData.conditions) ? parsedData.conditions : [],
+        extractionMethod: parsedData.extractionMethod === "ai-extracted" ? "ai-extracted" : "parsed",
+        uploadedFilename: parsedData.uploadedFilename,
+        originalFilename: parsedData.originalFilename,
+        source: "admin_upload",
+      }
+    : null;
+  const pendingSource: NmcReviewSource | null = pendingVerification
+    ? {
+        pin: pendingVerification.pin && pendingVerification.pin !== "PENDING" ? pendingVerification.pin : "",
+        registeredName: pendingVerification.registeredName || "",
+        registrationStatus: pendingVerification.registrationStatus || "",
+        fieldOfPractice: pendingVerification.fieldOfPractice || "",
+        effectiveDate: pendingVerification.effectiveDate || null,
+        renewalDate: pendingVerification.renewalDate || null,
+        conditions: (pendingVerification.conditions as string[] | null) || [],
+        extractionMethod: getNmcExtractionMethod(pendingVerification) === "ai-extracted" ? "ai-extracted" : "parsed",
+        uploadedFilename: (pendingVerification.rawResponse as NmcRawResponse | null)?.evidenceFilename || undefined,
+        originalFilename: (pendingVerification.rawResponse as NmcRawResponse | null)?.originalFilename || undefined,
+        source: "portal_upload",
+      }
+    : null;
+  const reviewSource: NmcReviewSource | null = parsedSource ?? pendingSource;
+
   if (isLoading) return <Skeleton className="h-40" />;
 
-  if (verification && !showRecheck && !parsedData) {
+  if (verification && verification.status !== "pending" && !showRecheck && !parsedData) {
     return (
       <div className="space-y-4" data-testid="tab-nmc">
         <VerificationBanner
@@ -899,102 +1155,15 @@ function NmcTab({ candidateId }: { candidateId: string }) {
     );
   }
 
-  if (parsedData) {
-    const statusLower = (parsedData.registrationStatus || "").toLowerCase();
-    const isRegistered = statusLower.includes("registered") && !statusLower.includes("condition") && !statusLower.includes("caution") && !statusLower.includes("suspend");
+  if (reviewSource) {
     return (
-      <div className="space-y-4" data-testid="tab-nmc">
-        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 p-4 space-y-1">
-          <div className="flex items-center gap-2">
-            <FileCheck className="h-4 w-4 text-blue-400" />
-            <p className="text-sm font-medium">PDF Parsed — Review Details</p>
-            {parsedData.extractionMethod === "ai-extracted" && (
-              <Badge variant="outline" className="text-[10px] bg-purple-950/60 text-purple-300 border-purple-800/50" data-testid="badge-ai-extracted">
-                <Sparkles className="h-3 w-3 mr-1" />
-                AI-extracted
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {parsedData.extractionMethod === "ai-extracted"
-              ? "Standard parsing returned incomplete results. These details were extracted using AI. Please review carefully and confirm."
-              : "These details were extracted from the uploaded NMC register PDF. Please review and confirm."}
-          </p>
-        </div>
-
-        <div className={`rounded-lg border p-4 space-y-3 ${isRegistered ? "border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-950/20" : "border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/20"}`}>
-          <div className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full ${isRegistered ? "bg-green-500" : "bg-amber-500"}`} />
-            <span className="text-sm font-semibold">{parsedData.registrationStatus || "Unknown Status"}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {parsedData.pin && (
-              <div>
-                <span className="text-muted-foreground text-xs">NMC PIN</span>
-                <p className="font-medium" data-testid="text-parsed-pin">{parsedData.pin}</p>
-              </div>
-            )}
-            <div>
-              <span className="text-muted-foreground text-xs">Registered Name</span>
-              <p className="font-medium" data-testid="text-parsed-name">{parsedData.registeredName || "—"}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Location</span>
-              <p className="font-medium">{parsedData.location || "—"}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Field of Practice</span>
-              <p className="font-medium" data-testid="text-parsed-field">{parsedData.fieldOfPractice || "—"}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Renewal Date</span>
-              <p className="font-medium" data-testid="text-parsed-renewal">{parsedData.renewalDate || "—"}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Effective Date</span>
-              <p className="font-medium" data-testid="text-parsed-effective">{parsedData.effectiveDate || "—"}</p>
-            </div>
-          </div>
-          {parsedData.conditions?.length > 0 && (
-            <div className="rounded-md border border-orange-800/50 bg-orange-950/30 p-2">
-              <p className="text-xs font-medium text-orange-300">Conditions/Cautions detected:</p>
-              <ul className="mt-1 text-xs text-orange-400">
-                {parsedData.conditions.map((c: string, i: number) => <li key={i}>{c}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            onClick={() => confirmMutation.mutate({
-              pin: parsedData.pin || resolvedPin || "",
-              registeredName: parsedData.registeredName,
-              registrationStatus: parsedData.registrationStatus,
-              fieldOfPractice: parsedData.fieldOfPractice,
-              effectiveDate: parsedData.effectiveDate,
-              renewalDate: parsedData.renewalDate,
-              conditions: parsedData.conditions || [],
-              uploadedFilename: parsedData.uploadedFilename,
-              originalFilename: parsedData.originalFilename,
-              extractionMethod: parsedData.extractionMethod || "parsed",
-            })}
-            disabled={confirmMutation.isPending || !parsedData.registrationStatus}
-            data-testid="button-confirm-nmc"
-            tooltip="Save the parsed NMC verification details to this candidate's record."
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            {confirmMutation.isPending ? "Confirming..." : "Confirm & Save Verification"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setParsedData(null)}
-            data-testid="button-cancel-nmc"
-          >
-            Cancel
-          </Button>
-        </div>
-      </div>
+      <NmcReviewPanel
+        source={reviewSource}
+        verification={pendingVerification}
+        resolvedPin={resolvedPin}
+        confirmMutation={confirmMutation}
+        onCancel={parsedData ? () => setParsedData(null) : undefined}
+      />
     );
   }
 

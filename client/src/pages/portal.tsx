@@ -963,11 +963,13 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
   const [pin, setPin] = useState(candidate.nmcPin || "");
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
-  const [nmcParseResult, setNmcParseResult] = useState<any>(null);
   const { toast } = useToast();
   const isPinLocked = !!(candidate.nmcPin) && !pinUnlocked;
   const { data: nmcDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
+  });
+  const { data: nmcVerification } = useQuery<any>({
+    queryKey: ["/api/portal", token, "nmc-verification"],
   });
 
   const saveMutation = useMutation({
@@ -993,24 +995,36 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
-      const result = await res.json();
-      setNmcParseResult(result);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(body?.message || "Upload failed");
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
-      toast({ title: "NMC register PDF uploaded and parsed" });
-    } catch {
-      toast({ title: "Upload failed", description: "Could not process the NMC register PDF", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "nmc-verification"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "onboarding-state"] });
+      toast({ title: "NMC register PDF uploaded", description: "Submitted to admin for review." });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Could not process the NMC register PDF", variant: "destructive" });
     } finally {
       setPdfUploading(false);
       e.target.value = "";
     }
   };
 
-  const statusColour = nmcParseResult?.registrationStatus?.toLowerCase() === "registered"
+  // Persist the "submitted for review" panel from the server so it survives a
+  // page refresh. Pending = waiting for admin confirm, verified/failed/escalated
+  // = admin has actioned the submission.
+  const submission = nmcVerification && (nmcVerification.rawResponse?.source === "portal_upload" || nmcVerification.rawResponse?.pdfVerification)
+    ? nmcVerification
+    : null;
+  const submissionDoc = submission?.document;
+  const submissionStatusLower = (submission?.registrationStatus || "").toLowerCase();
+  const statusColour = submissionStatusLower === "registered"
     ? "text-emerald-400 border-emerald-800/50 bg-emerald-950/30"
-    : nmcParseResult?.registrationStatus
+    : submission?.registrationStatus
       ? "text-amber-400 border-amber-800/50 bg-amber-950/30"
-      : "";
+      : "text-muted-foreground border-muted/40 bg-muted/10";
 
   return (
     <SectionWrapper title="NMC PIN Verification" icon={<Shield className="h-5 w-5" />} status={status}>
@@ -1074,25 +1088,44 @@ function NmcStep({ token, candidate, status }: { token: string; candidate: Candi
             </Button>
           </label>
 
-          {nmcParseResult && (
-            <div className={`rounded-md border p-3 text-sm ${statusColour}`}>
+          {submission && (
+            <div className={`rounded-md border p-3 text-sm ${statusColour}`} data-testid="portal-nmc-submission-panel">
               <div className="flex items-start gap-2">
                 <Shield className="h-4 w-4 mt-0.5 shrink-0" />
-                <div className="space-y-1">
-                  <p className="font-medium">Registration Details Extracted</p>
+                <div className="space-y-1 flex-1">
+                  <p className="font-medium">
+                    {submission.status === "pending" && "Submitted for admin review"}
+                    {submission.status === "verified" && "Verified by admin"}
+                    {submission.status === "failed" && "Admin review — verification failed"}
+                    {submission.status === "escalated" && "Admin review — escalated"}
+                  </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-2">
                     <span className="text-muted-foreground">Name:</span>
-                    <span>{nmcParseResult.registeredName || "—"}</span>
+                    <span>{submission.registeredName || "—"}</span>
                     <span className="text-muted-foreground">Status:</span>
-                    <span className="font-medium">{nmcParseResult.registrationStatus || "—"}</span>
+                    <span className="font-medium">{submission.registrationStatus || "—"}</span>
                     <span className="text-muted-foreground">Field:</span>
-                    <span>{nmcParseResult.fieldOfPractice || "—"}</span>
+                    <span>{submission.fieldOfPractice || "—"}</span>
                     <span className="text-muted-foreground">Renewal:</span>
-                    <span>{nmcParseResult.renewalDate || "—"}</span>
+                    <span>{submission.renewalDate || "—"}</span>
+                    {submissionDoc && (
+                      <>
+                        <span className="text-muted-foreground">Uploaded file:</span>
+                        <span data-testid="portal-nmc-submission-filename">
+                          {submissionDoc.filePath ? (
+                            <a href={submissionDoc.filePath} target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-300">
+                              {submissionDoc.originalFilename || submissionDoc.filename}
+                            </a>
+                          ) : (submissionDoc.originalFilename || submissionDoc.filename)}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    The admin team will review and confirm these details.
-                  </p>
+                  {submission.status === "pending" && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      The admin team will review and confirm these details. You can re-upload at any time to replace the submission.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

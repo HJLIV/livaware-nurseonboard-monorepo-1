@@ -72,4 +72,108 @@ describe("Portal NMC & DBS Verification Routes", () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/no file/i);
   });
+
+  // T48: Pending portal-uploaded NMC verification surfaces to admin GET with linked document.
+  it("T48: GET /api/candidates/:id/nmc-verification returns pending portal upload + document link", async () => {
+    const { storage } = await import("../server/storage");
+    const nurse = await createTestNurse(agent);
+    const link = await createPortalLink(agent, nurse.id, "onboard");
+    const doc = await storage.createDocument({
+      nurseId: nurse.id,
+      type: "NMC Register PDF",
+      filename: `nmc-${Date.now()}.pdf`,
+      originalFilename: "nmc-register.pdf",
+      filePath: `/api/uploads/nmc-${Date.now()}.pdf`,
+      fileSize: 1024,
+      mimeType: "application/pdf",
+      category: "nmc",
+      uploadedBy: "nurse",
+    } as any);
+    await storage.createNmcVerification({
+      nurseId: nurse.id,
+      pin: "PENDING",
+      registeredName: "Test Nurse",
+      registrationStatus: "Registered",
+      fieldOfPractice: "Adult Nursing",
+      conditions: [],
+      effectiveDate: null,
+      renewalDate: null,
+      status: "pending",
+      verifiedAt: null,
+      rawResponse: {
+        pdfVerification: true,
+        evidenceFilename: doc.filename,
+        originalFilename: doc.originalFilename,
+        documentId: doc.id,
+        extractionMethod: "parsed",
+        source: "portal_upload",
+      },
+    } as any);
+
+    const res = await agent.get(`/api/candidates/${nurse.id}/nmc-verification`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("pending");
+    expect(res.body.document).toBeTruthy();
+    expect(res.body.document.id).toBe(doc.id);
+    expect(res.body.rawResponse.source).toBe("portal_upload");
+
+    // Portal GET also reflects the persisted submission (survives refresh).
+    const portalRes = await supertest(app).get(`/api/portal/${link.token}/nmc-verification`);
+    expect(portalRes.status).toBe(200);
+    expect(portalRes.body.status).toBe("pending");
+    expect(portalRes.body.document?.id).toBe(doc.id);
+  });
+
+  // T49: Admin confirm against a pending portal upload reuses the same row + document.
+  it("T49: admin confirm reuses pending verification row, preserves documentId, no duplicate", async () => {
+    const { storage } = await import("../server/storage");
+    const nurse = await createTestNurse(agent);
+    const doc = await storage.createDocument({
+      nurseId: nurse.id,
+      type: "NMC Register PDF",
+      filename: `nmc-${Date.now()}-2.pdf`,
+      originalFilename: "nmc-register.pdf",
+      filePath: `/api/uploads/nmc-${Date.now()}-2.pdf`,
+      fileSize: 1024,
+      mimeType: "application/pdf",
+      category: "nmc",
+      uploadedBy: "nurse",
+    } as any);
+    const pending = await storage.createNmcVerification({
+      nurseId: nurse.id,
+      pin: "PENDING",
+      registeredName: "Test Nurse",
+      registrationStatus: "Registered",
+      fieldOfPractice: "Adult Nursing",
+      conditions: [],
+      effectiveDate: null,
+      renewalDate: null,
+      status: "pending",
+      verifiedAt: null,
+      rawResponse: { pdfVerification: true, documentId: doc.id, source: "portal_upload", extractionMethod: "parsed" },
+    } as any);
+
+    const confirm = await agent.post(`/api/candidates/${nurse.id}/nmc-verify`).send({
+      pin: "18A1234C",
+      registeredName: "Test Nurse",
+      registrationStatus: "Registered",
+      fieldOfPractice: "Adult Nursing",
+    });
+    expect(confirm.status).toBe(201);
+    expect(confirm.body.id).toBe(pending.id); // same row reused
+    expect(confirm.body.status).toBe("verified");
+    expect(confirm.body.rawResponse.documentId).toBe(doc.id);
+  });
+
+  // T50: Confirm endpoint surfaces a clear PIN-format error message.
+  it("T50: admin confirm returns clear error message for invalid PIN", async () => {
+    const candidate = await createTestCandidate(agent);
+    const res = await agent.post(`/api/candidates/${candidate.id}/nmc-verify`).send({
+      pin: "BADPIN",
+      registrationStatus: "Registered",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/invalid nmc pin format/i);
+    expect(res.body.message).toMatch(/18A1234C/);
+  });
 });

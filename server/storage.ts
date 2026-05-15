@@ -41,6 +41,7 @@ export interface IStorage {
 
   getNmcVerification(candidateId: string): Promise<NmcVerification | undefined>;
   createNmcVerification(data: InsertNmcVerification): Promise<NmcVerification>;
+  updateNmcVerification(id: string, data: Partial<InsertNmcVerification>): Promise<NmcVerification | undefined>;
 
   getDbsVerification(candidateId: string): Promise<DbsVerification | undefined>;
   createDbsVerification(data: InsertDbsVerification): Promise<DbsVerification>;
@@ -205,6 +206,11 @@ export class DatabaseStorage implements IStorage {
 
   async createNmcVerification(data: InsertNmcVerification): Promise<NmcVerification> {
     const [result] = await db.insert(nmcVerifications).values(data).returning();
+    return result;
+  }
+
+  async updateNmcVerification(id: string, data: Partial<InsertNmcVerification>): Promise<NmcVerification | undefined> {
+    const [result] = await db.update(nmcVerifications).set(data).where(eq(nmcVerifications.id, id)).returning();
     return result;
   }
 

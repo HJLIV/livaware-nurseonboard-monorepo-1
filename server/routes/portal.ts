@@ -851,6 +851,19 @@ export function registerPortalRoutes(app: Express) {
     },
   );
 
+  app.get("/api/portal/:token/nmc-verification", validatePortalToken, async (req, res) => {
+    const nurseId = (req as any).nurseId;
+    const verification = await storage.getNmcVerification(nurseId);
+    if (!verification) return res.json(null);
+    let document: { id: string; filename: string; originalFilename: string | null; filePath: string | null } | null = null;
+    const raw = (verification.rawResponse || {}) as Record<string, any>;
+    if (raw.documentId) {
+      const doc = await storage.getDocument(raw.documentId);
+      if (doc) document = { id: doc.id, filename: doc.filename, originalFilename: doc.originalFilename, filePath: doc.filePath };
+    }
+    res.json({ ...verification, document });
+  });
+
   app.post("/api/portal/:token/nmc-parse-pdf", validatePortalToken, requireOnboardingUnlocked, uploadLimiter, upload.single("file"), async (req, res) => {
     try {
       const nurseId = (req as any).nurseId;
@@ -874,11 +887,48 @@ export function registerPortalRoutes(app: Express) {
       triggerSharePointUpload(doc.id, nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc');
       triggerEmailNotification(nurseId, `/api/uploads/${req.file.filename}`, req.file.originalname, 'nmc', 'nurse', req.file.mimetype);
 
+      // Persist a pending NMC verification record so the parsed details + the
+      // uploaded PDF are immediately visible on the admin candidate page and
+      // survive a portal page refresh. Falls through to the existing admin
+      // confirm flow which will flip the status to verified/failed/escalated.
+      const candidate = await storage.getCandidate(nurseId);
+      const existing = await storage.getNmcVerification(nurseId);
+      const pinForRecord = (result.pin || candidate?.nmcPin || "").toUpperCase();
+      const rawResponse = {
+        pdfVerification: true,
+        evidenceFilename: req.file.filename,
+        originalFilename: req.file.originalname,
+        documentId: doc.id,
+        extractionMethod: result.extractionMethod,
+        source: "portal_upload",
+      };
+      const verificationFields = {
+        nurseId,
+        pin: pinForRecord || "PENDING",
+        registeredName: result.registeredName || "",
+        registrationStatus: result.registrationStatus || "",
+        fieldOfPractice: result.fieldOfPractice || "",
+        conditions: result.conditions || [],
+        effectiveDate: result.effectiveDate || null,
+        renewalDate: result.renewalDate || null,
+        status: "pending" as const,
+        verifiedAt: null,
+        rawResponse,
+      };
+      let verification;
+      if (existing && existing.status === "pending") {
+        verification = await storage.updateNmcVerification(existing.id, verificationFields) || existing;
+      } else {
+        verification = await storage.createNmcVerification(verificationFields);
+      }
+
+      await safeWriteStepStatuses(nurseId, { nmc: "in_progress" });
+
       await storage.createAuditLog({
         nurseId,
         action: "portal_nmc_pdf_parsed",
         agentName: portalAgent(req),
-        detail: { registeredName: result.registeredName, status: result.registrationStatus, extractionMethod: result.extractionMethod },
+        detail: { registeredName: result.registeredName, status: result.registrationStatus, extractionMethod: result.extractionMethod, verificationId: verification.id },
       });
 
       res.json({
@@ -886,6 +936,7 @@ export function registerPortalRoutes(app: Express) {
         uploadedFilename: req.file.filename,
         originalFilename: req.file.originalname,
         documentId: doc.id,
+        verificationId: verification.id,
         status: "pending",
       });
     } catch (err: any) {
