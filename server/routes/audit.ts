@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { db } from "../db";
 import { auditLogs } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { enrichAuditLogs } from "../services/audit-enrich";
 
 export function registerAuditRoutes(app: Express) {
   // GET /api/audit-logs - all audit logs with optional filters (admin only, middleware applied in routes.ts)
@@ -25,7 +26,8 @@ export function registerAuditRoutes(app: Express) {
     }
 
     const result = await query;
-    res.json(result);
+    const enriched = await enrichAuditLogs(result);
+    res.json(enriched);
   });
 
   // GET /api/audit-logs/stats - count by module and action type
@@ -46,6 +48,7 @@ export function registerAuditRoutes(app: Express) {
   // GET /api/audit-logs/nurse/:id - audit logs for a specific nurse
   app.get("/api/audit-logs/nurse/:id", async (req, res) => {
     const result = await db.select().from(auditLogs).where(eq(auditLogs.nurseId, req.params.id)).orderBy(desc(auditLogs.timestamp));
-    res.json(result);
+    const enriched = await enrichAuditLogs(result);
+    res.json(enriched);
   });
 }

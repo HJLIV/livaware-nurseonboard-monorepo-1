@@ -161,7 +161,7 @@ export async function registerRoutes(
     try {
       const updated = await runAiStep(id);
       await logAction(existing.nurseId ?? null, "preboard", "assessment_ai_rerun",
-        req.session?.username || "admin",
+        req.session?.username ? (req.session?.role ? `${req.session.username} (${req.session.role})` : req.session.username) : "admin",
         { assessmentId: id, nurseName: existing.nurseName });
       res.json({ status: "ok", assessment: updated });
     } catch (err) {
@@ -185,7 +185,7 @@ export async function registerRoutes(
     try {
       const updated = await runEmailStep(id);
       await logAction(existing.nurseId ?? null, "preboard", "assessment_email_resent",
-        req.session?.username || "admin",
+        req.session?.username ? (req.session?.role ? `${req.session.username} (${req.session.role})` : req.session.username) : "admin",
         { assessmentId: id, nurseName: existing.nurseName });
       res.json({ status: "ok", assessment: updated });
     } catch (err) {

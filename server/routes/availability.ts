@@ -11,7 +11,7 @@ import {
   type NurseAvailability,
 } from "@shared/schema";
 import { storage } from "../storage";
-import { validatePortalToken, requireAdmin } from "../middleware";
+import { validatePortalToken, requireAdmin, portalAgent } from "../middleware";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────
 
@@ -136,11 +136,10 @@ async function ensureCompletedNurse(nurseId: string): Promise<{ ok: boolean; nur
 }
 
 function agentForReq(req: Request): string {
-  return (
-    (req as any).session?.username
-      || (req as any).session?.email
-      || "system"
-  );
+  const s = (req as any).session;
+  const u = s?.username || s?.email;
+  if (!u) return "system";
+  return s?.role ? `${u} (${s.role})` : u;
 }
 
 // ─── Route registration ───────────────────────────────────────────────────
@@ -200,7 +199,7 @@ export function registerAvailabilityRoutes(app: Express) {
       nurseId,
       module: "availability",
       action: "availability_updated",
-      agentName: "nurse_portal",
+      agentName: portalAgent(req),
       detail: { source: "portal", count: cells.length, sample: cells.slice(0, 5) },
     });
     res.json({ updated: cells.length, entries: written });

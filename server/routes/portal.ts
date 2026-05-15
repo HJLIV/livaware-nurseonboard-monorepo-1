@@ -6,7 +6,7 @@ import { db } from "../db";
 import { arcadeUsers } from "@shared/schema";
 import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged, requireNurseStageCompleted } from "../middleware";
+import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged, requireNurseStageCompleted, portalAgent } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
@@ -177,7 +177,7 @@ export function registerPortalRoutes(app: Express) {
     if (!candidate) return res.status(404).json({ message: "Candidate not found" });
     if (!link.usedAt) {
       await storage.markMagicLinkUsed(link.id);
-      await storage.createAuditLog({ nurseId: candidate.id, action: "portal_accessed", agentName: "nurse_portal", detail: {} });
+      await storage.createAuditLog({ nurseId: candidate.id, action: "portal_accessed", agentName: `nurse_portal:${candidate.fullName}`, detail: {} });
     }
     res.json({ candidate, token: link.token });
   });
@@ -196,7 +196,7 @@ export function registerPortalRoutes(app: Express) {
     if (req.body.dbsNumber) updates.dbs = "in_progress";
     if (req.body.currentEmployer || req.body.yearsQualified || req.body.specialisms) updates.profile = "in_progress";
     if (Object.keys(updates).length > 0) await safeWriteStepStatuses(nurseId, updates);
-    await storage.createAuditLog({ nurseId, action: "portal_candidate_updated", agentName: "nurse_portal", detail: { fields: Object.keys(req.body) } });
+    await storage.createAuditLog({ nurseId, action: "portal_candidate_updated", agentName: portalAgent(req), detail: { fields: Object.keys(req.body) } });
     res.json(candidate);
   });
 
@@ -226,7 +226,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createEmploymentHistory(data);
     await safeWriteStepStatuses(nurseId, { profile: "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_employment_added", agentName: "nurse_portal", detail: { employer: result.employer, jobTitle: result.jobTitle } });
+    await storage.createAuditLog({ nurseId, action: "portal_employment_added", agentName: portalAgent(req), detail: { employer: result.employer, jobTitle: result.jobTitle } });
     res.status(201).json(result);
   });
 
@@ -234,7 +234,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const deleted = await storage.deleteEmploymentHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
-    await storage.createAuditLog({ nurseId, action: "portal_employment_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
+    await storage.createAuditLog({ nurseId, action: "portal_employment_deleted", agentName: portalAgent(req), detail: { id: req.params.id } });
     res.json({ success: true });
   });
 
@@ -252,7 +252,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createEducationHistory(data);
     await safeWriteStepStatuses(nurseId, { profile: "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_education_added", agentName: "nurse_portal", detail: { institution: result.institution, qualification: result.qualification } });
+    await storage.createAuditLog({ nurseId, action: "portal_education_added", agentName: portalAgent(req), detail: { institution: result.institution, qualification: result.qualification } });
     res.status(201).json(result);
   });
 
@@ -260,7 +260,7 @@ export function registerPortalRoutes(app: Express) {
     const nurseId = (req as any).nurseId;
     const deleted = await storage.deleteEducationHistory(req.params.id, nurseId);
     if (!deleted) return res.status(404).json({ message: "Entry not found" });
-    await storage.createAuditLog({ nurseId, action: "portal_education_deleted", agentName: "nurse_portal", detail: { id: req.params.id } });
+    await storage.createAuditLog({ nurseId, action: "portal_education_deleted", agentName: portalAgent(req), detail: { id: req.params.id } });
     res.json({ success: true });
   });
 
@@ -298,7 +298,7 @@ export function registerPortalRoutes(app: Express) {
         await storage.createAuditLog({
           nurseId,
           action: "portal_cv_upload_rejected",
-          agentName: "nurse_portal",
+          agentName: portalAgent(req),
           detail: {
             originalFilename: req.file.originalname,
             mimeType: req.file.mimetype,
@@ -331,7 +331,7 @@ export function registerPortalRoutes(app: Express) {
       await storage.createAuditLog({
         nurseId,
         action: "portal_cv_uploaded",
-        agentName: "nurse_portal",
+        agentName: portalAgent(req),
         detail: {
           detectedCategory: ingest.category,
           detectedType: ingest.type,
@@ -389,7 +389,7 @@ export function registerPortalRoutes(app: Express) {
         try { fs.unlinkSync(req.file.path); } catch {}
         return res.status(404).json({ message: "Candidate not found" });
       }
-      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_uploaded", agentName: "nurse_portal", detail: { filename: req.file.originalname, filePath } });
+      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_uploaded", agentName: portalAgent(req), detail: { filename: req.file.originalname, filePath } });
       res.json({ passportPhotoPath: filePath });
     } catch (err: any) {
       console.error("[Portal Passport Photo Upload] Error:", err.message);
@@ -402,7 +402,7 @@ export function registerPortalRoutes(app: Express) {
       const nurseId = (req as any).nurseId;
       const updated = await storage.updateCandidate(nurseId, { passportPhotoPath: null });
       if (!updated) return res.status(404).json({ message: "Candidate not found" });
-      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_removed", agentName: "nurse_portal", detail: {} });
+      await storage.createAuditLog({ nurseId, action: "portal_passport_photo_removed", agentName: portalAgent(req), detail: {} });
       res.json({ success: true });
     } catch (err: any) {
       console.error("[Portal Passport Photo Remove] Error:", err.message);
@@ -436,7 +436,7 @@ export function registerPortalRoutes(app: Express) {
         uploadedBy: "nurse",
       });
       await safeWriteStepStatuses(nurseId, { identity: "in_progress" });
-      await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: "Proof of Address", category: "proof_of_address", filename: req.file.originalname } });
+      await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: portalAgent(req), detail: { type: "Proof of Address", category: "proof_of_address", filename: req.file.originalname } });
       if (doc.filePath) {
         triggerSharePointUpload(doc.id, doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address');
         triggerEmailNotification(doc.nurseId, doc.filePath, doc.originalFilename || doc.filename, 'proof_of_address', 'nurse', doc.mimeType || undefined);
@@ -478,7 +478,7 @@ export function registerPortalRoutes(app: Express) {
     if (data.category === "competency_evidence") docUpdates.competency = "in_progress";
     if (data.category === "training_certificate") docUpdates.training = "in_progress";
     if (Object.keys(docUpdates).length > 0) await safeWriteStepStatuses(nurseId, docUpdates);
-    await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: "nurse_portal", detail: { type: result.type, category: data.category, filename: result.filename } });
+    await storage.createAuditLog({ nurseId, action: "portal_document_uploaded", agentName: portalAgent(req), detail: { type: result.type, category: data.category, filename: result.filename } });
     if (result.filePath) {
       triggerSharePointUpload(result.id, result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general');
       triggerEmailNotification(result.nurseId, result.filePath, result.originalFilename || result.filename, result.category || 'general', 'nurse', result.mimeType || undefined);
@@ -497,7 +497,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createCompetencyDeclaration(data);
     await safeWriteStepStatuses(nurseId, { competency: "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_competency_declared", agentName: "nurse_portal", detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
+    await storage.createAuditLog({ nurseId, action: "portal_competency_declared", agentName: portalAgent(req), detail: { domain: result.domain, competency: result.competencyName, level: result.selfAssessedLevel } });
     // Competency declaration is one of the auto-unlock prerequisites.
     try { await maybeAutoUnlock(nurseId, "nurse_portal"); } catch {}
     res.status(201).json(result);
@@ -530,7 +530,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createMandatoryTraining(data);
     await safeWriteStepStatuses(nurseId, { training: "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_training_recorded", agentName: "nurse_portal", detail: { module: result.moduleName, certificateDocumentId: result.certificateDocumentId } });
+    await storage.createAuditLog({ nurseId, action: "portal_training_recorded", agentName: portalAgent(req), detail: { module: result.moduleName, certificateDocumentId: result.certificateDocumentId } });
     res.status(201).json(result);
   });
 
@@ -585,7 +585,7 @@ export function registerPortalRoutes(app: Express) {
       await storage.createAuditLog({
         nurseId,
         action: "portal_training_cert_uploaded",
-        agentName: "nurse_portal",
+        agentName: portalAgent(req),
         detail: { matches: parseResult.matches.map(m => m.moduleName), autoRecorded, documentId: doc.id },
       });
 
@@ -811,7 +811,7 @@ export function registerPortalRoutes(app: Express) {
         await storage.createAuditLog({
           nurseId,
           action: "portal_chase_upload",
-          agentName: "nurse_portal",
+          agentName: portalAgent(req),
           detail: {
             module: moduleName,
             documentId: doc.id,
@@ -878,7 +878,7 @@ export function registerPortalRoutes(app: Express) {
       await storage.createAuditLog({
         nurseId,
         action: "portal_nmc_pdf_parsed",
-        agentName: "nurse_portal",
+        agentName: portalAgent(req),
         detail: { registeredName: result.registeredName, status: result.registrationStatus, extractionMethod: result.extractionMethod },
       });
 
@@ -930,7 +930,7 @@ export function registerPortalRoutes(app: Express) {
       await storage.createAuditLog({
         nurseId,
         action: "passport_uploaded",
-        agentName: "nurse_portal",
+        agentName: portalAgent(req),
         detail: {
           mrzDetected: result.mrzDetected,
           ocrConfidence: result.ocrConfidence,
@@ -963,7 +963,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createHealthDeclaration(data);
     await safeWriteStepStatuses(nurseId, { health: result.completed ? "completed" : "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_health_declared", agentName: "nurse_portal", detail: { ohReferral: result.ohReferralRequired } });
+    await storage.createAuditLog({ nurseId, action: "portal_health_declared", agentName: portalAgent(req), detail: { ohReferral: result.ohReferralRequired } });
     res.status(201).json(result);
 
     triageHealthDeclarationInBackground(result);
@@ -998,14 +998,14 @@ export function registerPortalRoutes(app: Express) {
         emailSent = true;
 
         await storage.updateReference(result.id, { outcome: "sent", emailSentAt: new Date() } as any);
-        await storage.createAuditLog({ nurseId, action: "reference_email_sent", agentName: "nurse_portal", detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName } });
+        await storage.createAuditLog({ nurseId, action: "reference_email_sent", agentName: portalAgent(req), detail: { refereeEmail: result.refereeEmail, refereeName: result.refereeName } });
       } catch (err: any) {
         console.error("Failed to send reference request email:", err?.message || err);
-        await storage.createAuditLog({ nurseId, action: "reference_email_failed", agentName: "nurse_portal", detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
+        await storage.createAuditLog({ nurseId, action: "reference_email_failed", agentName: portalAgent(req), detail: { error: err?.message || "Unknown error", refereeEmail: result.refereeEmail } });
       }
     }
 
-    await storage.createAuditLog({ nurseId, action: "portal_reference_added", agentName: "nurse_portal", detail: { refereeName: result.refereeName, emailSent } });
+    await storage.createAuditLog({ nurseId, action: "portal_reference_added", agentName: portalAgent(req), detail: { refereeName: result.refereeName, emailSent } });
     res.status(201).json({ ...result, emailSent });
   });
 
@@ -1037,7 +1037,7 @@ export function registerPortalRoutes(app: Express) {
     const data = { ...req.body, nurseId };
     const result = await storage.createProfessionalIndemnity(data);
     await safeWriteStepStatuses(nurseId, { indemnity: result.verified ? "completed" : "in_progress" });
-    await storage.createAuditLog({ nurseId, action: "portal_indemnity_recorded", agentName: "nurse_portal", detail: { provider: result.provider } });
+    await storage.createAuditLog({ nurseId, action: "portal_indemnity_recorded", agentName: portalAgent(req), detail: { provider: result.provider } });
     res.status(201).json(result);
   });
 
@@ -1064,7 +1064,7 @@ export function registerPortalRoutes(app: Express) {
     await safeWriteStepStatuses(nurseId, {
       dbs: result.status === "verified" ? "completed" : result.status === "failed" ? "failed" : "in_progress",
     });
-    await storage.createAuditLog({ nurseId, action: "portal_dbs_recorded", agentName: "nurse_portal", detail: { certificateNumber: result.certificateNumber } });
+    await storage.createAuditLog({ nurseId, action: "portal_dbs_recorded", agentName: portalAgent(req), detail: { certificateNumber: result.certificateNumber } });
     res.status(201).json(result);
   });
 
@@ -1103,7 +1103,7 @@ export function registerPortalRoutes(app: Express) {
     await storage.createAuditLog({
       nurseId,
       action: "equal_opportunities_submitted",
-      agentName: "nurse_portal",
+      agentName: portalAgent(req),
       detail: { submitted: true },
     });
     res.status(existing ? 200 : 201).json(result);
@@ -1155,7 +1155,7 @@ export function registerPortalRoutes(app: Express) {
     await storage.createAuditLog({
       nurseId,
       action: requiresAdmin ? "portal_step_submitted_for_verification" : "portal_step_completed",
-      agentName: "nurse_portal",
+      agentName: portalAgent(req),
       detail: { stepKey, previous: current ?? "pending", next },
     });
     res.json({ stepKey, status: next, requiresAdminVerification: requiresAdmin });

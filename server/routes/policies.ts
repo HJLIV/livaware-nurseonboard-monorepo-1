@@ -23,6 +23,7 @@ import {
   requireAdmin,
   requireSuperAdmin,
   validatePortalToken,
+  portalAgent,
   requireNurseStageCompleted,
   isSuperAdmin,
 } from "../middleware";
@@ -36,7 +37,10 @@ const policyImportUpload = multer({
 });
 
 function agentFor(req: Request): string {
-  return req.session?.username || "system";
+  const u = req.session?.username;
+  const r = req.session?.role;
+  if (!u) return "system";
+  return r ? `${u} (${r})` : u;
 }
 
 interface PolicyForNurse {
@@ -770,7 +774,7 @@ export function registerPolicyRoutes(app: Express) {
           openedPdf,
         });
 
-      await logAction(nurseId, "portal", "policy_acknowledged", "nurse_portal", {
+      await logAction(nurseId, "portal", "policy_acknowledged", portalAgent(req), {
         policyId,
         title: policy.title,
         version: policy.version,

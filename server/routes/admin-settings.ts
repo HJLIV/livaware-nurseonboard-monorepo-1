@@ -42,7 +42,10 @@ function portalBaseUrlFromReq(req: Request): string {
 }
 
 function agentNameFor(req: Request): string {
-  return req.session?.username || "admin";
+  const u = req.session?.username;
+  const r = req.session?.role;
+  if (!u) return "admin";
+  return r ? `${u} (${r})` : u;
 }
 
 export function registerAdminSettingsRoutes(app: Express): void {

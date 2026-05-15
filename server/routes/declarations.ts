@@ -46,7 +46,10 @@ import {
 import { generateDeclarationPDF } from "../declarations/pdf";
 
 function agentFor(req: Request): string {
-  return req.session?.username || "system";
+  const u = req.session?.username;
+  const r = req.session?.role;
+  if (!u) return "system";
+  return r ? `${u} (${r})` : u;
 }
 
 function clientIp(req: Request): string | null {

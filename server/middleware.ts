@@ -48,6 +48,7 @@ export async function validatePortalToken(req: Request, res: Response, next: Nex
     const loaded = await loadPortalSessionFromRequest(req);
     if (!loaded) return res.status(401).json({ message: "Portal sign-in required" });
     (req as any).nurseId = loaded.nurse.id;
+    (req as any).nurseFullName = loaded.nurse.fullName;
     (req as any).portalSession = loaded.session;
     return next();
   }
@@ -61,6 +62,9 @@ export async function validatePortalToken(req: Request, res: Response, next: Nex
   if (link && !link.claimedAt) {
     (req as any).nurseId = link.nurseId;
     (req as any).portalLink = link;
+    const { storage } = await import("./storage");
+    const c = await storage.getCandidate(link.nurseId);
+    if (c) (req as any).nurseFullName = c.fullName;
     return next();
   }
   // Token unknown/expired/already-claimed — fall back to a portal-session
@@ -70,10 +74,20 @@ export async function validatePortalToken(req: Request, res: Response, next: Nex
   const loaded = await loadPortalSessionFromRequest(req);
   if (loaded) {
     (req as any).nurseId = loaded.nurse.id;
+    (req as any).nurseFullName = loaded.nurse.fullName;
     (req as any).portalSession = loaded.session;
     return next();
   }
   return res.status(404).json({ message: "Invalid or expired portal link" });
+}
+
+// Build the agentName used by portal-side audit writes. Embeds the
+// nurse's real name when known so /audit shows "Jane Doe" instead of
+// the generic "nurse_portal" label. Read-side enrichment in
+// server/services/audit-enrich.ts parses both forms.
+export function portalAgent(req: any): string {
+  const name = req?.nurseFullName as string | undefined;
+  return name ? `nurse_portal:${name}` : "nurse_portal";
 }
 
 export const magicLinkLimiter = rateLimit({

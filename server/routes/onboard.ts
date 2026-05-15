@@ -1215,11 +1215,6 @@ export function registerAdminRoutes(app: Express) {
     res.json(result);
   });
 
-  app.get("/api/audit-logs", async (_req, res) => {
-    const result = await storage.getAuditLogs();
-    res.json(result);
-  });
-
   app.get("/api/dashboard/stats", async (_req, res) => {
     const stats = await storage.getDashboardStats();
     res.json(stats);

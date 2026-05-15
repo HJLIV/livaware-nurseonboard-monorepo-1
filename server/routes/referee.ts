@@ -62,11 +62,15 @@ export function registerRefereeRoutes(app: Express) {
 
       await storage.markRefereeTokenCompleted(refereeTokenRecord.id);
 
+      const reference = await storage.getReference(refereeTokenRecord.referenceId);
+      const candidate = await storage.getCandidate(refereeTokenRecord.nurseId);
+      const refereeLabel = reference?.refereeName || "referee";
+
       await storage.createAuditLog({
         nurseId: refereeTokenRecord.nurseId,
         action: "reference_form_submitted",
-        agentName: "referee",
-        detail: { referenceId: refereeTokenRecord.referenceId, redFlagTriggered },
+        agentName: `referee:${refereeLabel}`,
+        detail: { referenceId: refereeTokenRecord.referenceId, redFlagTriggered, candidateName: candidate?.fullName },
       });
 
       res.json({ success: true, message: "Reference form submitted successfully" });

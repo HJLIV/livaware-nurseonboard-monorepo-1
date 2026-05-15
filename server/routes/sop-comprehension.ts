@@ -44,7 +44,10 @@ function stripOptions(q: SopComprehensionQuestion) {
 }
 
 function agentFor(req: Request): string {
-  return req.session?.username || "portal";
+  const u = req.session?.username;
+  const r = req.session?.role;
+  if (!u) return "portal";
+  return r ? `${u} (${r})` : u;
 }
 
 async function loadAttemptsForNurse(nurseId: string): Promise<SopComprehensionAttempt[]> {

@@ -30,7 +30,9 @@ import {
   ChevronRight,
   X,
   BookOpen,
+  Cog,
 } from "lucide-react";
+import { resolveAuditActor, actorRoleLabel } from "@/lib/audit-actor";
 
 interface AuditRow {
   id: string;
@@ -38,6 +40,10 @@ interface AuditRow {
   action: string;
   nurseId: string | null;
   agentName: string | null;
+  actorName?: string | null;
+  actorRole?: string | null;
+  nurseName?: string | null;
+  nurseEmail?: string | null;
   detail?: Record<string, unknown> | null;
   timestamp: string;
 }
@@ -121,12 +127,23 @@ function ActivityRow({ row }: { row: AuditRow }) {
       <div className="flex-1 min-w-0 text-xs text-muted-foreground/80 truncate">
         {detail}
       </div>
-      {row.agentName && (
-        <div className="flex items-center gap-1 shrink-0 max-w-[160px]">
-          <User2 className="h-3 w-3 text-muted-foreground/40" />
-          <span className="text-[11px] text-muted-foreground/60 truncate">{row.agentName}</span>
-        </div>
-      )}
+      {(() => {
+        const { actorName, actorRole } = resolveAuditActor(row);
+        const isSystem = actorRole === "system";
+        const Icon = isSystem ? Cog : User2;
+        const roleLabel = actorRoleLabel(actorRole);
+        return (
+          <div className="flex items-center gap-1.5 shrink-0 max-w-[200px]">
+            <Icon className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+            <span className="text-[11px] text-foreground/80 truncate" title={actorName}>{actorName}</span>
+            {roleLabel && !isSystem && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium uppercase tracking-wider text-muted-foreground/70 border-border/50">
+                {roleLabel}
+              </Badge>
+            )}
+          </div>
+        );
+      })()}
       <div className="flex items-center gap-1 shrink-0 min-w-[80px] justify-end">
         <Clock className="h-3 w-3 text-muted-foreground/30" />
         <time className="text-[11px] text-muted-foreground/50 tabular-nums">{timeAgo(row.timestamp)}</time>

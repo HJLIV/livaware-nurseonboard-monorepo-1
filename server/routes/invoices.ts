@@ -40,6 +40,7 @@ import {
   requireSuperAdmin,
   upload,
   uploadLimiter,
+  portalAgent,
 } from "../middleware";
 import { generateInvoicePdf } from "../invoice-pdf";
 import { isOutlookConfigured, sendInvoiceSubmittedEmail } from "../outlook";
@@ -85,8 +86,10 @@ async function requireCompletedStageWrite(req: Request, res: Response, next: Nex
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function agentForReq(req: Request): string {
-  const session = (req as Request & { session?: { username?: string; email?: string } }).session;
-  return session?.username || session?.email || "system";
+  const session = (req as Request & { session?: { username?: string; email?: string; role?: string } }).session;
+  const u = session?.username || session?.email;
+  if (!u) return "system";
+  return session?.role ? `${u} (${session.role})` : u;
 }
 
 function parseHHMM(s: string): number {
@@ -232,7 +235,7 @@ async function createInvoiceFromSubmission(
     nurseId,
     module: "invoices",
     action: "invoice_submitted",
-    agentName: source === "portal" ? "nurse_portal" : agent,
+    agentName: agent,
     detail: { source, invoiceId: createdId, totalAmountPence, totalMinutes, entries: entriesPriced.length },
   });
   const full = await loadFullInvoice(createdId);
@@ -240,7 +243,7 @@ async function createInvoiceFromSubmission(
   // submission lands in finance's inbox immediately. Failure must never break
   // the submit response — the invoice is already persisted and visible in-app.
   if (full) {
-    void emailInvoicePdfOnSubmit(full, nurseId, source).catch((err) => {
+    void emailInvoicePdfOnSubmit(full, nurseId, source, agent).catch((err) => {
       console.error("[invoices] failed to email submitted invoice PDF", err);
     });
   }
@@ -251,6 +254,7 @@ async function emailInvoicePdfOnSubmit(
   full: NonNullable<Awaited<ReturnType<typeof loadFullInvoice>>>,
   nurseId: string,
   source: "portal" | "admin",
+  agent: string,
 ) {
   if (!isOutlookConfigured()) return;
   const pdfBuffer = await generateInvoicePdf({
@@ -272,7 +276,7 @@ async function emailInvoicePdfOnSubmit(
     nurseId,
     module: "invoices",
     action: "invoice_pdf_emailed",
-    agentName: source === "portal" ? "nurse_portal" : "system",
+    agentName: agent,
     detail: { invoiceId: full.id, invoiceNumber: full.invoiceNumber, source, recipient: process.env.INVOICE_RECIPIENT_EMAIL || "invoices@livaware.co.uk" },
   });
 }
@@ -347,7 +351,7 @@ export function registerInvoiceRoutes(app: Express) {
     const parsed = invoiceSubmissionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     try {
-      const inv = await createInvoiceFromSubmission(nurseId, parsed.data, "portal", "nurse_portal");
+      const inv = await createInvoiceFromSubmission(nurseId, parsed.data, "portal", portalAgent(req));
       res.status(201).json(inv);
     } catch (err) {
       console.error("[invoice submit]", err);
@@ -386,7 +390,7 @@ export function registerInvoiceRoutes(app: Express) {
       nurseId,
       module: "invoices",
       action: "invoice_withdrawn",
-      agentName: "nurse_portal",
+      agentName: portalAgent(req),
       detail: { invoiceId: id },
     });
     res.json({ deleted: true });
@@ -430,7 +434,7 @@ export function registerInvoiceRoutes(app: Express) {
         nurseId,
         module: "invoices",
         action: "invoice_attachment_added",
-        agentName: "nurse_portal",
+        agentName: portalAgent(req),
         detail: { invoiceId: id, filename: file.originalname },
       });
       res.json({ attachmentUrl: url, attachmentFilename: file.originalname });

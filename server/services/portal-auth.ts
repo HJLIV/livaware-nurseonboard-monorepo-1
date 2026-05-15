@@ -307,7 +307,7 @@ export async function claimBootstrapLink(
   if (!nurse) return { error: "not_found" };
 
   const { session } = await issuePortalSession(req, res, nurse.id, "bootstrap_link", "nurse_portal");
-  await logAction(nurse.id, "portal_auth", "portal_bootstrap_claimed", "nurse_portal", {
+  await logAction(nurse.id, "portal_auth", "portal_bootstrap_claimed", `nurse_portal:${nurse.fullName}`, {
     linkId: link.id,
     module: link.module,
   });

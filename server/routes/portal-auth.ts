@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db";
-import { portalLinks, portalSessions } from "@shared/schema";
+import { portalLinks, portalSessions, nurses } from "@shared/schema";
 import { logAction } from "../services/audit";
 import {
   PORTAL_SESSION_COOKIE,
@@ -92,7 +92,7 @@ export function registerPortalAuthRoutes(app: Express) {
 
     const recent = await countRecentCodesForNurse(nurse.id);
     if (recent >= PORTAL_CODE_RATE_MAX) {
-      await logAction(nurse.id, "portal_auth", "portal_code_rate_limited", "nurse_portal", {
+      await logAction(nurse.id, "portal_auth", "portal_code_rate_limited", `nurse_portal:${nurse.fullName}`, {
         recent,
         ip: getRequestIp(req),
       });
@@ -100,7 +100,7 @@ export function registerPortalAuthRoutes(app: Express) {
     }
 
     const { code, expiresAt } = await createPortalAuthCode(req, nurse.id);
-    await logAction(nurse.id, "portal_auth", "portal_code_requested", "nurse_portal", {
+    await logAction(nurse.id, "portal_auth", "portal_code_requested", `nurse_portal:${nurse.fullName}`, {
       ip: getRequestIp(req),
       expiresAt: expiresAt.toISOString(),
     });
@@ -117,7 +117,7 @@ export function registerPortalAuthRoutes(app: Express) {
       }
     }
 
-    await logAction(nurse.id, "portal_auth", "portal_code_email", "nurse_portal", {
+    await logAction(nurse.id, "portal_auth", "portal_code_email", `nurse_portal:${nurse.fullName}`, {
       emailSent,
       emailError: emailError || null,
     });
@@ -146,7 +146,7 @@ export function registerPortalAuthRoutes(app: Express) {
 
     const result = await verifyPortalAuthCode(nurse.id, code);
     if (!result.ok) {
-      await logAction(nurse.id, "portal_auth", "portal_code_verify_failed", "nurse_portal", {
+      await logAction(nurse.id, "portal_auth", "portal_code_verify_failed", `nurse_portal:${nurse.fullName}`, {
         reason: result.reason,
         ip: getRequestIp(req),
       });
@@ -161,7 +161,7 @@ export function registerPortalAuthRoutes(app: Express) {
     }
 
     const { session } = await issuePortalSession(req, res, nurse.id, "email_code", "nurse_portal");
-    await logAction(nurse.id, "portal_auth", "portal_code_verified", "nurse_portal", {
+    await logAction(nurse.id, "portal_auth", "portal_code_verified", `nurse_portal:${nurse.fullName}`, {
       sessionId: session.id,
       ip: getRequestIp(req),
     });
@@ -217,7 +217,9 @@ export function registerPortalAuthRoutes(app: Express) {
         .where(and(eq(portalSessions.sessionTokenHash, hash), isNull(portalSessions.revokedAt)))
         .returning();
       if (revoked) {
-        await logAction(revoked.nurseId, "portal_auth", "portal_signed_out", "nurse_portal", {
+        const [n] = await db.select({ fullName: nurses.fullName }).from(nurses).where(eq(nurses.id, revoked.nurseId)).limit(1);
+        const agent = n ? `nurse_portal:${n.fullName}` : "nurse_portal";
+        await logAction(revoked.nurseId, "portal_auth", "portal_signed_out", agent, {
           sessionId: revoked.id,
         });
       }

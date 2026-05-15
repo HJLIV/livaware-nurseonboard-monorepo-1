@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/layout/app-layout";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { resolveAuditActor, actorRoleLabel } from "@/lib/audit-actor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,7 +81,11 @@ interface AuditLog {
   module: string;
   action: string;
   detail?: Record<string, unknown> | string;
-  agentName?: string;
+  agentName?: string | null;
+  actorName?: string | null;
+  actorRole?: string | null;
+  nurseName?: string | null;
+  nurseEmail?: string | null;
   timestamp: string;
 }
 
@@ -814,11 +819,20 @@ function AuditTab({ nurseId }: { nurseId: string }) {
           <span className="flex-1 truncate text-sm text-muted-foreground">
             {typeof log.detail === "object" ? JSON.stringify(log.detail) : log.detail}
           </span>
-          {log.agentName && (
-            <span className="text-xs text-muted-foreground shrink-0">
-              by {log.agentName}
-            </span>
-          )}
+          {(() => {
+            const { actorName, actorRole } = resolveAuditActor(log);
+            const roleLabel = actorRoleLabel(actorRole);
+            return (
+              <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1.5" title={log.agentName ?? undefined}>
+                by <span className="text-foreground/80">{actorName}</span>
+                {roleLabel && actorRole !== "system" && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium uppercase tracking-wider text-muted-foreground/70">
+                    {roleLabel}
+                  </Badge>
+                )}
+              </span>
+            );
+          })()}
           <time className="text-xs text-muted-foreground shrink-0">
             {new Date(log.timestamp).toLocaleDateString("en-US", {
               month: "short",

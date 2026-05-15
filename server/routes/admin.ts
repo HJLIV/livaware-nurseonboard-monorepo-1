@@ -18,7 +18,10 @@ function moduleForStage(stage: string | null | undefined): PortalModule {
 }
 
 function agentFor(req: Request): string {
-  return req.session?.username || "system";
+  const u = req.session?.username;
+  const r = req.session?.role;
+  if (!u) return "system";
+  return r ? `${u} (${r})` : u;
 }
 
 export function registerNurseRoutes(app: Express) {
@@ -479,7 +482,9 @@ export function registerNurseRoutes(app: Express) {
 
   app.get("/api/nurses/:id/audit-log", async (req, res) => {
     const logs = await db.select().from(auditLogs).where(eq(auditLogs.nurseId, req.params.id)).orderBy(desc(auditLogs.timestamp));
-    res.json(logs);
+    const { enrichAuditLogs } = await import("../services/audit-enrich");
+    const enriched = await enrichAuditLogs(logs);
+    res.json(enriched);
   });
 
   app.get("/api/nurses/:id/preboard", async (req, res) => {
@@ -661,7 +666,7 @@ export function registerNurseRoutes(app: Express) {
       if (isFirstVisit && link) {
         // Mark legacy usedAt (kept for backwards-compat with audit + UI).
         await db.update(portalLinks).set({ usedAt: link.usedAt ?? new Date() }).where(eq(portalLinks.id, link.id));
-        await logAction(nurse.id, "portal", "portal_accessed", "nurse_portal", { module: link.module });
+        await logAction(nurse.id, "portal", "portal_accessed", `nurse_portal:${nurse.fullName}`, { module: link.module });
       }
       // Completion is based purely on the underlying status fields, not on
       // whether the nurse has been advanced to a later stage. This keeps the

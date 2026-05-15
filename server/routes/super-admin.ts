@@ -9,6 +9,21 @@ import { db } from "../db";
 import { auditLogs } from "@shared/schema";
 import { and, desc, eq, gte, ilike, lte, or, sql, type SQL } from "drizzle-orm";
 import { requireSuperAdmin } from "../middleware";
+import { enrichAuditLogs, actorGroupKey } from "../services/audit-enrich";
+
+// SQL expression that mirrors actorGroupKey() — collapses
+// "<portal_label>:<anything>" to "<portal_label>" so portal writes that
+// now embed a real name (e.g. "nurse_portal:Jane Doe") still aggregate
+// into a single bucket on the actor leaderboard.
+const PORTAL_GROUP_PREFIXES = ["nurse_portal", "candidate", "applicant", "referee", "system", "certificate_ai"];
+const groupKeySql = sql<string>`
+  CASE
+    WHEN position(':' in ${auditLogs.agentName}) > 0
+     AND split_part(${auditLogs.agentName}, ':', 1) = ANY(${PORTAL_GROUP_PREFIXES}::text[])
+    THEN split_part(${auditLogs.agentName}, ':', 1)
+    ELSE ${auditLogs.agentName}
+  END
+`;
 
 type AuditModule = "preboard" | "onboard" | "skills_arcade" | "admin" | "portal" | "portal_auth" | "system" | "availability" | "invoices";
 const VALID_MODULES: ReadonlySet<AuditModule> = new Set<AuditModule>([
@@ -78,7 +93,8 @@ export function registerSuperAdminRoutes(app: Express) {
             .orderBy(desc(auditLogs.timestamp))
             .limit(limit)
         : await db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)).limit(limit);
-      res.json({ rows, count: rows.length });
+      const enriched = await enrichAuditLogs(rows);
+      res.json({ rows: enriched, count: enriched.length });
     } catch (err: any) {
       console.error("[super-admin] activity feed failed:", err);
       res.status(500).json({ message: err?.message || "Failed to load activity" });
@@ -92,7 +108,7 @@ export function registerSuperAdminRoutes(app: Express) {
       const where = buildFilters(req);
       const baseQuery = db
         .select({
-          agentName: auditLogs.agentName,
+          agentName: groupKeySql,
           count: sql<number>`count(*)::int`,
           lastSeen: sql<Date>`max(${auditLogs.timestamp})`,
         })
@@ -100,11 +116,11 @@ export function registerSuperAdminRoutes(app: Express) {
       const rows = where.length
         ? await baseQuery
             .where(and(...where))
-            .groupBy(auditLogs.agentName)
+            .groupBy(groupKeySql)
             .orderBy(sql`count(*) desc`)
             .limit(200)
         : await baseQuery
-            .groupBy(auditLogs.agentName)
+            .groupBy(groupKeySql)
             .orderBy(sql`count(*) desc`)
             .limit(200);
       res.json({ actors: rows });
@@ -125,7 +141,7 @@ export function registerSuperAdminRoutes(app: Express) {
         1,
         Math.min(parseInt(String(req.query.limit ?? "200"), 10) || 200, 1000),
       );
-      const where: SQL[] = [eq(auditLogs.agentName, name), ...buildFilters(req)];
+      const where: SQL[] = [sql`${groupKeySql} = ${name}`, ...buildFilters(req)];
 
       const rows = await db
         .select()
@@ -133,6 +149,7 @@ export function registerSuperAdminRoutes(app: Express) {
         .where(and(...where))
         .orderBy(desc(auditLogs.timestamp))
         .limit(limit);
+      const enrichedRows = await enrichAuditLogs(rows);
 
       const byAction = await db
         .select({
@@ -156,10 +173,10 @@ export function registerSuperAdminRoutes(app: Express) {
 
       res.json({
         actor: name,
-        rows,
+        rows: enrichedRows,
         byAction,
         byModule,
-        total: rows.length,
+        total: enrichedRows.length,
       });
     } catch (err: any) {
       console.error("[super-admin] actor drill-down failed:", err);

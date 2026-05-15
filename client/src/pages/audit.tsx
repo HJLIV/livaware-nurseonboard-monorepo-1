@@ -12,14 +12,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ScrollText, Clock, User2 } from "lucide-react";
+import { Search, ScrollText, Clock, User2, Cog } from "lucide-react";
+import { resolveAuditActor, actorRoleLabel } from "@/lib/audit-actor";
 
 interface AuditLog {
   id: string;
   module: string;
   action: string;
   nurseId?: string;
-  agentName?: string;
+  agentName?: string | null;
+  actorName?: string | null;
+  actorRole?: string | null;
+  nurseName?: string | null;
+  nurseEmail?: string | null;
   detail?: Record<string, unknown> | string;
   timestamp: string;
 }
@@ -90,6 +95,9 @@ export default function AuditPage() {
       const detailStr = typeof log.detail === "object" ? JSON.stringify(log.detail) : (log.detail || "");
       return (
         (log.agentName?.toLowerCase().includes(q) ?? false) ||
+        (log.actorName?.toLowerCase().includes(q) ?? false) ||
+        (log.nurseName?.toLowerCase().includes(q) ?? false) ||
+        (log.nurseEmail?.toLowerCase().includes(q) ?? false) ||
         detailStr.toLowerCase().includes(q) ||
         log.module.toLowerCase().includes(q) ||
         log.action.toLowerCase().includes(q)
@@ -192,12 +200,25 @@ export default function AuditPage() {
                         ) : null}
                       </div>
 
-                      {log.agentName && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <User2 className="h-3 w-3 text-muted-foreground/30" />
-                          <span className="text-[11px] text-muted-foreground/50">{log.agentName}</span>
-                        </div>
-                      )}
+                      {(() => {
+                        const { actorName, actorRole } = resolveAuditActor(log);
+                        const isSystem = actorRole === "system";
+                        const Icon = isSystem ? Cog : User2;
+                        const roleLabel = actorRoleLabel(actorRole);
+                        return (
+                          <div className="flex items-center gap-1.5 shrink-0 max-w-[220px]">
+                            <Icon className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                            <span className="text-[11px] text-foreground/80 truncate" title={actorName}>
+                              {actorName}
+                            </span>
+                            {roleLabel && !isSystem && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-medium uppercase tracking-wider text-muted-foreground/70 border-border/50">
+                                {roleLabel}
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex items-center gap-1 shrink-0 min-w-[80px] justify-end">
                         <Clock className="h-3 w-3 text-muted-foreground/30" />
