@@ -2,6 +2,7 @@ import type { Express, Request } from "express";
 import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
+import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
 import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
@@ -160,9 +161,7 @@ export function registerAdminRoutes(app: Express) {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: "Document date cannot be in the future" });
       }
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      if (docDate < threeMonthsAgo) {
+      if (!isProofOfAddressWithinThreeMonths(documentDate)) {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ message: "Document must be dated within the last 3 months" });
       }

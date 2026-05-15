@@ -8,6 +8,7 @@ import type { ScenarioContent } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged, requireNurseStageCompleted, portalAgent } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
+import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
 import { maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
 import { parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
@@ -419,9 +420,7 @@ export function registerPortalRoutes(app: Express) {
       const docDate = new Date(documentDate);
       const now = new Date();
       if (docDate > now) return res.status(400).json({ message: "Document date cannot be in the future" });
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      if (docDate < threeMonthsAgo) return res.status(400).json({ message: "Document must be dated within the last 3 months" });
+      if (!isProofOfAddressWithinThreeMonths(documentDate)) return res.status(400).json({ message: "Document must be dated within the last 3 months" });
       const filePath = `/api/uploads/${req.file.filename}`;
       const doc = await storage.createDocument({
         nurseId,

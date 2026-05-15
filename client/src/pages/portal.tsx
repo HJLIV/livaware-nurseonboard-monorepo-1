@@ -39,6 +39,7 @@ import type {
   MandatoryTraining, HealthDeclaration,
   ProfessionalIndemnity, Reference
 } from "@shared/schema";
+import { isProofOfAddressWithinThreeMonths, getProofOfAddressValidity } from "@shared/poa-validity";
 
 interface NextOfKinData {
   name: string;
@@ -513,9 +514,7 @@ function PortalProofOfAddress({ token }: { token: string }) {
       const docDate = new Date(documentDate);
       const today = new Date();
       if (docDate > today) throw new Error("Document date cannot be in the future");
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      if (docDate < threeMonthsAgo) throw new Error("Document must be dated within the last 3 months");
+      if (!isProofOfAddressWithinThreeMonths(documentDate)) throw new Error("Document must be dated within the last 3 months");
       const formData = new FormData();
       formData.append("file", file);
       formData.append("documentDate", documentDate);
@@ -544,13 +543,7 @@ function PortalProofOfAddress({ token }: { token: string }) {
     if (e.target) e.target.value = "";
   };
 
-  const isExpired = (expiryDate: string | null) => {
-    if (!expiryDate) return true;
-    const d = new Date(expiryDate);
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    return d < threeMonthsAgo;
-  };
+  const getPoaState = (expiryDate: string | null) => getProofOfAddressValidity(expiryDate);
 
   return (
     <div className="space-y-3">
@@ -564,16 +557,25 @@ function PortalProofOfAddress({ token }: { token: string }) {
       {poaDocs.length > 0 && (
         <div className="space-y-2">
           {poaDocs.map((doc: any) => {
-            const expired = isExpired(doc.expiryDate);
+            const poaState = getPoaState(doc.expiryDate);
+            const expired = poaState === "expired";
+            const unknown = poaState === "unknown";
+            const wrapperClass = unknown
+              ? "border-amber-800/30 bg-amber-950/10"
+              : expired
+                ? "border-red-800/30 bg-red-950/10"
+                : "border-emerald-800/30 bg-emerald-950/10";
             return (
-              <div key={doc.id} className={`flex items-center gap-2 rounded-md border p-2 text-sm ${expired ? "border-red-800/30 bg-red-950/10" : "border-emerald-800/30 bg-emerald-950/10"}`}>
-                {expired ? <AlertCircle className="h-4 w-4 text-red-400 shrink-0" /> : <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
+              <div key={doc.id} className={`flex items-center gap-2 rounded-md border p-2 text-sm ${wrapperClass}`}>
+                {expired || unknown ? <AlertCircle className={`h-4 w-4 shrink-0 ${unknown ? "text-amber-400" : "text-red-400"}`} /> : <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />}
                 <span className="truncate flex-1">{doc.originalFilename || doc.filename}</span>
-                {doc.expiryDate && (
+                {doc.expiryDate ? (
                   <span className={`text-xs shrink-0 ${expired ? "text-red-400" : "text-emerald-400"}`}>
                     {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
                     {expired && " — expired"}
                   </span>
+                ) : (
+                  <span className="text-xs shrink-0 text-amber-400">Date unknown</span>
                 )}
                 {doc.filePath && (
                   <a

@@ -49,6 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback, useRef } from "react";
 import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
 import { ONBOARDING_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES, INDUCTION_POLICIES, REFERENCE_QUESTIONS } from "@shared/schema";
+import { isProofOfAddressWithinThreeMonths, getProofOfAddressValidity } from "@shared/poa-validity";
 import type {
   Candidate, OnboardingState, NmcVerification, DbsVerification,
   CompetencyDeclaration, Reference, MandatoryTraining, HealthDeclaration,
@@ -326,13 +327,7 @@ function IdentityVerificationStatus({ candidate }: { candidate: Candidate }) {
   const hasPhotoId = !!candidate.passportPhotoPath || rtwDocs.length > 0;
 
   const proofDocs = documents.filter((d: any) => d.category === "proof_of_address");
-  const validProofDocs = proofDocs.filter((d: any) => {
-    if (!d.expiryDate) return false;
-    const docDate = new Date(d.expiryDate);
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    return docDate >= threeMonthsAgo;
-  });
+  const validProofDocs = proofDocs.filter((d: any) => isProofOfAddressWithinThreeMonths(d.expiryDate));
   const hasValidProofOfAddress = validProofDocs.length > 0;
 
   const allMet = hasPhotoId && hasValidProofOfAddress;
@@ -1469,13 +1464,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
   const rtwDocs = (docs || []).filter((d: any) => d.category === "right_to_work");
   const poaDocs = (docs || []).filter((d: any) => d.category === "proof_of_address");
 
-  const isPoaExpired = (expiryDate: string | null) => {
-    if (!expiryDate) return true;
-    const docDate = new Date(expiryDate);
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    return docDate < threeMonthsAgo;
-  };
+  const getPoaState = (expiryDate: string | null) => getProofOfAddressValidity(expiryDate);
 
   return (
     <div className="space-y-6" data-testid="tab-right-to-work">
@@ -1610,10 +1599,17 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
         {poaDocs.length > 0 && (
           <div className="space-y-2">
             {poaDocs.map((doc: any) => {
-              const expired = isPoaExpired(doc.expiryDate);
+              const poaState = getPoaState(doc.expiryDate);
+              const expired = poaState === "expired";
+              const unknown = poaState === "unknown";
+              const borderClass = unknown
+                ? "border-amber-500/30 bg-amber-500/5"
+                : expired
+                  ? "border-red-500/30 bg-red-500/5"
+                  : "border-emerald-500/30 bg-emerald-500/5";
               const isImage = doc.mimeType?.startsWith("image/");
               return (
-                <div key={doc.id} className={`rounded-lg border ${expired ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`} data-testid={`doc-poa-${doc.id}`}>
+                <div key={doc.id} className={`rounded-lg border ${borderClass}`} data-testid={`doc-poa-${doc.id}`}>
                   <div className="flex items-center gap-3 p-3">
                     {isImage && doc.filePath ? (
                       <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
@@ -1636,11 +1632,13 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       ) : (
                         <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
                       )}
-                      {doc.expiryDate && (
+                      {doc.expiryDate ? (
                         <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
                           Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
                           {expired && " — Older than 3 months"}
                         </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-600">Date unknown</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
