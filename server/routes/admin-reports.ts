@@ -19,6 +19,7 @@ import { storage } from "../storage";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { isOutlookConfigured } from "../outlook";
 import { evaluateMandatoryTrainingCell } from "../training-status";
+import { triggerDocumentAnalysis } from "../document-analysis";
 import { filterValidRtwDocs } from "@shared/rtw-evidence";
 import {
   computeOutstandingTrainingForNurse,
@@ -163,13 +164,13 @@ function documentCell(docs: { aiStatus?: string | null; expiryDate?: string | nu
   if (best.aiStatus === "pass") {
     return { status: "green", label: best.expiryDate ? `Valid to ${formatDate(best.expiryDate)}` : "AI: pass", date: best.expiryDate ?? null };
   }
-  // No AI verdict yet (legacy / AI not configured / not analysed): the doc has
-  // been uploaded and is not expired and has no negative AI signal, so treat it
-  // as green. (AI key may not be configured — without this, uploaded docs would
-  // stay amber forever and the matrix would never show completed.)
+  // No AI verdict yet — Claude analysis hasn't run on this doc. The matrix
+  // endpoint backfills these by firing triggerDocumentAnalysis for every doc
+  // it sees with aiStatus == null, so on the next refresh this will flip to
+  // pass / warning / fail.
   return {
-    status: "green",
-    label: best.expiryDate ? `Uploaded — valid to ${formatDate(best.expiryDate)}` : "Uploaded",
+    status: "amber",
+    label: "AI checking",
     date: best.expiryDate ?? null,
   };
 }
@@ -241,6 +242,39 @@ export function registerAdminReportsRoutes(app: Express) {
         const list = docsByNurse.get(d.nurseId) ?? [];
         list.push(d);
         docsByNurse.set(d.nurseId, list);
+      }
+
+      // Backfill: any document that has never been through Claude (aiStatus
+      // is null/missing) gets queued for analysis now. triggerDocumentAnalysis
+      // is fire-and-forget, sets aiStatus="pending" immediately, and
+      // short-circuits for unsupported categories/mime types, so this is
+      // safe to call broadly. On the next matrix refresh these flip to a
+      // real pass/warning/fail verdict.
+      const BACKFILL_CAP = 25;
+      let backfilled = 0;
+      for (const d of documents) {
+        if (backfilled >= BACKFILL_CAP) break;
+        if (d.aiStatus) continue;
+        if (!d.filePath || !d.mimeType || !d.category) continue;
+        try {
+          triggerDocumentAnalysis(
+            d.id,
+            d.filePath,
+            d.mimeType,
+            d.category,
+            d.type,
+            d.nurseId,
+          );
+          backfilled++;
+        } catch (err: any) {
+          console.warn(
+            `[admin-reports] backfill triggerDocumentAnalysis failed for ${d.id}:`,
+            err?.message || err,
+          );
+        }
+      }
+      if (backfilled > 0) {
+        console.log(`[admin-reports] queued ${backfilled} document(s) for AI backfill`);
       }
 
       const indemnityByNurse = new Map<string, (typeof professionalIndemnityRows)[number]>();
