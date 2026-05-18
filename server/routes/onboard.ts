@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
-import { sendPortalInviteEmail, sendApplicantWelcomeEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
+import { sendApplicantWelcomeEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
 import {
@@ -83,6 +83,8 @@ export function registerAdminRoutes(app: Express) {
     const parsed = insertCandidateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const data = { ...parsed.data };
+    // Default true for back-compat; admin can opt out via the registration UI.
+    const shouldSendWelcomeEmail = req.body?.sendWelcomeEmail !== false;
     if (data.fastTracked) {
       data.currentStage = "onboard";
     }
@@ -98,7 +100,7 @@ export function registerAdminRoutes(app: Express) {
     }
 
     let emailSent = false;
-    if (candidate.email) {
+    if (shouldSendWelcomeEmail && candidate.email) {
       try {
         const token = crypto.randomBytes(32).toString("hex");
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -106,12 +108,13 @@ export function registerAdminRoutes(app: Express) {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
-        // First-touch send — use the warmer welcome template. Subsequent
-        // "resend portal link" actions still use sendPortalInviteEmail.
+        // First-touch send — always use the warmer Livaware welcome
+        // template so the candidate's first contact is on-brand and
+        // contains the onboard.livaware.co.uk return-URL instructions.
         await sendApplicantWelcomeEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
         emailSent = true;
         await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
-        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString(), template: "applicant_welcome" } });
       } catch (err: any) {
         console.error("Auto-invite email failed:", err?.message || err);
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });
@@ -1426,12 +1429,18 @@ export function registerAdminRoutes(app: Express) {
 
     const stage = (candidate.currentStage === "skills_arcade" ? "skills_arcade" : candidate.currentStage === "onboard" ? "onboard" : "preboard") as "preboard" | "onboard" | "skills_arcade";
 
+    // Admin "Email the candidate their portal link" action (Actions menu).
+    // Cascaded onto the warm Livaware welcome template so every admin-
+    // initiated portal email — first touch or resend — uses the on-brand
+    // template that points the candidate at onboard.livaware.co.uk for
+    // future sign-ins. `stage` is no longer needed for templating.
+    void stage;
     let emailSent = false;
     if (candidate.email) {
       try {
-        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, stage);
+        await sendApplicantWelcomeEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
         emailSent = true;
-        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
+        await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString(), template: "applicant_welcome" } });
       } catch (err: any) {
         console.error("Failed to send portal invite email:", err?.message || err);
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_email_failed", agentName: agentFor(req), detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email } });

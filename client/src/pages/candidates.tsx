@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ArrowRight, UserPlus, Mail, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch, FolderSearch, Cloud, Inbox, ChevronDown, AlertTriangle, CheckCircle2, X, Link2, Trash2, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Search, Plus, ArrowRight, UserPlus, Mail, MailCheck, Phone, Stethoscope, Send, Loader2, Sparkles, FileSearch, FolderSearch, Cloud, Inbox, ChevronDown, AlertTriangle, CheckCircle2, X, Link2, Trash2, LayoutGrid, List as ListIcon } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -29,27 +30,34 @@ function AddCandidateDialog() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [band, setBand] = useState("5");
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const { toast } = useToast();
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const wantedToSend = sendWelcomeEmail;
       const res = await apiRequest("POST", "/api/candidates", {
         fullName, email, phone, band: parseInt(band), status: "application",
         currentStage: "onboard",
         fastTracked: true,
+        sendWelcomeEmail: wantedToSend,
       });
-      return res.json();
+      const json = await res.json();
+      return { ...json, wantedToSend };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/candidates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       setOpen(false);
-      setFullName(""); setEmail(""); setPhone("");
+      setFullName(""); setEmail(""); setPhone(""); setSendWelcomeEmail(true);
       toast({
         title: "Fast-tracked to onboarding",
         description: data.emailSent
-          ? "Portal invite email sent to " + data.email
-          : "Candidate registered and fast-tracked. Portal invite email could not be sent.",
+          ? `Welcome email sent to ${data.email} — they can also return at onboard.livaware.co.uk any time.`
+          : data.wantedToSend === false
+            ? `${data.fullName || "Candidate"} registered. Welcome email was skipped at your request — share their portal link manually.`
+            : "Candidate registered and fast-tracked. Welcome email could not be sent — please share the link manually.",
+        variant: data.emailSent || data.wantedToSend === false ? undefined : "destructive",
       });
     },
     onError: (err: Error) => {
@@ -94,6 +102,26 @@ function AddCandidateDialog() {
               </SelectContent>
             </Select>
           </div>
+          <label
+            htmlFor="fasttrack-sendWelcomeEmail"
+            className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+          >
+            <Checkbox
+              id="fasttrack-sendWelcomeEmail"
+              checked={sendWelcomeEmail}
+              onCheckedChange={(v) => setSendWelcomeEmail(v === true)}
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5 flex-1">
+              <p className="text-sm font-medium leading-none flex items-center gap-2">
+                <MailCheck className="h-3.5 w-3.5 text-primary" />
+                Send welcome email now
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Emails the candidate a warm Livaware welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
+              </p>
+            </div>
+          </label>
           <Button
             className="w-full h-10 font-semibold"
             onClick={() => createMutation.mutate()}
@@ -102,7 +130,7 @@ function AddCandidateDialog() {
           >
             {createMutation.isPending ? (
               <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-            ) : "Register Candidate"}
+            ) : sendWelcomeEmail ? "Register & Send Welcome" : "Register Candidate"}
           </Button>
         </div>
       </DialogContent>

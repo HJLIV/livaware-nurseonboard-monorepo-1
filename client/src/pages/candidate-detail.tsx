@@ -4514,7 +4514,7 @@ function CandidateDetailInner({ candidateId }: { candidateId: string }) {
                   <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
                   <div className="flex flex-col">
                     <span>Email the candidate their portal link</span>
-                    <span className="text-[11px] text-muted-foreground">Sends a fresh sign-in link to {candidate.email || "their inbox"}</span>
+                    <span className="text-[11px] text-muted-foreground">Sends the branded Livaware welcome with a fresh portal link to {candidate.email || "their inbox"} — and reminds them they can sign back in any time at onboard.livaware.co.uk.</span>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem

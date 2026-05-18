@@ -339,15 +339,19 @@ export function registerNurseRoutes(app: Express) {
 
       let emailStatus: "sent" | "failed" | "skipped" = "skipped";
       let emailError: string | undefined;
+      // `module` not used for templating — bulk invites now use the
+      // warm Livaware welcome template for parity with single-send.
+      void module;
       if (sendEmail && nurse.email && outlookReady) {
         try {
-          await sendPortalInviteEmail(nurse.email, nurse.fullName, portalUrl, expiresAt, module);
+          await sendApplicantWelcomeEmail(nurse.email, nurse.fullName, portalUrl, expiresAt);
           emailStatus = "sent";
           emailsSent += 1;
           await logAction(nurse.id, "admin", "portal_invite_emailed", agentFor(req), {
             recipientEmail: nurse.email,
             expiresAt: expiresAt.toISOString(),
             bulk: true,
+            template: "applicant_welcome",
           });
         } catch (err: any) {
           emailStatus = "failed";
