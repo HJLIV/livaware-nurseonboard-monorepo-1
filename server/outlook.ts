@@ -153,7 +153,7 @@ export async function sendPortalInviteEmail(
 // and more on-brand than the generic portal-invite email because this
 // is the candidate's first contact with Livaware — should set the tone
 // for the rest of the journey.
-const APPLICANT_WELCOME_SUBJECT = "Welcome to Livaware — Let's get started";
+const APPLICANT_WELCOME_SUBJECT = "Welcome to Livaware — your journey starts here";
 
 export async function sendApplicantWelcomeEmail(
   recipientEmail: string,
@@ -176,7 +176,7 @@ export async function sendApplicantWelcomeEmail(
     <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
 
       <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 36px 32px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Welcome aboard</p>
+        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Your journey starts here</p>
         <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
         <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
       </div>
@@ -185,11 +185,11 @@ export async function sendApplicantWelcomeEmail(
         <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
 
         <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 16px;">
-          A warm welcome to Livaware — we're really pleased you've decided to join us. From here on you have a single place to manage everything we'll need from you, in your own time and at your own pace.
+          A warm welcome to Livaware, and thank you for taking the first step with us. We're delighted you're considering joining our team of nurses, and we've set everything up so that getting to know us is as straightforward as possible.
         </p>
 
         <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 24px;">
-          Your secure personal portal is ready. Tap the button below to open it for the first time — you'll be signed in straight away on this device.
+          Your secure personal portal is ready — it's where you'll complete each step of your application in your own time, at your own pace. Tap the button below to open it for the first time and you'll be signed in straight away on this device.
         </p>
 
         <div style="text-align: center; margin: 32px 0;">
@@ -204,11 +204,11 @@ export async function sendApplicantWelcomeEmail(
         </p>
 
         <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">What happens next</p>
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">Your three steps with us</p>
           <ol style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
-            <li><strong style="color: #F0ECE4;">A short clinical assessment</strong> — around 10–15 minutes, all online. You can pause and pick up where you left off.</li>
-            <li><strong style="color: #F0ECE4;">Onboarding documents</strong> — passport, right-to-work, NMC PIN, training certificates. Upload from your phone or laptop, whichever's easier.</li>
-            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short interactive scenarios so you can show us how you think on the floor.</li>
+            <li><strong style="color: #F0ECE4;">A short clinical assessment</strong> — around 10–15 minutes online. A friendly first look at how you approach real-world scenarios; you can pause and come back to it any time.</li>
+            <li><strong style="color: #F0ECE4;">Share your documents</strong> — passport, right-to-work, NMC PIN and any training certificates. Upload from your phone or laptop, whichever's easier.</li>
+            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short interactive scenarios so you can show us how you think on the floor, and we get a sense of where you'll shine.</li>
           </ol>
         </div>
 
@@ -224,7 +224,7 @@ export async function sendApplicantWelcomeEmail(
         </p>
 
         <p style="font-size: 14px; color: #E0DCD4; margin-top: 28px; line-height: 1.7;">
-          Looking forward to working with you,<br />
+          Looking forward to getting to know you,<br />
           <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
         </p>
       </div>
