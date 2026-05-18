@@ -30,7 +30,7 @@ import {
   Plus, Mail, Phone, MapPin, Calendar, Award, Briefcase, Globe, Upload,
   Download, Copy, ExternalLink, FolderOpen, Link2, Loader2, Star,
   ClipboardCheck, AlertCircle, Sparkles, FileDown, Zap, Archive, ArchiveRestore, Trash2, UserCheck,
-  ChevronDown, ChevronRight, Send, Activity, MoreHorizontal, Wand2
+  ChevronDown, ChevronRight, Send, Activity, MoreHorizontal, Wand2, BellRing, KeyRound, ListChecks
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,6 +39,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { useSuspectBurstCharThreshold } from "@/hooks/use-preboard-integrity-settings";
 import { Link } from "wouter";
@@ -4347,6 +4351,43 @@ function CandidateDetailInner({ candidateId }: { candidateId: string }) {
     },
   });
 
+  const outstandingNudgeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/candidates/${candidateId}/outstanding-nudge`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      const count = data?.itemCount ?? 0;
+      toast({
+        title: "Nudge email sent",
+        description: count > 0
+          ? `Listed ${count} outstanding item${count === 1 ? "" : "s"} and reminded them to sign in at onboard.livaware.co.uk.`
+          : "Sent a gentle nudge with a sign-in reminder for onboard.livaware.co.uk.",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't send the nudge", description: err?.message || "Something went wrong sending the nudge email.", variant: "destructive" });
+    },
+  });
+
+  const signInReminderMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/candidates/${candidateId}/sign-in-reminder`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidateId, "audit-log"] });
+      toast({
+        title: "Sign-in reminder sent",
+        description: "Short reminder sent with email + 6-digit-code instructions for onboard.livaware.co.uk — no portal link inside.",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't send the reminder", description: err?.message || "Something went wrong sending the sign-in reminder.", variant: "destructive" });
+    },
+  });
+
   const archiveMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("DELETE", `/api/nurses/${candidateId}`);
@@ -4491,30 +4532,43 @@ function CandidateDetailInner({ candidateId }: { candidateId: string }) {
                   data-testid="button-candidate-actions"
                   disabled={
                     generateLinkMutation.isPending ||
+                    outstandingNudgeMutation.isPending ||
+                    signInReminderMutation.isPending ||
                     archiveMutation.isPending ||
                     restoreMutation.isPending ||
                     refillPersonalInfoMutation.isPending
                   }
-                  tooltip="Open candidate actions menu (portal link, archive, restore, refill)."
+                  tooltip="Open candidate actions menu (nudge, sign-in reminder, archive, restore, refill)."
                 >
-                  {(generateLinkMutation.isPending || archiveMutation.isPending || restoreMutation.isPending || refillPersonalInfoMutation.isPending)
+                  {(generateLinkMutation.isPending || outstandingNudgeMutation.isPending || signInReminderMutation.isPending || archiveMutation.isPending || restoreMutation.isPending || refillPersonalInfoMutation.isPending)
                     ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                     : <MoreHorizontal className="h-4 w-4 mr-1.5" />}
                   Actions
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuContent align="end" className="w-80">
                 <DropdownMenuLabel>What would you like to do?</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  data-testid="action-send-portal-invite"
-                  disabled={generateLinkMutation.isPending}
-                  onSelect={(e) => { e.preventDefault(); generateLinkMutation.mutate(); }}
+                  data-testid="action-send-outstanding-nudge"
+                  disabled={outstandingNudgeMutation.isPending || !candidate.email}
+                  onSelect={(e) => { e.preventDefault(); outstandingNudgeMutation.mutate(); }}
                 >
-                  <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <BellRing className="h-4 w-4 mr-2 text-primary" />
                   <div className="flex flex-col">
-                    <span>Email the candidate their portal link</span>
-                    <span className="text-[11px] text-muted-foreground">Sends the branded Livaware welcome with a fresh portal link to {candidate.email || "their inbox"} — and reminds them they can sign back in any time at onboard.livaware.co.uk.</span>
+                    <span>Send a personalised nudge</span>
+                    <span className="text-[11px] text-muted-foreground">Emails {candidate.email || "the candidate"} a friendly list of what's still outstanding (e.g. NMC PIN, DBS, references) with a sign-in reminder for onboard.livaware.co.uk.</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="action-send-signin-reminder"
+                  disabled={signInReminderMutation.isPending || !candidate.email}
+                  onSelect={(e) => { e.preventDefault(); signInReminderMutation.mutate(); }}
+                >
+                  <KeyRound className="h-4 w-4 mr-2 text-primary" />
+                  <div className="flex flex-col">
+                    <span>Send a sign-in reminder</span>
+                    <span className="text-[11px] text-muted-foreground">A short email — no portal link — just the email + 6-digit-code instructions for onboard.livaware.co.uk. Use when they've misplaced the link.</span>
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -4546,6 +4600,29 @@ function CandidateDetailInner({ candidateId }: { candidateId: string }) {
                     <span className="text-[11px] text-muted-foreground">Looks at the passport, NMC certificate, DBS, etc. and fills any blank fields</span>
                   </div>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger data-testid="action-more-options">
+                    <ListChecks className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span>More email options</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent className="w-80">
+                      <DropdownMenuLabel className="text-[11px] uppercase tracking-widest text-muted-foreground/70">Rarely needed</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        data-testid="action-send-portal-invite"
+                        disabled={generateLinkMutation.isPending || !candidate.email}
+                        onSelect={(e) => { e.preventDefault(); generateLinkMutation.mutate(); }}
+                      >
+                        <Mail className="h-4 w-4 mr-2 text-muted-foreground" />
+                        <div className="flex flex-col">
+                          <span>Re-send the raw portal link</span>
+                          <span className="text-[11px] text-muted-foreground">Generates a fresh single-use link and emails it. In most cases the nudge or sign-in reminder above is what you actually want — candidates can already self-sign-in at onboard.livaware.co.uk any time.</span>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 {candidate.archivedAt ? (
                   <DropdownMenuItem

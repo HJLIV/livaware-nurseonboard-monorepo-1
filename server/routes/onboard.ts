@@ -3,7 +3,8 @@ import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
-import { sendApplicantWelcomeEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
+import { sendApplicantWelcomeEmail, sendOutstandingNudgeEmail, sendSignInReminderEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
+import { ONBOARDING_STEPS, STEP_STATUS } from "@shared/schema";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
 import {
@@ -1449,6 +1450,83 @@ export function registerAdminRoutes(app: Express) {
 
     await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent } });
     res.status(201).json({ token: link.token, expiresAt: link.expiresAt, url: `/portal/${link.token}`, emailSent });
+  });
+
+  // Compute friendly names of onboarding steps that are not yet "completed".
+  // Used by the "Send outstanding-items nudge" admin action and exposed via
+  // GET /api/candidates/:id/outstanding-items so the admin UI can preview
+  // what's about to be emailed.
+  async function computeOutstandingStepNames(nurseId: string): Promise<string[]> {
+    const state = await storage.getOnboardingState(nurseId);
+    const statuses = (state?.stepStatuses as Record<string, string> | undefined) ?? {};
+    const outstanding: string[] = [];
+    for (const step of ONBOARDING_STEPS) {
+      const status = statuses[step.key];
+      if (status !== STEP_STATUS.completed) {
+        outstanding.push(step.name);
+      }
+    }
+    return outstanding;
+  }
+
+  app.get("/api/candidates/:id/outstanding-items", requireAdmin, async (req, res) => {
+    const candidate = await storage.getCandidate(param(req, "id"));
+    if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+    const items = await computeOutstandingStepNames(candidate.id);
+    res.json({ items });
+  });
+
+  app.post("/api/candidates/:id/outstanding-nudge", requireAdmin, magicLinkLimiter, async (req, res) => {
+    const candidate = await storage.getCandidate(param(req, "id"));
+    if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+    if (!candidate.email) return res.status(400).json({ message: "Candidate has no email on file" });
+
+    const items = await computeOutstandingStepNames(candidate.id);
+    try {
+      await sendOutstandingNudgeEmail(candidate.email, candidate.fullName, items);
+      await storage.createAuditLog({
+        nurseId: candidate.id,
+        action: "outstanding_nudge_emailed",
+        agentName: agentFor(req),
+        detail: { recipientEmail: candidate.email, itemCount: items.length, items, template: "outstanding_nudge" },
+      });
+      res.status(200).json({ emailSent: true, itemCount: items.length, items });
+    } catch (err: any) {
+      console.error("Outstanding nudge failed:", err?.message || err);
+      await storage.createAuditLog({
+        nurseId: candidate.id,
+        action: "outstanding_nudge_email_failed",
+        agentName: agentFor(req),
+        detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email },
+      });
+      res.status(500).json({ emailSent: false, message: err?.message || "Failed to send nudge email" });
+    }
+  });
+
+  app.post("/api/candidates/:id/sign-in-reminder", requireAdmin, magicLinkLimiter, async (req, res) => {
+    const candidate = await storage.getCandidate(param(req, "id"));
+    if (!candidate) return res.status(404).json({ message: "Candidate not found" });
+    if (!candidate.email) return res.status(400).json({ message: "Candidate has no email on file" });
+
+    try {
+      await sendSignInReminderEmail(candidate.email, candidate.fullName);
+      await storage.createAuditLog({
+        nurseId: candidate.id,
+        action: "sign_in_reminder_emailed",
+        agentName: agentFor(req),
+        detail: { recipientEmail: candidate.email, template: "sign_in_reminder" },
+      });
+      res.status(200).json({ emailSent: true });
+    } catch (err: any) {
+      console.error("Sign-in reminder failed:", err?.message || err);
+      await storage.createAuditLog({
+        nurseId: candidate.id,
+        action: "sign_in_reminder_email_failed",
+        agentName: agentFor(req),
+        detail: { error: err?.message || "Unknown error", recipientEmail: candidate.email },
+      });
+      res.status(500).json({ emailSent: false, message: err?.message || "Failed to send sign-in reminder" });
+    }
   });
 
   app.get("/api/candidates/:id/magic-links", async (req, res) => {

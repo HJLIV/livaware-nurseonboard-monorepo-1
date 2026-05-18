@@ -255,6 +255,157 @@ export async function sendApplicantWelcomeEmail(
   });
 }
 
+// ─── Outstanding-items nudge email ───────────────────────────────────
+// Sent from the candidate-detail Actions menu when an admin wants to
+// give an already-registered nurse a gentle, personalised reminder of
+// what's still outstanding on their portal — without resending a fresh
+// portal link (because they can self-sign-in at onboard.livaware.co.uk
+// any time with email + 6-digit code).
+const OUTSTANDING_NUDGE_SUBJECT = "A gentle nudge from Livaware — a few things still to finish";
+
+export async function sendOutstandingNudgeEmail(
+  recipientEmail: string,
+  recipientName: string,
+  outstandingItems: string[],
+) {
+  const client = await getGraphClient();
+  const rawFirstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
+  const firstName = escapeHtml(rawFirstName);
+
+  const itemsHtml = outstandingItems.length
+    ? outstandingItems
+        .map(
+          (item) =>
+            `<li style="margin: 0 0 8px;"><span style="color: #F0ECE4; font-weight: 500;">${escapeHtml(item)}</span></li>`,
+        )
+        .join("")
+    : `<li style="color: #E0DCD4;">A few finishing touches to wrap things up.</li>`;
+
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+
+      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 32px 32px 28px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">A gentle nudge</p>
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 26px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
+      </div>
+
+      <div style="padding: 32px 32px 24px;">
+        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 22px;">
+          Just a friendly note from the Livaware onboarding team. We've had a look at your portal and there are a small number of things still to finish — nothing urgent, but if you can find a spare ten minutes it would help us move you along to the next stage.
+        </p>
+
+        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 26px;">
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">Still to finish</p>
+          <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0; padding-left: 22px;">
+            ${itemsHtml}
+          </ul>
+        </div>
+
+        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 18px 20px; border-radius: 6px; margin: 0 0 24px;">
+          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in</p>
+          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.75; margin: 0;">
+            Whenever you're ready, go to <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a>, type in your email, and we'll send you a 6-digit code to sign straight in. No password to remember, no link to dig out of an old email.
+          </p>
+        </div>
+
+        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.75; margin: 0 0 8px;">
+          If anything's unclear or you've already sorted one of these on your end, just reply to this email and a real person on our onboarding team will pick it up.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 26px; line-height: 1.7;">
+          With our thanks,<br />
+          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
+        </p>
+      </div>
+
+      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
+        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">Replies to this email reach our onboarding team directly.</p>
+      </div>
+    </div>
+  `;
+
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: OUTSTANDING_NUDGE_SUBJECT,
+      body: { contentType: "HTML", content: htmlBody },
+      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
+    },
+    saveToSentItems: true,
+  });
+}
+
+// ─── Sign-in reminder email ──────────────────────────────────────────
+// A deliberately tiny "you can come back any time" email — no portal
+// link inside, just the email + 6-digit-code instructions and the
+// onboard.livaware.co.uk URL. Useful when admin just wants to remind
+// a candidate that the door is open.
+const SIGN_IN_REMINDER_SUBJECT = "Your Livaware portal is always one sign-in away";
+
+export async function sendSignInReminderEmail(
+  recipientEmail: string,
+  recipientName: string,
+) {
+  const client = await getGraphClient();
+  const rawFirstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
+  const firstName = escapeHtml(rawFirstName);
+  const safeEmail = escapeHtml(recipientEmail);
+
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+
+      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 32px 32px 28px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Always one sign-in away</p>
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 26px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
+      </div>
+
+      <div style="padding: 32px 32px 24px;">
+        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 22px;">
+          A quick note to remind you that your Livaware portal is always open whenever you'd like to pick things up again — there's nothing to install, no password to reset, and no old email to dig out.
+        </p>
+
+        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 22px 24px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 14px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">How to sign back in</p>
+          <ol style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
+            <li>Go to <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a></li>
+            <li>Type in this email address (<span style="color: #F0ECE4;">${safeEmail}</span>)</li>
+            <li>We'll send you a <strong style="color: #C8A96E;">6-digit code</strong> — pop it in and you're back in your portal</li>
+          </ol>
+        </div>
+
+        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.75; margin: 0 0 8px;">
+          You can do this from any phone, tablet or laptop, and as many times as you like. If you ever change your email address, just reply to this email and we'll update our records.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 26px; line-height: 1.7;">
+          See you soon,<br />
+          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
+        </p>
+      </div>
+
+      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
+        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">Replies to this email reach our onboarding team directly.</p>
+      </div>
+    </div>
+  `;
+
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: SIGN_IN_REMINDER_SUBJECT,
+      body: { contentType: "HTML", content: htmlBody },
+      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
+    },
+    saveToSentItems: true,
+  });
+}
+
 // ─── Portal passwordless sign-in code email (task 107) ───────────────
 export async function sendPortalSignInCodeEmail(
   recipientEmail: string,
