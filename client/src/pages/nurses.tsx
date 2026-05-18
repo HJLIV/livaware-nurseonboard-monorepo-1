@@ -20,7 +20,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon, ChevronDown, Settings2 } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon, ChevronDown, Settings2, MailCheck } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -54,18 +55,25 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [emailOutcome, setEmailOutcome] = useState<"sent" | "skipped" | "failed">("sent");
   const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const registerMutation = useMutation({
     mutationFn: async () => {
+      // Capture the toggle value at submit time so a later UI flip can't
+      // race with the success branch below.
+      const wantedToSend = sendWelcomeEmail;
       const res = await apiRequest("POST", "/api/nurses", {
         fullName: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim(),
+        sendWelcomeEmail: wantedToSend,
       });
-      return res.json();
+      const json = await res.json();
+      return { ...json, wantedToSend };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
@@ -73,9 +81,14 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
       if (data.preboardInviteUrl) {
         setInviteUrl(data.preboardInviteUrl);
         if (data.emailSent) {
-          toast({ title: "Invite email sent", description: `${firstName} ${lastName} has been emailed their secure portal link.` });
+          setEmailOutcome("sent");
+          toast({ title: "Welcome email sent", description: `${firstName} ${lastName} has been emailed their welcome and secure portal link.` });
+        } else if (!data.wantedToSend) {
+          setEmailOutcome("skipped");
+          toast({ title: "Applicant registered", description: `${firstName} ${lastName} added — welcome email was skipped at your request. Share the portal link below when you're ready.` });
         } else {
-          toast({ title: "Applicant registered", description: `${firstName} ${lastName} added. Invite email could not be sent automatically — share the link manually.`, variant: "destructive" });
+          setEmailOutcome("failed");
+          toast({ title: "Applicant registered", description: `${firstName} ${lastName} added. Welcome email could not be sent automatically — share the link manually.`, variant: "destructive" });
         }
       } else {
         resetAndClose();
@@ -92,7 +105,9 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
     setFirstName("");
     setLastName("");
     setEmail("");
+    setSendWelcomeEmail(true);
     setInviteUrl(null);
+    setEmailOutcome("sent");
     setCopied(false);
   };
 
@@ -139,7 +154,14 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
                     {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">This link expires in 30 days. We've also emailed it to the applicant — keep this on hand as a backup.</p>
+                <p className="text-xs text-muted-foreground">
+                  This link expires in 30 days.{" "}
+                  {emailOutcome === "sent" && "We've also emailed it to the applicant — keep this on hand as a backup."}
+                  {emailOutcome === "skipped" && "No welcome email was sent — share this link with the applicant yourself."}
+                  {emailOutcome === "failed" && (
+                    <span className="text-amber-500">The welcome email could not be sent automatically — please share this link with the applicant manually.</span>
+                  )}
+                </p>
               </div>
               <DialogFooter>
                 <Button onClick={resetAndClose} className="w-full">Done</Button>
@@ -167,12 +189,32 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
                 <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Email</Label>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane.doe@example.com" className="h-10" />
               </div>
+              <label
+                htmlFor="sendWelcomeEmail"
+                className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <Checkbox
+                  id="sendWelcomeEmail"
+                  checked={sendWelcomeEmail}
+                  onCheckedChange={(v) => setSendWelcomeEmail(v === true)}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5 flex-1">
+                  <p className="text-sm font-medium leading-none flex items-center gap-2">
+                    <MailCheck className="h-3.5 w-3.5 text-primary" />
+                    Send welcome email now
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Emails the applicant a warm Livaware welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
+                  </p>
+                </div>
+              </label>
               <DialogFooter className="pt-2">
                 <Button type="button" variant="outline" onClick={resetAndClose}>Cancel</Button>
                 <Button type="submit" disabled={registerMutation.isPending || !firstName.trim() || !lastName.trim() || !email.trim()} className="gap-2">
                   {registerMutation.isPending ? (
                     <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  ) : "Register & Invite"}
+                  ) : sendWelcomeEmail ? "Register & Send Welcome" : "Register Applicant"}
                 </Button>
               </DialogFooter>
             </form>

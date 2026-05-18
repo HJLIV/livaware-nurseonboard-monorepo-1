@@ -40,9 +40,11 @@ export function registerNurseRoutes(app: Express) {
   });
 
   app.post("/api/nurses", async (req, res) => {
-    const { fullName, firstName, lastName, email, phone, dateOfBirth, address } = req.body;
+    const { fullName, firstName, lastName, email, phone, dateOfBirth, address, sendWelcomeEmail } = req.body;
     const name = fullName || (firstName && lastName ? `${firstName} ${lastName}`.trim() : firstName || "");
     if (!name || !email) return res.status(400).json({ message: "Name and email are required" });
+    // Default true for backwards-compat with any caller that omits the flag.
+    const shouldSendWelcomeEmail = sendWelcomeEmail !== false;
 
     const [nurse] = await db.insert(nurses).values({
       fullName: name, email, phone, dateOfBirth, address,
@@ -72,10 +74,11 @@ export function registerNurseRoutes(app: Express) {
       console.error("Failed to generate preboard link:", e);
     }
 
-    // Auto-send the portal invite email to the new applicant. Mirrors the
-    // behaviour of POST /api/candidates so every new registration receives
-    // the secure portal link by email, not just an in-app URL.
-    if (portalUrl && portalExpiresAt && nurse.email) {
+    // Auto-send the warm welcome email to the new applicant. Admin can
+    // opt out via `sendWelcomeEmail: false` (e.g. when they want to brief
+    // the candidate themselves first); the default remains "send" so we
+    // mirror POST /api/candidates and never silently skip the first-touch.
+    if (shouldSendWelcomeEmail && portalUrl && portalExpiresAt && nurse.email) {
       if (!isOutlookConfigured()) {
         console.warn("[nurses.create] Outlook not configured — invite email skipped");
         await logAction(nurse.id, "admin", "portal_invite_email_failed", agentFor(req), {

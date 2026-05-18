@@ -213,9 +213,12 @@ export async function sendApplicantWelcomeEmail(
         </div>
 
         <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 16px 20px; border-radius: 6px; margin: 0 0 24px;">
-          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Good to know</p>
-          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0;">
-            This link is personal to you — please keep it private. After this first sign-in, you'll come back any time using your email address and a 6-digit code we send you, so you can pick up from any device. For reference, this initial invite link expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong>.
+          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in again, any time</p>
+          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0 0 10px;">
+            You don't need to keep this email to come back. Whenever you'd like to continue, just visit <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a> and enter your email address — we'll send you a 6-digit code to sign in straight away, from any phone, tablet or laptop.
+          </p>
+          <p style="font-size: 12px; color: #B0AAA0; line-height: 1.7; margin: 0;">
+            This first invite link is personal to you, so please keep it private. For reference, it expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong> — but the email-and-code sign-in above always works.
           </p>
         </div>
 
