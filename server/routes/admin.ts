@@ -714,6 +714,31 @@ export function registerNurseRoutes(app: Express) {
       const onboardDone = nurse.onboardStatus === "cleared" || nurse.currentStage === "completed";
       const arcadeDone = nurse.arcadeStatus === "competent" || nurse.currentStage === "completed";
 
+      // Resolve each lane's status from the actual DB enum so the hub
+      // reflects whether the candidate has truly started a stage. Without
+      // this, every not-yet-started lane was shown as "In Progress" in
+      // the sidebar / hub — which misled candidates into thinking they'd
+      // begun something they hadn't.
+      const preboardStatus = preboardDone
+        ? "completed"
+        : nurse.preboardStatus === "in_progress"
+        ? "in_progress"
+        : nurse.preboardStatus === "flagged"
+        ? "in_progress"
+        : "not_started";
+      const onboardStatus = onboardDone
+        ? "completed"
+        : nurse.onboardStatus === "in_progress" ||
+          nurse.onboardStatus === "escalated" ||
+          nurse.onboardStatus === "blocked"
+        ? "in_progress"
+        : "not_started";
+      const arcadeStatus = arcadeDone
+        ? "completed"
+        : nurse.arcadeStatus === "in_progress" || nurse.arcadeStatus === "remediation"
+        ? "in_progress"
+        : "not_started";
+
       // All three lanes are accessible at the same time. The hub no longer
       // gates onboarding or the skills arcade behind the assessment — the
       // candidate can work through any of them in parallel and finish the
@@ -721,19 +746,31 @@ export function registerNurseRoutes(app: Express) {
       // Cookie carries the identity, so action URLs are tokenless.
       const journey = {
         preboard: {
-          status: preboardDone ? "completed" : "in_progress",
+          status: preboardStatus,
           actionUrl: `/preboard/assessment`,
-          label: preboardDone ? "Update Details" : "Start Assessment",
+          label: preboardDone
+            ? "Update Details"
+            : preboardStatus === "in_progress"
+            ? "Continue Assessment"
+            : "Start Assessment",
         },
         onboard: {
-          status: onboardDone ? "completed" : "in_progress",
+          status: onboardStatus,
           actionUrl: `/portal/page`,
-          label: onboardDone ? "Update Documents" : "Continue Onboarding",
+          label: onboardDone
+            ? "Update Documents"
+            : onboardStatus === "in_progress"
+            ? "Continue Onboarding"
+            : "Start Onboarding",
         },
         skillsArcade: {
-          status: arcadeDone ? "completed" : "in_progress",
+          status: arcadeStatus,
           actionUrl: `/portal/arcade`,
-          label: arcadeDone ? "Review Modules" : "Start Skills Arcade",
+          label: arcadeDone
+            ? "Review Modules"
+            : arcadeStatus === "in_progress"
+            ? "Continue Skills Arcade"
+            : "Start Skills Arcade",
         },
       };
 
