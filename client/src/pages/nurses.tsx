@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon, ChevronDown, Settings2, MailCheck } from "lucide-react";
+import { UserPlus, Search, Users, ArrowUpRight, Mail, Calendar, Copy, ExternalLink, Check, ChevronRight, Loader2, RefreshCw, Archive, ArchiveRestore, LayoutGrid, List as ListIcon, ChevronDown, Settings2, MailCheck, Shirt, Download } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -677,6 +677,17 @@ export default function NursesPage() {
                 </div>
               </PopoverContent>
             </Popover>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => { window.location.href = "/api/admin/uniform-sizing.csv"; }}
+              data-testid="button-download-uniform-sizing-csv"
+              tooltip="Download every active candidate with their uniform top, trouser and length sizes as CSV."
+            >
+              <Shirt className="h-3.5 w-3.5" />
+              Uniform Sizing CSV
+            </Button>
             <RegisterNurseDialog />
           </div>
         </div>

@@ -34,7 +34,11 @@ import {
   Link2,
   Loader2,
   FileText,
+  Shirt,
+  Pencil,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getStageDisplayName } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
@@ -50,6 +54,11 @@ interface NurseDetail {
   portalToken?: string;
   createdAt: string;
   updatedAt: string;
+  uniformTopSize?: string | null;
+  uniformTrouserSize?: string | null;
+  uniformTrouserLength?: string | null;
+  uniformSizingUpdatedAt?: string | null;
+  uniformSizingUpdatedBy?: string | null;
 }
 
 interface PreboardResult {
@@ -262,6 +271,121 @@ function NurseInvoicesTab({ nurseId, nurseName, nurseEmail, currentStage }: { nu
   );
 }
 
+const UNIFORM_LENGTH_LABELS: Record<string, string> = { short: "Short", regular: "Regular", long: "Long" };
+
+function UniformSizingCard({ nurse }: { nurse: NurseDetail }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [top, setTop] = useState(nurse.uniformTopSize || "");
+  const [trouser, setTrouser] = useState(nurse.uniformTrouserSize || "");
+  const [length, setLength] = useState<string>(nurse.uniformTrouserLength || "");
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/nurses/${nurse.id}/uniform-sizing`, {
+        uniformTopSize: top.trim() || null,
+        uniformTrouserSize: trouser.trim() || null,
+        uniformTrouserLength: length || null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/nurses/${nurse.id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/nurses/${nurse.id}/audit-log`] });
+      setEditing(false);
+      toast({ title: "Uniform sizing saved", description: "The office will see the updated sizes next time they pull the list." });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const empty = !nurse.uniformTopSize && !nurse.uniformTrouserSize && !nurse.uniformTrouserLength;
+
+  return (
+    <Card data-testid="card-uniform-sizing">
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shirt className="h-4 w-4 text-muted-foreground" />
+            Uniform Sizing
+          </CardTitle>
+          {nurse.uniformSizingUpdatedAt && (
+            <p className="text-[11px] text-muted-foreground/70 mt-1">
+              Updated {new Date(nurse.uniformSizingUpdatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              {nurse.uniformSizingUpdatedBy ? ` · ${nurse.uniformSizingUpdatedBy}` : ""}
+            </p>
+          )}
+        </div>
+        {!editing && (
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setEditing(true)} data-testid="button-edit-uniform-sizing">
+            <Pencil className="h-3 w-3" /> Edit
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!editing ? (
+          empty ? (
+            <p className="text-sm text-muted-foreground italic">Not recorded. Click <strong>Edit</strong> to capture top, trouser & length.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-1">Top</p>
+                <p className="font-medium" data-testid="value-uniform-top">{nurse.uniformTopSize || "Not recorded"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-1">Trouser</p>
+                <p className="font-medium" data-testid="value-uniform-trouser">{nurse.uniformTrouserSize || "Not recorded"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-1">Length</p>
+                <p className="font-medium" data-testid="value-uniform-length">{nurse.uniformTrouserLength ? UNIFORM_LENGTH_LABELS[nurse.uniformTrouserLength] : "Not recorded"}</p>
+              </div>
+            </div>
+          )
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Top</Label>
+                <Input value={top} onChange={(e) => setTop(e.target.value)} placeholder="e.g. M" maxLength={80} data-testid="input-uniform-top" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Trouser</Label>
+                <Input value={trouser} onChange={(e) => setTrouser(e.target.value)} placeholder="e.g. M 12" maxLength={80} data-testid="input-uniform-trouser" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Length</Label>
+                <Select value={length || "__none"} onValueChange={(v) => setLength(v === "__none" ? "" : v)}>
+                  <SelectTrigger data-testid="select-uniform-length"><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">—</SelectItem>
+                    <SelectItem value="short">Short</SelectItem>
+                    <SelectItem value="regular">Regular</SelectItem>
+                    <SelectItem value="long">Long</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-uniform-sizing">
+                {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => {
+                setTop(nurse.uniformTopSize || "");
+                setTrouser(nurse.uniformTrouserSize || "");
+                setLength(nurse.uniformTrouserLength || "");
+                setEditing(false);
+              }}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function OverviewTab({ nurse }: { nurse: NurseDetail }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -311,6 +435,7 @@ function OverviewTab({ nurse }: { nurse: NurseDetail }) {
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <UniformSizingCard nurse={nurse} />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Personal Information</CardTitle>
@@ -482,7 +607,7 @@ function PreboardTab({ nurseId }: { nurseId: string }) {
   );
 }
 
-function OnboardTab({ nurseId }: { nurseId: string }) {
+function OnboardTab({ nurseId, nurse }: { nurseId: string; nurse: NurseDetail }) {
   const { data: steps, isLoading } = useQuery<OnboardStep[]>({
     queryKey: [`/api/nurses/${nurseId}/onboard`],
   });
@@ -490,6 +615,7 @@ function OnboardTab({ nurseId }: { nurseId: string }) {
   if (isLoading) {
     return (
       <div className="space-y-3">
+        <Skeleton className="h-40 w-full" />
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-16 w-full" />
         ))}
@@ -497,22 +623,21 @@ function OnboardTab({ nurseId }: { nurseId: string }) {
     );
   }
 
-  if (!steps || steps.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <ShieldCheck className="h-10 w-10 text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">
-            No onboarding steps assigned yet
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-2">
-      {steps.map((step, index) => (
+    <div className="space-y-4">
+      <UniformSizingCard nurse={nurse} />
+      {!steps || steps.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <ShieldCheck className="h-10 w-10 text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground">
+              No onboarding steps assigned yet
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {steps.map((step, index) => (
         <Card key={step.id}>
           <CardContent className="flex items-center gap-4 py-4">
             <div
@@ -546,7 +671,9 @@ function OnboardTab({ nurseId }: { nurseId: string }) {
             <StatusBadge status={step.status} />
           </CardContent>
         </Card>
-      ))}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -940,7 +1067,7 @@ export default function NurseDetail() {
           </TabsContent>
 
           <TabsContent value="onboard" className="mt-6">
-            <OnboardTab nurseId={nurseId} />
+            <OnboardTab nurseId={nurseId} nurse={nurse} />
           </TabsContent>
 
           <TabsContent value="arcade" className="mt-6">

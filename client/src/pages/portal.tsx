@@ -781,6 +781,196 @@ function PortalHeadshotUpload({ token, candidate }: { token: string; candidate: 
   );
 }
 
+const UNIFORM_LENGTH_LABELS_PORTAL: Record<string, string> = { short: "Short", regular: "Regular", long: "Long" };
+
+const UNIFORM_TOP_OPTIONS = [
+  "XS 6-8", "S 8-10", "M 10-12", "M 12-14", "L 14-16", "L 16-18", "XL 18-20", "XXL 20-22",
+  "XS 34-36", "S 36-38", "M 38-40", "M 40-42", "L 42-44", "L 44-46", "XL 46-48", "XXL 48-50",
+];
+const UNIFORM_TROUSER_OPTIONS = [
+  "XS 6-8", "S 8-10", "M 10-12", "M 12-14", "L 14-16", "L 16-18", "XL 18-20", "XXL 20-22",
+  "S 30-31", "M 32-33", "M 34-35", "L 36-38", "XL 38-40", "XXL 40-42",
+];
+const UNIFORM_OTHER = "__other";
+
+function UniformSizePicker({
+  label, testIdBase, value, onChange, options, placeholder,
+}: {
+  label: string;
+  testIdBase: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+}) {
+  const isCustom = !!value && !options.includes(value);
+  const [mode, setMode] = useState<"list" | "custom">(isCustom ? "custom" : "list");
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      {mode === "list" ? (
+        <Select
+          value={value || "__none"}
+          onValueChange={(v) => {
+            if (v === UNIFORM_OTHER) {
+              setMode("custom");
+              onChange("");
+            } else if (v === "__none") {
+              onChange("");
+            } else {
+              onChange(v);
+            }
+          }}
+        >
+          <SelectTrigger data-testid={`select-${testIdBase}`}><SelectValue placeholder={placeholder} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none">Not recorded</SelectItem>
+            {options.map((opt) => (
+              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+            ))}
+            <SelectItem value={UNIFORM_OTHER}>Other…</SelectItem>
+          </SelectContent>
+        </Select>
+      ) : (
+        <div className="flex items-center gap-2">
+          <Input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Type your size"
+            maxLength={80}
+            data-testid={`input-${testIdBase}-custom`}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            onClick={() => { setMode("list"); onChange(""); }}
+            data-testid={`button-${testIdBase}-back`}
+          >
+            Back to list
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PortalUniformSizing({ token, candidate }: { token: string; candidate: Candidate }) {
+  const [editing, setEditing] = useState(false);
+  const [top, setTop] = useState<string>(candidate.uniformTopSize ?? "");
+  const [trouser, setTrouser] = useState<string>(candidate.uniformTrouserSize ?? "");
+  const [length, setLength] = useState<string>(candidate.uniformTrouserLength ?? "");
+  const { toast } = useToast();
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/portal/${token}/uniform-sizing`, {
+        uniformTopSize: top.trim() || null,
+        uniformTrouserSize: trouser.trim() || null,
+        uniformTrouserLength: length || null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal", token, "candidate"] });
+      setEditing(false);
+      toast({ title: "Uniform sizing saved", description: "Thanks — the office will use these for your next order." });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const empty = !candidate.uniformTopSize && !candidate.uniformTrouserSize && !candidate.uniformTrouserLength;
+
+  return (
+    <div className="rounded-md border border-card-border bg-muted/20 p-4 space-y-3" data-testid="portal-uniform-sizing">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">Uniform Sizing</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            We hold this so the office can order the right kit. If anything is wrong, correct it here.
+          </p>
+        </div>
+        {!editing && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(true)} data-testid="button-portal-edit-uniform">
+            {empty ? "Add" : "Edit"}
+          </Button>
+        )}
+      </div>
+      {!editing ? (
+        empty ? (
+          <p className="text-xs text-muted-foreground italic">Not recorded</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Top</p>
+              <p className="font-medium" data-testid="portal-uniform-top">{candidate.uniformTopSize || "Not recorded"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Trouser</p>
+              <p className="font-medium" data-testid="portal-uniform-trouser">{candidate.uniformTrouserSize || "Not recorded"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Length</p>
+              <p className="font-medium" data-testid="portal-uniform-length">{candidate.uniformTrouserLength ? UNIFORM_LENGTH_LABELS_PORTAL[candidate.uniformTrouserLength] : "Not recorded"}</p>
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="space-y-3">
+          <p className="text-[11px] text-muted-foreground">
+            Pick the closest size from the list, or choose <strong>Other…</strong> to type a custom size.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <UniformSizePicker
+              label="Top"
+              testIdBase="portal-uniform-top"
+              value={top}
+              onChange={setTop}
+              options={UNIFORM_TOP_OPTIONS}
+              placeholder="Choose a top size"
+            />
+            <UniformSizePicker
+              label="Trouser"
+              testIdBase="portal-uniform-trouser"
+              value={trouser}
+              onChange={setTrouser}
+              options={UNIFORM_TROUSER_OPTIONS}
+              placeholder="Choose a trouser size"
+            />
+            <div className="space-y-1">
+              <Label className="text-xs">Trouser length</Label>
+              <Select value={length || "__none"} onValueChange={(v) => setLength(v === "__none" ? "" : v)}>
+                <SelectTrigger data-testid="select-portal-uniform-length"><SelectValue placeholder="Not applicable" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">Not applicable</SelectItem>
+                  <SelectItem value="short">Short</SelectItem>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="long">Long</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-portal-save-uniform">
+              {saveMutation.isPending ? "Saving..." : "Save"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setTop(candidate.uniformTopSize ?? "");
+              setTrouser(candidate.uniformTrouserSize ?? "");
+              setLength(candidate.uniformTrouserLength ?? "");
+              setEditing(false);
+            }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IdentityStep({ token, candidate, status }: { token: string; candidate: Candidate; status?: string }) {
   const { data: identityDocs } = useQuery<any[]>({
     queryKey: ["/api/portal", token, "documents"],
@@ -948,6 +1138,10 @@ function IdentityStep({ token, candidate, status }: { token: string; candidate: 
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-identity">
           {saveMutation.isPending ? "Saving..." : "Save Demographics"}
         </Button>
+
+        <Separator />
+
+        <PortalUniformSizing token={token} candidate={candidate} />
 
         <Separator />
 

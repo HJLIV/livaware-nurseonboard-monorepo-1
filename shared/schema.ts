@@ -85,6 +85,16 @@ export const nurses = pgTable("nurses", {
   // re-locks them.
   complianceApprovedAt: timestamp("compliance_approved_at"),
   complianceApprovedBy: text("compliance_approved_by"),
+  // ─── Uniform sizing (task 153) ───────────────────────────────────
+  // Captured once on the nurse profile so the office doesn't have to
+  // keep re-asking. Top / trouser are free text (e.g. "M 40-42" or
+  // "L 14"). Length is one of `short | regular | long` — only
+  // meaningful for women's-cut trousers, optional otherwise.
+  uniformTopSize: text("uniform_top_size"),
+  uniformTrouserSize: text("uniform_trouser_size"),
+  uniformTrouserLength: text("uniform_trouser_length"),
+  uniformSizingUpdatedAt: timestamp("uniform_sizing_updated_at"),
+  uniformSizingUpdatedBy: text("uniform_sizing_updated_by"),
   // ─── Invoice billing profile (task 134) ───────────────────────────
   // Last-used personal + bank details + hourly rate captured from any
   // invoice the nurse submits. Used to prefill the new-invoice wizard

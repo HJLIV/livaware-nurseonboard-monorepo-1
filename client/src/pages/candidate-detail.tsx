@@ -371,6 +371,120 @@ function IdentityVerificationStatus({ candidate }: { candidate: Candidate }) {
   );
 }
 
+const UNIFORM_LENGTH_LABELS: Record<string, string> = { short: "Short", regular: "Regular", long: "Long" };
+
+function UniformSizingBlock({ candidate }: { candidate: Candidate }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [top, setTop] = useState<string>(candidate.uniformTopSize ?? "");
+  const [trouser, setTrouser] = useState<string>(candidate.uniformTrouserSize ?? "");
+  const [length, setLength] = useState<string>(candidate.uniformTrouserLength ?? "");
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", `/api/nurses/${candidate.id}/uniform-sizing`, {
+        uniformTopSize: top.trim() || null,
+        uniformTrouserSize: trouser.trim() || null,
+        uniformTrouserLength: length || null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/candidates", candidate.id] });
+      queryClient.invalidateQueries({ queryKey: [`/api/nurses/${candidate.id}`] });
+      setEditing(false);
+      toast({ title: "Uniform sizing saved", description: "Stored on the candidate profile and audit-logged." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Couldn't save", description: e?.message || "Try again.", variant: "destructive" });
+    },
+  });
+
+  const empty = !candidate.uniformTopSize && !candidate.uniformTrouserSize && !candidate.uniformTrouserLength;
+  const updatedAt = candidate.uniformSizingUpdatedAt ? new Date(candidate.uniformSizingUpdatedAt) : null;
+
+  return (
+    <div className="rounded-md border border-card-border bg-muted/10 p-4 space-y-3" data-testid="candidate-uniform-sizing">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold">Uniform Sizing</h4>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Top, trouser & length the office uses to order kit.
+          </p>
+        </div>
+        {!editing && (
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => {
+            setTop(candidate.uniformTopSize ?? "");
+            setTrouser(candidate.uniformTrouserSize ?? "");
+            setLength(candidate.uniformTrouserLength ?? "");
+            setEditing(true);
+          }} data-testid="button-edit-uniform">
+            <Pencil className="h-3 w-3" />
+            {empty ? "Add" : "Edit"}
+          </Button>
+        )}
+      </div>
+      {!editing ? (
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Top</p>
+            <p className="font-medium" data-testid="value-uniform-top">{candidate.uniformTopSize || "Not recorded"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Trouser</p>
+            <p className="font-medium" data-testid="value-uniform-trouser">{candidate.uniformTrouserSize || "Not recorded"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 mb-0.5">Length</p>
+            <p className="font-medium" data-testid="value-uniform-length">{candidate.uniformTrouserLength ? UNIFORM_LENGTH_LABELS[candidate.uniformTrouserLength] : "Not recorded"}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Top</Label>
+              <Input value={top} onChange={(e) => setTop(e.target.value)} placeholder="e.g. M 40-42" maxLength={80} data-testid="input-uniform-top" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Trouser</Label>
+              <Input value={trouser} onChange={(e) => setTrouser(e.target.value)} placeholder="e.g. M 34-35" maxLength={80} data-testid="input-uniform-trouser" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Length</Label>
+              <Select value={length || "__none"} onValueChange={(v) => setLength(v === "__none" ? "" : v)}>
+                <SelectTrigger data-testid="select-uniform-length"><SelectValue placeholder="Not applicable" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">Not applicable</SelectItem>
+                  <SelectItem value="short">Short</SelectItem>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="long">Long</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending} data-testid="button-save-uniform">
+              {save.isPending ? "Saving..." : "Save"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setTop(candidate.uniformTopSize ?? "");
+              setTrouser(candidate.uniformTrouserSize ?? "");
+              setLength(candidate.uniformTrouserLength ?? "");
+              setEditing(false);
+            }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+      {updatedAt && (
+        <p className="text-[10px] text-muted-foreground/70">
+          Last updated {updatedAt.toLocaleDateString()} by {candidate.uniformSizingUpdatedBy || "—"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function IdentityTab({ candidate }: { candidate: Candidate }) {
   const [editing, setEditing] = useState(false);
   const { toast } = useToast();
@@ -503,6 +617,7 @@ function IdentityTab({ candidate }: { candidate: Candidate }) {
               <InfoRow label="Next of Kin — Relationship" value={parseNextOfKin(candidate.nextOfKin).relationship || undefined} />
               <InfoRow label="Next of Kin — Contact" value={parseNextOfKin(candidate.nextOfKin).contactNumber || undefined} />
             </div>
+            <UniformSizingBlock candidate={candidate} />
           </div>
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Professional Details</h3>

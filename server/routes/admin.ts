@@ -980,6 +980,62 @@ export function registerNurseRoutes(app: Express) {
     res.json(state);
   });
 
+  // ─── Uniform sizing (task 153) ───────────────────────────────────
+  // Admin can set or update the nurse's uniform sizes from the
+  // profile page. Length is an enum (short|regular|long); top &
+  // trouser are short free text so the office can pencil in "M
+  // 40-42" or similar. Always overwrites — sizes change, and the
+  // admin always knows the latest figure.
+  app.put("/api/nurses/:id/uniform-sizing", requireAdmin, async (req, res) => {
+    const result = await applyUniformSizingUpdate({
+      nurseId: req.params.id,
+      body: req.body,
+      updatedBy: agentFor(req),
+      module: "admin",
+      action: "uniform_sizing_updated",
+    });
+    if ("error" in result) return res.status(result.status).json({ message: result.error });
+    res.json(result.nurse);
+  });
+
+  // One-off backfill for the nine named nurses whose sizes were
+  // collected over WhatsApp before this feature existed. Idempotent
+  // — running twice is fine, the second run is a no-op per nurse
+  // whose sizes already match.
+  app.post("/api/admin/uniform-sizing/backfill", requireSuperAdmin, async (req, res) => {
+    const result = await runUniformSizingBackfill(agentFor(req));
+    res.json(result);
+  });
+
+  // CSV export of every active nurse with their uniform sizes for
+  // the office to bulk-order. Three new columns: top, trouser,
+  // trouser length.
+  app.get("/api/admin/uniform-sizing.csv", requireAdmin, async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(nurses)
+      .where(isNull(nurses.archivedAt))
+      .orderBy(nurses.fullName);
+    const header = ["Full Name", "Email", "Phone", "Stage", "Uniform Top", "Uniform Trouser", "Uniform Trouser Length", "Sizing Updated At", "Sizing Updated By"];
+    const csv = [header.join(",")];
+    for (const n of rows) {
+      csv.push([
+        n.fullName,
+        n.email || "",
+        n.phone || "",
+        n.currentStage || "",
+        n.uniformTopSize || "",
+        n.uniformTrouserSize || "",
+        n.uniformTrouserLength || "",
+        n.uniformSizingUpdatedAt ? n.uniformSizingUpdatedAt.toISOString() : "",
+        n.uniformSizingUpdatedBy || "",
+      ].map(csvCell).join(","));
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="uniform-sizing-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv.join("\n"));
+  });
+
   app.post("/api/admin/orphan-uploads/link", requireAdmin, async (req, res) => {
     try {
       const { filename, nurseId } = req.body || {};
@@ -1055,4 +1111,147 @@ export function registerNurseRoutes(app: Express) {
 function extractScore(analysis: string): number | undefined {
   const match = analysis.match(/(\d{1,3})(?:\s*\/\s*100|\s*%)/);
   return match ? parseInt(match[1], 10) : undefined;
+}
+
+// ─── Uniform sizing helpers (task 153) ──────────────────────────────
+// Shared between the admin PUT and the portal PUT so both surfaces
+// run the same validation + write + audit. See `portal-admin-parity`.
+const UNIFORM_LENGTHS = new Set(["short", "regular", "long"]);
+
+function normalizeUniformField(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  if (!t) return null;
+  if (t.length > 80) return undefined;
+  return t;
+}
+
+export type UniformLength = "short" | "regular" | "long";
+
+export interface UniformSizingPatchInput {
+  uniformTopSize?: string | null;
+  uniformTrouserSize?: string | null;
+  uniformTrouserLength?: UniformLength | null | "";
+}
+
+type UniformSizingDbPatch = {
+  uniformTopSize?: string | null;
+  uniformTrouserSize?: string | null;
+  uniformTrouserLength?: UniformLength | null;
+  uniformSizingUpdatedAt?: Date;
+  uniformSizingUpdatedBy?: string;
+  updatedAt?: Date;
+};
+
+export type ApplyUniformSizingResult =
+  | { nurse: typeof nurses.$inferSelect }
+  | { error: string; status: number };
+
+export async function applyUniformSizingUpdate(opts: {
+  nurseId: string;
+  body: UniformSizingPatchInput | null | undefined;
+  updatedBy: string;
+  module: "admin" | "portal";
+  action: string;
+}): Promise<ApplyUniformSizingResult> {
+  const { nurseId, body, updatedBy, module, action } = opts;
+  const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
+  if (!nurse) return { error: "Nurse not found", status: 404 };
+
+  const src = (body ?? {}) as Record<string, unknown>;
+  const patch: UniformSizingDbPatch = {};
+  if ("uniformTopSize" in src) {
+    const v = normalizeUniformField(src.uniformTopSize);
+    if (v === undefined) return { error: "uniformTopSize must be a string up to 80 chars", status: 400 };
+    patch.uniformTopSize = v;
+  }
+  if ("uniformTrouserSize" in src) {
+    const v = normalizeUniformField(src.uniformTrouserSize);
+    if (v === undefined) return { error: "uniformTrouserSize must be a string up to 80 chars", status: 400 };
+    patch.uniformTrouserSize = v;
+  }
+  if ("uniformTrouserLength" in src) {
+    const raw = src.uniformTrouserLength;
+    if (raw === null || raw === "") {
+      patch.uniformTrouserLength = null;
+    } else if (typeof raw === "string" && UNIFORM_LENGTHS.has(raw)) {
+      patch.uniformTrouserLength = raw as UniformLength;
+    } else {
+      return { error: "uniformTrouserLength must be one of: short, regular, long", status: 400 };
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return { error: "No uniform sizing fields provided", status: 400 };
+  }
+
+  const now = new Date();
+  patch.uniformSizingUpdatedAt = now;
+  patch.uniformSizingUpdatedBy = updatedBy;
+  patch.updatedAt = now;
+
+  const [updated] = await db.update(nurses).set(patch).where(eq(nurses.id, nurseId)).returning();
+  await logAction(nurseId, module, action, updatedBy, {
+    fields: Object.keys(patch).filter(k => k !== "updatedAt" && k !== "uniformSizingUpdatedAt" && k !== "uniformSizingUpdatedBy"),
+    top: updated.uniformTopSize,
+    trouser: updated.uniformTrouserSize,
+    length: updated.uniformTrouserLength,
+  });
+  return { nurse: updated };
+}
+
+// Names supplied in task #153 — sizes were collected over WhatsApp
+// before the form existed. Length intentionally null where the nurse
+// didn't specify one.
+const UNIFORM_BACKFILL: Array<{ name: string; top: string; trouser: string; length: string | null }> = [
+  { name: "Roderick Cabbab", top: "M 40-42", trouser: "M 34-35", length: null },
+  { name: "Meseret Tsegay", top: "M 40-42", trouser: "M 34-35", length: null },
+  { name: "Shafiq Kusi", top: "M 40-42", trouser: "L 36-38", length: null },
+  { name: "Ricardo Roxo", top: "M 40-42", trouser: "M 34-35", length: null },
+  { name: "Joriza Monforte", top: "M 10-12", trouser: "M 10-12", length: "regular" },
+  { name: "Bisrat Haile", top: "M 10-12", trouser: "M 10-12", length: "short" },
+  { name: "Maica Sanca", top: "S 6-8", trouser: "S 6-8", length: "short" },
+  { name: "Naresh Kaur", top: "L 14", trouser: "L 14", length: "long" },
+  { name: "Ruth Bobiles", top: "L 14", trouser: "L 14", length: "short" },
+];
+
+export async function runUniformSizingBackfill(actor: string) {
+  const all = await db.select().from(nurses);
+  const byNameLower = new Map(all.map(n => [n.fullName.trim().toLowerCase(), n]));
+  const applied: Array<{ name: string; nurseId: string; changed: boolean }> = [];
+  const missing: string[] = [];
+  for (const row of UNIFORM_BACKFILL) {
+    const match = byNameLower.get(row.name.toLowerCase());
+    if (!match) { missing.push(row.name); continue; }
+    const sameTop = (match.uniformTopSize || "") === row.top;
+    const sameTrouser = (match.uniformTrouserSize || "") === row.trouser;
+    const sameLength = (match.uniformTrouserLength || null) === row.length;
+    if (sameTop && sameTrouser && sameLength) {
+      applied.push({ name: row.name, nurseId: match.id, changed: false });
+      continue;
+    }
+    const now = new Date();
+    await db.update(nurses).set({
+      uniformTopSize: row.top,
+      uniformTrouserSize: row.trouser,
+      uniformTrouserLength: row.length,
+      uniformSizingUpdatedAt: now,
+      uniformSizingUpdatedBy: actor,
+      updatedAt: now,
+    }).where(eq(nurses.id, match.id));
+    await logAction(match.id, "admin", "uniform_sizing_backfilled", actor, {
+      top: row.top, trouser: row.trouser, length: row.length, source: "whatsapp",
+    });
+    applied.push({ name: row.name, nurseId: match.id, changed: true });
+  }
+  return { applied, missing, total: applied.length };
+}
+
+function csvCell(v: string | number | null | undefined): string {
+  const s = v == null ? "" : String(v);
+  if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
 }

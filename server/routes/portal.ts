@@ -201,6 +201,24 @@ export function registerPortalRoutes(app: Express) {
     res.json(candidate);
   });
 
+  // ─── Uniform sizing (task 153) ───────────────────────────────────
+  // Nurse can self-correct their own uniform sizes from the
+  // Demographics card. Same validation + audit shape as the admin
+  // PUT — see `applyUniformSizingUpdate` in routes/admin.ts.
+  app.put("/api/portal/:token/uniform-sizing", validatePortalToken, async (req, res) => {
+    const nurseId = (req as any).nurseId;
+    const { applyUniformSizingUpdate } = await import("./admin");
+    const result = await applyUniformSizingUpdate({
+      nurseId,
+      body: req.body,
+      updatedBy: portalAgent(req),
+      module: "portal",
+      action: "portal_uniform_sizing_updated",
+    });
+    if ("error" in result) return res.status(result.status).json({ message: result.error });
+    res.json(result.nurse);
+  });
+
   app.get("/api/portal/:token/onboarding-state", validatePortalToken, async (req, res) => {
     const nurseId = (req as any).nurseId;
     const state = await storage.getOnboardingState(nurseId);
