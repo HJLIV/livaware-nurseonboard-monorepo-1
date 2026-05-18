@@ -148,6 +148,110 @@ export async function sendPortalInviteEmail(
   });
 }
 
+// ─── Applicant welcome email ─────────────────────────────────────────
+// First-touch email sent when admin registers a new applicant. Warmer
+// and more on-brand than the generic portal-invite email because this
+// is the candidate's first contact with Livaware — should set the tone
+// for the rest of the journey.
+const APPLICANT_WELCOME_SUBJECT = "Welcome to Livaware — Let's get started";
+
+export async function sendApplicantWelcomeEmail(
+  recipientEmail: string,
+  recipientName: string,
+  portalUrl: string,
+  expiresAt: Date,
+) {
+  const client = await getGraphClient();
+
+  const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  // Use only the first name in the greeting to feel less like a form letter.
+  const firstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
+
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+
+      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 36px 32px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Welcome aboard</p>
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
+      </div>
+
+      <div style="padding: 36px 32px 28px;">
+        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 16px;">
+          A warm welcome to Livaware — we're really pleased you've decided to join us. From here on you have a single place to manage everything we'll need from you, in your own time and at your own pace.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 24px;">
+          Your secure personal portal is ready. Tap the button below to open it for the first time — you'll be signed in straight away on this device.
+        </p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 16px 56px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.20em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(200, 169, 110, 0.25);">
+            Open My Portal
+          </a>
+        </div>
+
+        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all; text-align: center; margin: 0 0 28px;">
+          Or paste this link into your browser:<br />
+          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
+        </p>
+
+        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">What happens next</p>
+          <ol style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
+            <li><strong style="color: #F0ECE4;">A short clinical assessment</strong> — around 10–15 minutes, all online. You can pause and pick up where you left off.</li>
+            <li><strong style="color: #F0ECE4;">Onboarding documents</strong> — passport, right-to-work, NMC PIN, training certificates. Upload from your phone or laptop, whichever's easier.</li>
+            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short interactive scenarios so you can show us how you think on the floor.</li>
+          </ol>
+        </div>
+
+        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 16px 20px; border-radius: 6px; margin: 0 0 24px;">
+          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Good to know</p>
+          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0;">
+            This link is personal to you — please keep it private. After this first sign-in, you'll come back any time using your email address and a 6-digit code we send you, so you can pick up from any device. For reference, this initial invite link expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong>.
+          </p>
+        </div>
+
+        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.7; margin: 0 0 8px;">
+          If anything's unclear or you hit a snag along the way, just reply to this email and a real person on our onboarding team will get back to you.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 28px; line-height: 1.7;">
+          Looking forward to working with you,<br />
+          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
+        </p>
+      </div>
+
+      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
+          Livaware Ltd — Secure Nurse Onboarding &middot; CQC Regulation 19 / Schedule 3 Compliant
+        </p>
+        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
+          Replies to this email reach our onboarding team directly.
+        </p>
+      </div>
+    </div>
+  `;
+
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: APPLICANT_WELCOME_SUBJECT,
+      body: { contentType: "HTML", content: htmlBody },
+      toRecipients: [
+        { emailAddress: { address: recipientEmail, name: recipientName } },
+      ],
+    },
+    saveToSentItems: true,
+  });
+}
+
 // ─── Portal passwordless sign-in code email (task 107) ───────────────
 export async function sendPortalSignInCodeEmail(
   recipientEmail: string,

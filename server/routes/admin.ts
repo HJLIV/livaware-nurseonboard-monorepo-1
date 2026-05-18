@@ -4,7 +4,7 @@ import { nurses, portalLinks, auditLogs, preboardAssessments, nmcVerifications, 
 import { eq, desc, and, gt, isNull, isNotNull } from "drizzle-orm";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
-import { sendPortalInviteEmail, isOutlookConfigured } from "../outlook";
+import { sendApplicantWelcomeEmail, isOutlookConfigured } from "../outlook";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { getGateState, maybeAutoUnlock } from "../services/onboarding-gate";
 import crypto from "crypto";
@@ -84,7 +84,7 @@ export function registerNurseRoutes(app: Express) {
         });
       } else {
         try {
-          await sendPortalInviteEmail(nurse.email, nurse.fullName, portalUrl, portalExpiresAt, "preboard");
+          await sendApplicantWelcomeEmail(nurse.email, nurse.fullName, portalUrl, portalExpiresAt);
           emailSent = true;
           await logAction(nurse.id, "admin", "portal_invite_emailed", agentFor(req), {
             recipientEmail: nurse.email,

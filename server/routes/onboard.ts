@@ -3,7 +3,7 @@ import { storage } from "../storage";
 import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
-import { sendPortalInviteEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
+import { sendPortalInviteEmail, sendApplicantWelcomeEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
 import { draftReferenceRequestEmail } from "../reference-ai";
 import { extractReferenceFromDocument } from "../reference-extract-ai";
 import {
@@ -106,8 +106,9 @@ export function registerAdminRoutes(app: Express) {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
-        const emailStage = candidate.currentStage === "onboard" ? "onboard" : candidate.currentStage === "skills_arcade" ? "skills_arcade" : "preboard";
-        await sendPortalInviteEmail(candidate.email, candidate.fullName, portalUrl, expiresAt, emailStage);
+        // First-touch send — use the warmer welcome template. Subsequent
+        // "resend portal link" actions still use sendPortalInviteEmail.
+        await sendApplicantWelcomeEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
         emailSent = true;
         await storage.createAuditLog({ nurseId: candidate.id, action: "magic_link_generated", agentName: agentFor(req), detail: { expiresAt: expiresAt.toISOString(), emailSent: true } });
         await storage.createAuditLog({ nurseId: candidate.id, action: "portal_invite_emailed", agentName: agentFor(req), detail: { recipientEmail: candidate.email, expiresAt: expiresAt.toISOString() } });
