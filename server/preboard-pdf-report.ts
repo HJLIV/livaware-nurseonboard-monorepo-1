@@ -214,7 +214,7 @@ export async function generatePdfReport(
 
     for (let i = 0; i < responses.length; i++) {
       const r = responses[i];
-      const timeUsed = r.timeLimit - r.timeSpent;
+      const timeUsed = r.timeSpent;
       const attempts = typeof r.pasteAttempts === "number" ? r.pasteAttempts : 0;
       const maxBurst = typeof r.maxBurstChars === "number" ? r.maxBurstChars : 0;
       const keystrokes = typeof r.keystrokeCount === "number" ? r.keystrokeCount : 0;
@@ -263,7 +263,7 @@ export async function generatePdfReport(
       qy += responseHeight + 10;
 
       doc.font("Helvetica").fontSize(8).fillColor(COLORS.subtle).text(
-        `${r.response.length} chars · ${timeUsed}s of ${r.timeLimit}s used`,
+        `${r.response.length} chars · ${timeUsed}s taken`,
         margin + 16,
         qy
       );

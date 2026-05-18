@@ -17,7 +17,7 @@ export function buildEmailHtml(assessment: Assessment): string {
           ${escapeHtml(r.response)}
         </div>
         <div style="font-family: 'Courier New', monospace; font-size: 11px; color: #8A8A94; margin-top: 8px;">
-          ${r.response.length} chars · ${r.timeLimit - r.timeSpent}s of ${r.timeLimit}s used
+          ${r.response.length} chars · ${r.timeSpent}s taken
         </div>
       </td>
     </tr>

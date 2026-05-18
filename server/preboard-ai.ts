@@ -12,10 +12,9 @@ export async function analyzeAssessment(
   responses: AssessmentResponse[]
 ): Promise<string> {
   const responseSummary = responses.map((r) => {
-    const timeUsed = r.timeLimit - r.timeSpent;
     return `**Question ${r.questionId} — ${r.domain} (${r.tag})**
 Prompt: ${r.prompt}
-Response (${r.response.length} chars, ${timeUsed}s of ${r.timeLimit}s used):
+Response (${r.response.length} chars, ${r.timeSpent}s taken):
 ${r.response}`;
   }).join("\n\n---\n\n");
 

@@ -20,13 +20,13 @@ const INTRO = {
   body: [
     "Livaware works exclusively in the home. No ward. No crash team behind the door. No senior nurse three bays down. Just you, your patient, their family — and what you bring into that room.",
     "If you're coming from hospital practice, that's the background we value. The clinical skills you've built are real — this assessment explores how you'd apply them when the safety nets change.",
-    "This is a conversation — time-limited and sequential — designed to show us how you think, how you hold complexity, and what kind of nurse you are when the pressure is real. Some scenarios will be unfamiliar. That's intentional. We're not testing what you've done. We want to see how you think.",
+    "This is a conversation — sequential and unhurried — designed to show us how you think, how you hold complexity, and what kind of nurse you are when the pressure is real. Some scenarios will be unfamiliar. That's intentional. We're not testing what you've done. We want to see how you think.",
     "Our patients carry diagnoses like metastatic lung cancer, leptomeningeal carcinomatosis, tracheostomy-dependence, and end-stage organ failure. Their families are often frightened, sometimes demanding, occasionally in denial. The homes we work in range from NHS-funded flat-shares to Mayfair residences. Our clinical practice is grounded in UK law, NMC standards, and BNF pharmacology.",
     "What holds all of that together is the quality of the nurse. That's what we're trying to understand here.",
   ],
   rules: [
-    { text: "Each question has a time limit. The clock starts when the question appears." },
-    { text: "Questions are sequential and cannot be revisited. Set aside 25–35 minutes." },
+    { text: "Take your time on each question — there is no timer. Most nurses finish in 25–35 minutes." },
+    { text: "Questions are sequential and cannot be revisited once submitted." },
     { text: "Responses lock on submission. Write as you'd speak — not as you'd document." },
     { text: "Copy and paste are disabled in the answer box — please type your response. Voice input is still available." },
   ],
@@ -1023,19 +1023,17 @@ function QuestionScreen({
   total: number;
   onSubmit: (
     text: string,
-    timeLeft: number,
+    elapsedSeconds: number,
     pasteAttempts: number,
     keystrokeCount: number,
     maxBurstChars: number,
   ) => void;
 }) {
   const [text, setText] = useState("");
-  const [timeLeft, setTimeLeft] = useState(question.timeLimit);
+  const [elapsed, setElapsed] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [visible, setVisible] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [warning, setWarning] = useState(false);
-  const [timerAnnouncement, setTimerAnnouncement] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [pasteBlocked, setPasteBlocked] = useState(false);
@@ -1118,7 +1116,7 @@ function QuestionScreen({
   }, [question.id]);
 
   const toggleListening = useCallback(() => {
-    if (!recognitionRef.current || submitted || timeLeft === 0) return;
+    if (!recognitionRef.current || submitted) return;
 
     if (isListening) {
       recognitionRef.current.stop();
@@ -1131,25 +1129,13 @@ function QuestionScreen({
         setIsListening(false);
       }
     }
-  }, [isListening, submitted, timeLeft]);
+  }, [isListening, submitted]);
 
   useEffect(() => {
     setTimeout(() => setVisible(true), 50);
     textareaRef.current?.focus();
     intervalRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(intervalRef.current!);
-          setTimerAnnouncement("Time is up");
-          return 0;
-        }
-        if (t <= 40) setWarning(true);
-        const next = t - 1;
-        if (next === 60) setTimerAnnouncement("One minute remaining");
-        else if (next === 30) setTimerAnnouncement("30 seconds remaining");
-        else if (next === 10) setTimerAnnouncement("10 seconds remaining");
-        return next;
-      });
+      setElapsed((t) => t + 1);
     }, 1000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -1159,7 +1145,7 @@ function QuestionScreen({
   const handleSubmit = useCallback(() => {
     if (submitted) return;
     const trimmed = text.trim();
-    if (trimmed.length < min && timeLeft > 0) return;
+    if (trimmed.length < min) return;
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
     setIsListening(false);
@@ -1170,26 +1156,18 @@ function QuestionScreen({
     setTimeout(
       () =>
         onSubmit(
-          trimmed || "(No response — time expired)",
-          timeLeft,
+          trimmed,
+          elapsed,
           attempts,
           keystrokes,
           maxBurst,
         ),
       700,
     );
-  }, [submitted, text, min, onSubmit, timeLeft]);
-
-  useEffect(() => {
-    if (timeLeft === 0 && !submitted) {
-      handleSubmit();
-    }
-  }, [timeLeft, submitted, handleSubmit]);
+  }, [submitted, text, min, onSubmit, elapsed]);
 
   const chars = text.trim().length;
   const ready = chars >= min;
-  const timePct = timeLeft / question.timeLimit;
-  const timerColor = warning ? BRAND.danger : timePct > 0.5 ? BRAND.success : BRAND.accent;
 
   return (
     <div
@@ -1223,29 +1201,6 @@ function QuestionScreen({
         </div>
 
         <div
-          aria-hidden="true"
-          style={{
-            height: 2,
-            background: `${BRAND.border}60`,
-            borderRadius: 1,
-            overflow: "hidden",
-            position: "relative",
-          }}
-        >
-          <div
-            data-testid="timer-bar"
-            style={{
-              height: "100%",
-              width: `${timePct * 100}%`,
-              background: `linear-gradient(90deg, ${timerColor}, ${timerColor}CC)`,
-              borderRadius: 1,
-              transition: "width 1s linear, background 0.3s ease",
-              boxShadow: warning ? `0 0 10px ${BRAND.dangerGlow}` : `0 0 6px ${timerColor}25`,
-            }}
-          />
-        </div>
-
-        <div
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -1269,25 +1224,17 @@ function QuestionScreen({
             </span>
           </div>
           <span
-            data-testid="text-timer"
-            aria-hidden="true"
             style={{
               fontFamily: FONT.mono,
-              fontSize: 14,
-              fontWeight: 500,
-              color: warning ? BRAND.danger : BRAND.muted,
-              letterSpacing: "0.06em",
-              fontVariantNumeric: "tabular-nums",
-              animation: warning ? "timerPulse 1s ease-in-out infinite" : "none",
+              color: BRAND.subtle,
+              fontSize: 10,
+              fontWeight: 400,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
             }}
           >
-            {formatTime(timeLeft)}
+            Take your time
           </span>
-          {timerAnnouncement && (
-            <span role="status" aria-live="assertive" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0,0,0,0)" }}>
-              {timerAnnouncement}
-            </span>
-          )}
         </div>
       </div>
 
@@ -1517,7 +1464,7 @@ function QuestionScreen({
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            disabled={submitted || timeLeft === 0}
+            disabled={submitted}
             aria-label={`Your response to question ${index + 1}`}
             placeholder={isListening ? "Listening — speak your response..." : "Type or tap the mic to speak your response..."}
             style={{
@@ -1544,7 +1491,7 @@ function QuestionScreen({
                 : "none",
             }}
           />
-          {speechSupported && !submitted && timeLeft > 0 && (
+          {speechSupported && !submitted && (
             <button
               data-testid="button-voice"
               onClick={toggleListening}
@@ -1909,7 +1856,7 @@ export default function AssessmentPage() {
 
   const handleAnswer = async (
     text: string,
-    timeLeft: number,
+    elapsedSeconds: number,
     pasteAttempts: number,
     keystrokeCount: number,
     maxBurstChars: number,
@@ -1921,7 +1868,7 @@ export default function AssessmentPage() {
       domain: q.domain,
       prompt: q.prompt,
       response: text,
-      timeSpent: timeLeft,
+      timeSpent: elapsedSeconds,
       timeLimit: q.timeLimit,
       pasteAttempts,
       keystrokeCount,
