@@ -20,6 +20,7 @@ import { SOP_COMPREHENSION_QUESTIONS } from "../sop-comprehension-content";
 import { storage } from "../storage";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
 import { isOutlookConfigured } from "../outlook";
+import { getGateState } from "../services/onboarding-gate";
 import { evaluateMandatoryTrainingCell } from "../training-status";
 import { triggerDocumentAnalysis } from "../document-analysis";
 import { filterValidRtwDocs } from "@shared/rtw-evidence";
@@ -707,10 +708,29 @@ export function registerAdminReportsRoutes(app: Express) {
           outlookDeepLink,
         };
       });
+      // Surface the recipient's onboarding-gate state so admins can see at a
+      // glance whether their chased certificates will actually be acceptable
+      // through the portal, or whether the portal is still locked behind
+      // unmet prerequisites (examination / competency / CV review).
+      const gateState = await getGateState(nurseId);
+      const missingPrerequisites: string[] = [];
+      if (gateState && !gateState.unlocked) {
+        if (!gateState.prerequisites.examinationCompleted) missingPrerequisites.push("Preboard examination");
+        if (!gateState.prerequisites.competencyDeclared) missingPrerequisites.push("Competency declaration");
+        if (!gateState.prerequisites.cvReviewed) missingPrerequisites.push("Admin CV review");
+      }
+      const gate = gateState
+        ? {
+            locked: !gateState.unlocked,
+            mode: gateState.mode,
+            missingPrerequisites,
+          }
+        : null;
       res.json({
         outlookConfigured: isOutlookConfigured(),
         totalChased: history.length,
         history,
+        gate,
       });
     } catch (err: any) {
       console.error("[admin-reports] chase-history failed:", err);

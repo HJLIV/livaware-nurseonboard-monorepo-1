@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   ArrowLeft, User, Shield, FileCheck, Stethoscope, BookOpen, Heart,
@@ -2657,6 +2658,11 @@ interface TrainingChaseHistoryResponse {
   outlookConfigured: boolean;
   totalChased: number;
   history: TrainingChaseEntry[];
+  gate: {
+    locked: boolean;
+    mode: "auto" | "manual";
+    missingPrerequisites: string[];
+  } | null;
 }
 
 function TrainingChaseHistorySection({ candidateId }: { candidateId: string }) {
@@ -2721,6 +2727,37 @@ function TrainingChaseHistorySection({ candidateId }: { candidateId: string }) {
                         <Badge variant="outline" className="text-[10px]">
                           {entry.moduleCount} module{entry.moduleCount === 1 ? "" : "s"}
                         </Badge>
+                        {data?.gate?.locked && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] inline-flex items-center gap-1 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300"
+                                  data-testid={`chase-history-locked-badge-${entry.id}`}
+                                >
+                                  <LockIcon className="h-3 w-3" />
+                                  Recipient portal locked
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs font-medium mb-1">Portal is still locked behind:</p>
+                                {data.gate.missingPrerequisites.length > 0 ? (
+                                  <ul className="text-xs list-disc pl-4 space-y-0.5">
+                                    {data.gate.missingPrerequisites.map((m) => (
+                                      <li key={m}>{m}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs">Manually locked by an admin.</p>
+                                )}
+                                <p className="text-[10px] mt-1 opacity-80">
+                                  Certificates uploaded via the chase link will be rejected until the gate opens.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
                         <span className="inline-flex items-center gap-1">
