@@ -766,6 +766,7 @@ export function registerPortalRoutes(app: Express) {
   app.post(
     "/api/portal/:token/chase-upload",
     validatePortalToken,
+    requireOnboardingUnlocked,
     uploadLimiter,
     upload.single("file"),
     async (req, res) => {

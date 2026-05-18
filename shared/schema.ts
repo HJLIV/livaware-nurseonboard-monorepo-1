@@ -1119,17 +1119,21 @@ export interface OnboardingGateNurse {
 
 export function isOnboardingUnlocked(
   nurse: OnboardingGateNurse | null | undefined,
-  _ctx: OnboardingGateContext,
+  ctx: OnboardingGateContext,
 ): boolean {
-  // The Assessment-prerequisite gate has been retired — questionnaires are
-  // open to every nurse by default. The only way the portal can now be
-  // locked is an explicit admin re-lock: switching the nurse to "manual"
-  // mode and clearing onboardingUnlockedAt. The prerequisite checklist is
-  // still surfaced in the admin panel for visibility.
+  // Portal-write gate. Two modes:
+  //   - "manual": only an explicit admin unlock (onboardingUnlockedAt) opens.
+  //   - "auto"  : opens once all three prerequisites are satisfied
+  //               (preboard examination, ≥1 competency declaration,
+  //               admin CV-review) OR an explicit admin unlock is in place.
+  // Either way, a stored onboardingUnlockedAt grandfathered by an admin is
+  // honoured so previously-unlocked nurses are never re-locked behind their
+  // backs.
   if (!nurse) return false;
+  if (nurse.onboardingUnlockedAt) return true;
   const mode = nurse.onboardingUnlockMode || "auto";
-  if (mode === "manual" && !nurse.onboardingUnlockedAt) return false;
-  return true;
+  if (mode === "manual") return false;
+  return !!(ctx.examinationCompleted && ctx.competencyDeclared && ctx.cvReviewed);
 }
 
 // Step keys whose final "completed" state requires an admin to verify the
