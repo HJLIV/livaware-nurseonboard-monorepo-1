@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { upload, validatePortalToken, uploadLimiter, requireOnboardingUnlocked, requireInductionAcknowledged, requireNurseStageCompleted, portalAgent } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
-import { maybeAutoUnlock } from "../services/onboarding-gate";
+import { getGateState, maybeAutoUnlock } from "../services/onboarding-gate";
 import { sendReferenceRequestEmail } from "../outlook";
 import { parseNmcPdfWithFallback, NmcVerificationError } from "../nmc-service";
 import { parseTrainingCertificate } from "../training-cert-service";
@@ -749,6 +749,12 @@ export function registerPortalRoutes(app: Express) {
 
       const allSatisfied = modules.length > 0 && modules.every((m) => m.satisfied);
 
+      // Mirror the gate the chase-upload POST enforces (requireOnboardingUnlocked)
+      // so the page can render a clear locked-state explainer instead of
+      // letting nurses try to upload and hit a generic 403.
+      const gate = await getGateState(nurseId);
+      const locked = !!gate && !gate.unlocked;
+
       res.json({
         isChase: true,
         sentAt: notification.sentAt,
@@ -756,6 +762,8 @@ export function registerPortalRoutes(app: Express) {
         nurseName: nurse?.fullName ?? null,
         modules,
         allSatisfied,
+        locked,
+        gate,
       });
     } catch (err: any) {
       console.error("[Portal Chase Status] Error:", err.message);

@@ -15,6 +15,8 @@ import {
   FileText,
   PartyPopper,
   Clock,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +28,15 @@ interface ChaseModule {
   label: string;
 }
 
+export interface ChaseGate {
+  unlocked: boolean;
+  prerequisites: {
+    examinationCompleted: boolean;
+    competencyDeclared: boolean;
+    cvReviewed: boolean;
+  };
+}
+
 export interface ChaseStatusResponse {
   isChase: boolean;
   sentAt?: string | null;
@@ -33,6 +44,8 @@ export interface ChaseStatusResponse {
   nurseName?: string | null;
   modules?: ChaseModule[];
   allSatisfied?: boolean;
+  locked?: boolean;
+  gate?: ChaseGate | null;
 }
 
 function formatDateGB(dateStr: string | null | undefined): string {
@@ -46,10 +59,12 @@ function ModuleRow({
   token,
   module: mod,
   onUploaded,
+  locked = false,
 }: {
   token: string;
   module: ChaseModule;
   onUploaded: (next: ChaseStatusResponse) => void;
+  locked?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +84,13 @@ function ModuleRow({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 403 && err?.error === "onboarding_locked") {
+          // Refresh chase-status so the page flips to the locked explainer.
+          queryClient.invalidateQueries({ queryKey: [`/api/portal/${token}/chase-status`] });
+          throw new Error(
+            "Your portal is locked while you finish your preboard assessment, competency declaration and CV review.",
+          );
+        }
         throw new Error(err.message || "Upload failed");
       }
       const result = await res.json();
@@ -159,6 +181,15 @@ function ModuleRow({
           >
             Done
           </Badge>
+        ) : locked ? (
+          <Badge
+            variant="outline"
+            className="bg-muted/40 text-muted-foreground border-border shrink-0"
+            data-testid={`chase-module-locked-${mod.moduleName.replace(/\s+/g, "-").toLowerCase()}`}
+          >
+            <Lock className="h-3 w-3 mr-1" />
+            Locked
+          </Badge>
         ) : (
           <label className="cursor-pointer shrink-0">
             <input
@@ -232,6 +263,14 @@ export default function ChaseUpload({
   const modules = data.modules || [];
   const satisfiedCount = modules.filter((m) => m.satisfied).length;
   const allSatisfied = data.allSatisfied || (modules.length > 0 && satisfiedCount === modules.length);
+  const locked = !!data.locked;
+  const prereqs = data.gate?.prerequisites;
+  const missingPrereqs: string[] = [];
+  if (prereqs) {
+    if (!prereqs.examinationCompleted) missingPrereqs.push("Finish your preboard clinical examination");
+    if (!prereqs.competencyDeclared) missingPrereqs.push("Complete at least one competency self-declaration");
+    if (!prereqs.cvReviewed) missingPrereqs.push("Wait for an admin to review your CV");
+  }
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-chase-upload">
@@ -262,9 +301,9 @@ export default function ChaseUpload({
             here's what we still need from you
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Upload a PDF or photo of each certificate below. We'll automatically
-            file it against the right training module — no need to label
-            anything.
+            {locked
+              ? "Your training uploads are paused until you finish the earlier steps below. Once those are cleared, your portal opens automatically and you can upload these certificates."
+              : "Upload a PDF or photo of each certificate below. We'll automatically file it against the right training module — no need to label anything."}
           </p>
           {data.sentAt && (
             <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -276,6 +315,44 @@ export default function ChaseUpload({
             </div>
           )}
         </div>
+
+        {locked && !allSatisfied && (
+          <Card
+            className="border-amber-500/30 bg-amber-500/5 mb-6"
+            data-testid="chase-locked-explainer"
+          >
+            <CardContent className="p-5 flex items-start gap-3">
+              <Lock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <div className="text-sm flex-1">
+                <p className="font-medium mb-1">
+                  Your portal is locked while you finish the earlier steps
+                </p>
+                <p className="text-muted-foreground leading-relaxed mb-3">
+                  Training uploads open up automatically once your preboard
+                  assessment, competency self-rating and CV review are all
+                  complete. The reminder we sent you still applies — you just
+                  need to clear these first.
+                </p>
+                {missingPrereqs.length > 0 && (
+                  <ul className="text-muted-foreground text-[13px] space-y-1 mb-3 list-disc list-inside">
+                    {missingPrereqs.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                )}
+                <Button asChild size="sm" variant="outline">
+                  <a
+                    href={`/portal/${token}`}
+                    data-testid="link-chase-locked-portal-hub"
+                  >
+                    Go to your portal
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {allSatisfied ? (
           <Card className="border-emerald-500/30 bg-emerald-500/5" data-testid="chase-all-done">
@@ -333,6 +410,7 @@ export default function ChaseUpload({
                     token={token}
                     module={m}
                     onUploaded={updateLocal}
+                    locked={locked}
                   />
                 ))}
               </div>
