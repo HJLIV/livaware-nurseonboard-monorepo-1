@@ -116,6 +116,12 @@ const sections: NavSectionDef[] = [
         adminOnly: true,
       },
       {
+        label: "Declarations matrix",
+        href: "/reports/declarations",
+        icon: ClipboardCheck,
+        adminOnly: true,
+      },
+      {
         label: "SOP comprehension",
         href: "/reports/sop-comprehension",
         icon: BookOpen,

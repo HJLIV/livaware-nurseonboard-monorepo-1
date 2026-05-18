@@ -32,7 +32,7 @@ Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) com
 ## Frontend Pages
 
 **Admin core**: `/` (dashboard), `/candidates`, `/candidates/:id`, `/pipeline`, `/nurses`, `/nurses/:id`, `/preboard`, `/audit`, `/guide`, `/settings`.
-**Reports**: `/reports/onboarding`, `/reports/training`, `/reports/competency`, `/reports/availability`, `/reports/invoices`, `/admin/policies`.
+**Reports**: `/reports/onboarding`, `/reports/training`, `/reports/competency`, `/reports/declarations`, `/reports/availability`, `/reports/invoices`, `/admin/policies`.
 **Skills Arcade**: `/arcade`, `/arcade/scenario/:id`, `/arcade/walkthrough/:id`, `/arcade/trainer`, `/arcade/admin/{modules,reports,users}`.
 **Portal (token-gated)**: `/portal/:token` (hub), `/portal/page/:token`, `/portal/availability`, `/portal/invoices`, `/portal/policies/:token`, `/preboard/assessment`, `/referee/:token`.
 **Super-admin**: `/super-admin/activity`.

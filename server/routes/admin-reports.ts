@@ -9,9 +9,11 @@ import {
   clearances,
   documents,
   sopComprehensionAttempts,
+  nurseDeclarations,
   MANDATORY_TRAINING_MODULES,
   COMPETENCY_MATRIX,
 } from "@shared/schema";
+import { listDeclarations } from "../declarations/registry";
 import { SOP_COMPREHENSION_QUESTIONS } from "../sop-comprehension-content";
 import { storage } from "../storage";
 import { requireAdmin, requireSuperAdmin } from "../middleware";
@@ -453,6 +455,96 @@ export function registerAdminReportsRoutes(app: Express) {
     } catch (err: any) {
       console.error("[admin-reports] training-matrix failed:", err);
       res.status(500).json({ message: err?.message || "Failed to build training matrix" });
+    }
+  });
+
+  // ==================== DECLARATIONS MATRIX ====================
+  // One row per candidate, one column per onboarding declaration
+  // (Rehab of Offenders, Occupational Health, EPP, WTD, Data Protection,
+  // Age & Eligibility). Green = submitted/signed, amber = draft or
+  // reopened (started but not signed), red = not started.
+  //
+  // This is the source of truth for "who has signed which legal
+  // declaration so far" — used by admins onboarding the mid-stream
+  // intake (people already working + people just starting).
+  app.get("/api/admin/reports/declarations-matrix", requireAdmin, async (_req, res) => {
+    try {
+      const declarationDefs = listDeclarations();
+      const [candidates, allDeclarations] = await Promise.all([
+        storage.getCandidates(),
+        db.select().from(nurseDeclarations),
+      ]);
+
+      // Index by nurseId -> declarationKey -> latest row (highest version)
+      const byNurse = new Map<string, Map<string, typeof allDeclarations[number]>>();
+      for (const d of allDeclarations) {
+        let perNurse = byNurse.get(d.nurseId);
+        if (!perNurse) {
+          perNurse = new Map();
+          byNurse.set(d.nurseId, perNurse);
+        }
+        const existing = perNurse.get(d.declarationKey);
+        if (!existing || (d.version ?? 0) > (existing.version ?? 0)) {
+          perNurse.set(d.declarationKey, d);
+        }
+      }
+
+      const columns: MatrixColumn[] = declarationDefs.map((def) => ({
+        key: `decl_${def.key}`,
+        label: def.title,
+        group: "Onboarding declarations",
+      }));
+
+      const rows: MatrixCandidate[] = candidates.map((c) => {
+        const cells: Record<string, MatrixCell> = {};
+        const perNurse = byNurse.get(c.id);
+
+        for (const def of declarationDefs) {
+          const row = perNurse?.get(def.key);
+          if (!row) {
+            cells[`decl_${def.key}`] = { status: "red", label: "Not started" };
+            continue;
+          }
+          if (row.status === "submitted") {
+            cells[`decl_${def.key}`] = {
+              status: "green",
+              label: row.signatureName ? `Signed by ${row.signatureName}` : "Signed",
+              date: row.submittedAt ? row.submittedAt.toISOString() : null,
+            };
+          } else if (row.status === "reopened") {
+            cells[`decl_${def.key}`] = {
+              status: "amber",
+              label: "Re-opened — awaiting re-sign",
+              date: row.reopenedAt ? row.reopenedAt.toISOString() : null,
+            };
+          } else {
+            cells[`decl_${def.key}`] = {
+              status: "amber",
+              label: "In progress (draft)",
+              date: row.updatedAt ? row.updatedAt.toISOString() : null,
+            };
+          }
+        }
+
+        return {
+          id: c.id,
+          name: c.fullName,
+          email: c.email,
+          band: c.band ?? null,
+          onboardStatus: c.onboardStatus ?? null,
+          cells,
+        };
+      });
+
+      const response: MatrixResponse = {
+        generatedAt: new Date().toISOString(),
+        columns,
+        candidates: rows,
+      };
+      res.json(response);
+    } catch (err: any) {
+      console.error("[admin-reports] declarations-matrix failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to build declarations matrix" });
     }
   });
 
