@@ -163,8 +163,15 @@ function documentCell(docs: { aiStatus?: string | null; expiryDate?: string | nu
   if (best.aiStatus === "pass") {
     return { status: "green", label: best.expiryDate ? `Valid to ${formatDate(best.expiryDate)}` : "AI: pass", date: best.expiryDate ?? null };
   }
-  // No AI verdict yet (legacy / not analysed): treat as uploaded but unverified.
-  return { status: "amber", label: best.expiryDate ? `Uploaded — valid to ${formatDate(best.expiryDate)}` : "Uploaded", date: best.expiryDate ?? null };
+  // No AI verdict yet (legacy / AI not configured / not analysed): the doc has
+  // been uploaded and is not expired and has no negative AI signal, so treat it
+  // as green. (AI key may not be configured — without this, uploaded docs would
+  // stay amber forever and the matrix would never show completed.)
+  return {
+    status: "green",
+    label: best.expiryDate ? `Uploaded — valid to ${formatDate(best.expiryDate)}` : "Uploaded",
+    date: best.expiryDate ?? null,
+  };
 }
 
 // Find documents for a candidate matching a canonical category, with optional
