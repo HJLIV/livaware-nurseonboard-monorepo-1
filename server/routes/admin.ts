@@ -54,10 +54,13 @@ export function registerNurseRoutes(app: Express) {
 
     await logAction(nurse.id, "admin", "nurse_created", agentFor(req), { name, email });
 
-    let portalUrl = null;
+    let portalUrl: string | null = null;
+    let emailSent = false;
+    let portalExpiresAt: Date | null = null;
     try {
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      portalExpiresAt = expiresAt;
       await db.insert(portalLinks).values({
         nurseId: nurse.id, token, module: "preboard", expiresAt, createdBy: agentFor(req),
       });
@@ -69,7 +72,35 @@ export function registerNurseRoutes(app: Express) {
       console.error("Failed to generate preboard link:", e);
     }
 
-    res.status(201).json({ ...nurse, preboardInviteUrl: portalUrl });
+    // Auto-send the portal invite email to the new applicant. Mirrors the
+    // behaviour of POST /api/candidates so every new registration receives
+    // the secure portal link by email, not just an in-app URL.
+    if (portalUrl && portalExpiresAt && nurse.email) {
+      if (!isOutlookConfigured()) {
+        console.warn("[nurses.create] Outlook not configured — invite email skipped");
+        await logAction(nurse.id, "admin", "portal_invite_email_failed", agentFor(req), {
+          recipientEmail: nurse.email,
+          error: "Outlook is not configured (missing AZURE_AD_* env vars)",
+        });
+      } else {
+        try {
+          await sendPortalInviteEmail(nurse.email, nurse.fullName, portalUrl, portalExpiresAt, "preboard");
+          emailSent = true;
+          await logAction(nurse.id, "admin", "portal_invite_emailed", agentFor(req), {
+            recipientEmail: nurse.email,
+            expiresAt: portalExpiresAt.toISOString(),
+          });
+        } catch (err: any) {
+          console.error("[nurses.create] Auto-invite email failed:", err?.message || err);
+          await logAction(nurse.id, "admin", "portal_invite_email_failed", agentFor(req), {
+            recipientEmail: nurse.email,
+            error: err?.message || "Unknown error",
+          });
+        }
+      }
+    }
+
+    res.status(201).json({ ...nurse, preboardInviteUrl: portalUrl, emailSent });
   });
 
   app.get("/api/nurses/:id", async (req, res) => {

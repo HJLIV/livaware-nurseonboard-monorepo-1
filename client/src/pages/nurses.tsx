@@ -72,6 +72,11 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       if (data.preboardInviteUrl) {
         setInviteUrl(data.preboardInviteUrl);
+        if (data.emailSent) {
+          toast({ title: "Invite email sent", description: `${firstName} ${lastName} has been emailed their secure portal link.` });
+        } else {
+          toast({ title: "Applicant registered", description: `${firstName} ${lastName} added. Invite email could not be sent automatically — share the link manually.`, variant: "destructive" });
+        }
       } else {
         resetAndClose();
         toast({ title: "Applicant registered", description: `${firstName} ${lastName} has been added to the platform.` });
@@ -134,7 +139,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
                     {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">This link expires in 30 days. Send it to the applicant to begin their assessment.</p>
+                <p className="text-xs text-muted-foreground">This link expires in 30 days. We've also emailed it to the applicant — keep this on hand as a backup.</p>
               </div>
               <DialogFooter>
                 <Button onClick={resetAndClose} className="w-full">Done</Button>
