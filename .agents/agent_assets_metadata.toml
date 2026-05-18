@@ -12,3 +12,9 @@ id = "64vW84AtWmryPnIEoj17Q"
 uri = "file://scripts/explainer-script.json"
 type = "unspecified"
 title = "Narration script (timed by scene)"
+
+[[outputs]]
+id = "6Gr_YBY_voB0mP_K8tO0P"
+uri = "file://previews/applicant-welcome-email.jpg"
+type = "image"
+title = "Applicant Welcome Email — rendered preview"
