@@ -98,6 +98,12 @@ const sections: NavSectionDef[] = [
     title: "Reports",
     items: [
       {
+        label: "Completion overview",
+        href: "/reports/completion",
+        icon: Activity,
+        adminOnly: true,
+      },
+      {
         label: "Onboarding matrix",
         href: "/reports/onboarding",
         icon: TableProperties,

@@ -57,6 +57,7 @@ const DocumentsReviewPage = lazy(() => import("@/pages/documents-review"));
 const PreboardAssessment = lazy(() => import("@/pages/preboard/assessment"));
 
 // Compliance Matrix Reports
+const CompletionMatrixPage = lazy(() => import("@/pages/reports/completion-matrix"));
 const OnboardingMatrixPage = lazy(() => import("@/pages/reports/onboarding-matrix"));
 const TrainingMatrixPage = lazy(() => import("@/pages/reports/training-matrix"));
 const CompetencyMatrixPage = lazy(() => import("@/pages/reports/competency-matrix"));
@@ -244,6 +245,7 @@ function AuthenticatedRouter() {
               <Route path="/documents">{() => <AdminRoute component={DocumentsPage} />}</Route>
 
               {/* Compliance Matrix Reports (admin only) */}
+              <Route path="/reports/completion">{() => <AppLayout><AdminRoute component={CompletionMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/onboarding">{() => <AppLayout><AdminRoute component={OnboardingMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/training">{() => <AppLayout><AdminRoute component={TrainingMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/competency">{() => <AppLayout><AdminRoute component={CompetencyMatrixPage} /></AppLayout>}</Route>

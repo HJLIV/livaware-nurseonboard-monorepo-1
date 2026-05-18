@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { RegisterNurseDialog } from "./nurses";
+import { useAuthRole } from "@/lib/use-auth-role";
 import {
   Users,
   ClipboardCheck,
@@ -18,6 +19,7 @@ import {
   Activity,
   TrendingUp,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 
 interface DashboardStats {
@@ -313,6 +315,106 @@ function QuickActions() {
   );
 }
 
+interface CompletionRow {
+  id: string;
+  name: string;
+  email: string;
+  currentStage: string;
+  overall: { pct: number };
+}
+
+interface CompletionResponse {
+  nurses: CompletionRow[];
+}
+
+function pctTone(pct: number): string {
+  if (pct >= 90) return "bg-emerald-500";
+  if (pct >= 60) return "bg-primary";
+  if (pct >= 30) return "bg-amber-500";
+  return "bg-rose-500";
+}
+
+function StalledNurses() {
+  const { isAdmin } = useAuthRole();
+  const { data, isLoading } = useQuery<CompletionResponse>({
+    queryKey: ["/api/admin/reports/completion-matrix"],
+    enabled: isAdmin,
+  });
+
+  // Hide widget entirely for non-admin sessions; the endpoint is
+  // admin-gated so showing an empty card would be misleading.
+  if (!isAdmin) return null;
+
+  // Always surface the 5 lowest-% mid-journey nurses, even if the
+  // whole roster happens to be above the "stalled" threshold — the
+  // widget is a relative leaderboard, not a hard alert.
+  const midJourney = (data?.nurses ?? []).filter(
+    (n) => n.currentStage !== "completed" && n.currentStage !== "withdrawn",
+  );
+  const lowest = midJourney
+    .slice()
+    .sort((a, b) => a.overall.pct - b.overall.pct)
+    .slice(0, 5);
+
+  return (
+    <Card className="animate-fade-in-up animate-delay-200">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="font-serif text-lg font-light tracking-tight flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              Stalled nurses
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Lowest overall completion, still mid-journey
+            </CardDescription>
+          </div>
+          <Link href="/reports/completion">
+            <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground hover:text-foreground">
+              Full matrix
+              <ArrowRight className="h-3 w-3" />
+            </Button>
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-3">
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-9 w-full rounded" />)}
+          </div>
+        ) : lowest.length === 0 ? (
+          <p className="text-sm text-muted-foreground/60 py-4 text-center">
+            No nurses are mid-journey right now.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {lowest.map((n, i) => (
+              <Link key={n.id} href={`/nurses/${n.id}`}>
+                <div
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/40 cursor-pointer transition-colors animate-fade-in-up"
+                  style={{ animationDelay: `${i * 40}ms` }}
+                  data-testid={`stalled-nurse-${n.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{n.name}</div>
+                    <div className="text-[11px] text-muted-foreground/70 truncate">{n.email}</div>
+                  </div>
+                  <div className="w-32 h-1.5 rounded-full bg-muted/40 overflow-hidden shrink-0">
+                    <div className={`h-full ${pctTone(n.overall.pct)}`} style={{ width: `${n.overall.pct}%` }} />
+                  </div>
+                  <span className="text-xs tabular-nums font-semibold text-muted-foreground/80 w-10 text-right shrink-0">
+                    {n.overall.pct}%
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
@@ -353,6 +455,9 @@ export default function Dashboard() {
             />
           ))}
         </div>
+
+        {/* ── Stalled Nurses ── */}
+        <StalledNurses />
 
         {/* ── Funnel + Quick Actions ── */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

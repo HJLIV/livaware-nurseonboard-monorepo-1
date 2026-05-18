@@ -12,6 +12,8 @@ import {
   nurseDeclarations,
   MANDATORY_TRAINING_MODULES,
   COMPETENCY_MATRIX,
+  ONBOARDING_STEPS,
+  STEP_STATUS,
 } from "@shared/schema";
 import { listDeclarations } from "../declarations/registry";
 import { SOP_COMPREHENSION_QUESTIONS } from "../sop-comprehension-content";
@@ -1220,6 +1222,140 @@ export function registerAdminReportsRoutes(app: Express) {
     } catch (err: any) {
       console.error("[admin-reports] sop-comprehension-matrix failed:", err);
       res.status(500).json({ message: err?.message || "Failed to build SOP comprehension matrix" });
+    }
+  });
+
+  // ==================== COMPLETION MATRIX ====================
+  // Per-nurse roll-up of every onboarding bucket into a single
+  // "overall %" figure. Each bucket is normalised to 0–100, then the
+  // overall % is the unweighted average of the buckets so no single
+  // section dominates the score. Stage lanes that don't apply to the
+  // current stage (e.g. arcade for a nurse still in preboard) are
+  // counted as 0 — they're still part of the journey.
+  app.get("/api/admin/reports/completion-matrix", requireAdmin, async (_req, res) => {
+    try {
+      const [
+        candidates,
+        onboardingStates,
+        allTraining,
+        allReferences,
+        allInductionPolicies,
+      ] = await Promise.all([
+        storage.getCandidates(),
+        storage.getAllOnboardingStates(),
+        storage.getAllMandatoryTraining(),
+        storage.getAllReferences(),
+        storage.getAllInductionPolicies(),
+      ]);
+
+      const stateByNurse = new Map<string, (typeof onboardingStates)[number]>();
+      for (const s of onboardingStates) stateByNurse.set((s as any).nurseId, s);
+
+      const trainingByNurse = new Map<string, typeof allTraining>();
+      for (const t of allTraining) {
+        const list = trainingByNurse.get(t.nurseId) ?? [];
+        list.push(t);
+        trainingByNurse.set(t.nurseId, list);
+      }
+
+      const refsByNurse = new Map<string, typeof allReferences>();
+      for (const r of allReferences) {
+        const list = refsByNurse.get(r.nurseId) ?? [];
+        list.push(r);
+        refsByNurse.set(r.nurseId, list);
+      }
+
+      const policiesByNurse = new Map<string, typeof allInductionPolicies>();
+      for (const p of allInductionPolicies) {
+        const list = policiesByNurse.get(p.nurseId) ?? [];
+        list.push(p);
+        policiesByNurse.set(p.nurseId, list);
+      }
+
+      const TRAINING_TOTAL = MANDATORY_TRAINING_MODULES.length;
+      const STEPS_TOTAL = ONBOARDING_STEPS.length;
+      const REFS_TOTAL = 2;
+
+      const rows = candidates.map((c) => {
+        // ── Bucket 1: Preboard assessment ────────────────────────
+        const preboardPct = c.preboardStatus === "completed" ? 100 : 0;
+
+        // ── Bucket 2: Onboarding steps (12 ONBOARDING_STEPS) ─────
+        const state = stateByNurse.get(c.id);
+        const stepStatuses = (state?.stepStatuses as Record<string, string>) || {};
+        const stepsCompleted = ONBOARDING_STEPS.filter(
+          (s) => stepStatuses[s.key] === STEP_STATUS.completed,
+        ).length;
+        const stepsPct = Math.round((stepsCompleted / STEPS_TOTAL) * 100);
+
+        // ── Bucket 3: Mandatory training certificates ────────────
+        const nurseTraining = trainingByNurse.get(c.id) ?? [];
+        const trainingCompleted = nurseTraining.filter((t) => t.certificateUploaded).length;
+        const trainingPct = Math.min(
+          100,
+          Math.round((trainingCompleted / TRAINING_TOTAL) * 100),
+        );
+
+        // ── Bucket 4: References (2 required) ────────────────────
+        const refs = refsByNurse.get(c.id) ?? [];
+        // Only count references the referee has actually completed.
+        // outcome="sent" means the email went out but no response yet,
+        // so it must NOT count toward completion. Terminal "received"
+        // and "flagged" outcomes (or a formSubmittedAt timestamp) are
+        // the real signals of a completed reference.
+        const refsReceived = refs.filter(
+          (r: any) => !!r.formSubmittedAt || r.outcome === "received" || r.outcome === "flagged",
+        ).length;
+        const refsPct = Math.min(100, Math.round((refsReceived / REFS_TOTAL) * 100));
+
+        // ── Bucket 5: Induction policies acknowledged ────────────
+        const policies = policiesByNurse.get(c.id) ?? [];
+        const policiesAcked = policies.filter((p) => p.acknowledged).length;
+        const policiesTotal = Math.max(policies.length, 10);
+        const policiesPct = Math.round((policiesAcked / policiesTotal) * 100);
+
+        // ── Bucket 6: Skills Arcade ──────────────────────────────
+        const arcadePct = c.arcadeStatus === "competent" ? 100 : 0;
+
+        const bucketPcts = [
+          preboardPct,
+          stepsPct,
+          trainingPct,
+          refsPct,
+          policiesPct,
+          arcadePct,
+        ];
+        const overallPct = Math.round(
+          bucketPcts.reduce((a, b) => a + b, 0) / bucketPcts.length,
+        );
+
+        return {
+          id: c.id,
+          name: c.fullName,
+          email: c.email,
+          band: c.band ?? null,
+          currentStage: c.currentStage,
+          onboardStatus: c.onboardStatus ?? null,
+          updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
+          sections: {
+            preboard: { pct: preboardPct, label: c.preboardStatus === "completed" ? "Completed" : "Not done" },
+            onboarding: { pct: stepsPct, label: `${stepsCompleted} / ${STEPS_TOTAL} steps` },
+            training: { pct: trainingPct, label: `${trainingCompleted} / ${TRAINING_TOTAL} modules` },
+            references: { pct: refsPct, label: `${refsReceived} / ${REFS_TOTAL} received` },
+            policies: { pct: policiesPct, label: `${policiesAcked} / ${policiesTotal} acknowledged` },
+            arcade: { pct: arcadePct, label: c.arcadeStatus === "competent" ? "Competent" : "Not competent" },
+          },
+          overall: { pct: overallPct },
+        };
+      });
+
+      res.json({
+        generatedAt: new Date().toISOString(),
+        nurses: rows,
+      });
+    } catch (err: any) {
+      console.error("[admin-reports] completion-matrix failed:", err);
+      res.status(500).json({ message: err?.message || "Failed to build completion matrix" });
     }
   });
 }
