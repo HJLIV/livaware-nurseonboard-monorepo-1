@@ -832,6 +832,25 @@ export function registerNurseRoutes(app: Express) {
     }
   });
 
+  // ─── Document Recovery: pull historic files back from mailbox ───────
+  // Last-resort recovery for files that aren't in disk, the bucket, or
+  // SharePoint — every upload also fired a notification email to the
+  // sender mailbox with the file as an attachment. Walks those messages
+  // and matches them to documents by candidate name + category +
+  // original filename, then writes them back into both stores.
+  // Idempotent — safe to re-run.
+  app.post("/api/admin/recover-from-mailbox", requireSuperAdmin, async (_req, res) => {
+    try {
+      const { recoverMissingFilesFromMailbox } = await import("../object-storage");
+      const result = await recoverMissingFilesFromMailbox();
+      console.log("[object-storage] Mailbox recovery complete:", result);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[object-storage] Mailbox recovery failed:", err);
+      res.status(500).json({ message: err?.message || "Recovery failed" });
+    }
+  });
+
   // ─── Document Recovery: orphan files ────────────────────────────────
   app.get("/api/admin/orphan-uploads", requireAdmin, async (_req, res) => {
     try {

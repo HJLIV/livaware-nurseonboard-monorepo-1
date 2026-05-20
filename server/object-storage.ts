@@ -401,6 +401,206 @@ export async function recoverMissingFilesFromSharePoint(): Promise<{
   return { scanned, recovered, noSharepointUrl, sharepointMisses, errors, sampleErrors };
 }
 
+// Outlook mailbox recovery — last-resort source for files that never
+// made it to SharePoint either. Every upload also fired a notification
+// email to AZURE_AD_SENDER_EMAIL's own inbox with subject
+// `Document Upload — {candidateName} — {category}` and the file as an
+// attachment with its `originalFilename`. We list those messages,
+// match each one to a missing document row by candidate+category+
+// filename, download the attachment, write it to /uploads, and mirror
+// it into the bucket.
+//
+// Best-effort and idempotent. Returns a structured summary.
+export async function recoverMissingFilesFromMailbox(): Promise<{
+  scanned: number;
+  recovered: number;
+  noMailboxMatch: number;
+  mailboxMisses: number;
+  errors: number;
+  messagesScanned: number;
+  sampleErrors: string[];
+}> {
+  const { db } = await import("./db");
+  const { documents, nurses } = await import("@shared/schema");
+
+  // 1. Build a map of every document still missing from both stores,
+  //    keyed by a normalised (candidate_name, category, original_filename)
+  //    tuple so we can match incoming mail attachments in O(1).
+  const allDocs = await db
+    .select({
+      id: documents.id,
+      nurseId: documents.nurseId,
+      filePath: documents.filePath,
+      originalFilename: documents.originalFilename,
+      filename: documents.filename,
+      category: documents.category,
+    })
+    .from(documents);
+
+  const allNurses = await db
+    .select({ id: nurses.id, fullName: nurses.fullName })
+    .from(nurses);
+  const nurseNameById = new Map<string, string>();
+  for (const n of allNurses) if (n.fullName) nurseNameById.set(n.id, n.fullName);
+
+  const norm = (s: string | null | undefined) =>
+    (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const key = (name: string, category: string, filename: string) =>
+    `${norm(name)}::${norm(category)}::${norm(filename)}`;
+
+  type MissingDoc = {
+    id: string;
+    nurseId: string;
+    basename: string;
+    candidateName: string;
+    category: string;
+    originalFilename: string;
+  };
+  const missingByKey = new Map<string, MissingDoc>();
+  let scanned = 0;
+  for (const doc of allDocs) {
+    if (!doc.filePath) continue;
+    const basename = path.basename(doc.filePath);
+    scanned++;
+    if (fs.existsSync(path.join(uploadsDir, basename))) continue;
+    if (await existsInBucket(basename)) continue;
+    const candidateName = nurseNameById.get(doc.nurseId) || "";
+    const category = doc.category || "";
+    const original = doc.originalFilename || basename;
+    if (!candidateName || !original) continue;
+    missingByKey.set(key(candidateName, category, original), {
+      id: doc.id,
+      nurseId: doc.nurseId,
+      basename,
+      candidateName,
+      category,
+      originalFilename: original,
+    });
+  }
+
+  if (missingByKey.size === 0) {
+    return {
+      scanned,
+      recovered: 0,
+      noMailboxMatch: 0,
+      mailboxMisses: 0,
+      errors: 0,
+      messagesScanned: 0,
+      sampleErrors: [],
+    };
+  }
+
+  // 2. Iterate the mailbox. Filter on subject prefix so we only pull
+  //    relevant messages, expand attachments to get their content
+  //    inline. We use $filter rather than $search because $filter
+  //    supports proper pagination and is consistent.
+  const { getGraphClient } = await import("./outlook");
+  const SENDER_EMAIL =
+    process.env.AZURE_AD_SENDER_EMAIL || "onboarding@livaware.co.uk";
+  const client = await getGraphClient();
+
+  let recovered = 0;
+  let errors = 0;
+  let messagesScanned = 0;
+  const sampleErrors: string[] = [];
+
+  // We have to do the heavy attachments fetch only when subject matches,
+  // otherwise the Graph payload becomes huge. So: list message metadata
+  // first (filtered), then for each candidate message fetch attachments.
+  let nextLink: string | null =
+    `/users/${SENDER_EMAIL}/messages?` +
+    `$filter=${encodeURIComponent("startswith(subject,'Document Upload')")}` +
+    `&$top=50&$select=id,subject,hasAttachments`;
+
+  const seenDocIds = new Set<string>();
+
+  while (nextLink && seenDocIds.size < missingByKey.size) {
+    try {
+      const page: any = await client.api(nextLink).get();
+      const messages: any[] = page.value || [];
+      messagesScanned += messages.length;
+      nextLink = page["@odata.nextLink"]
+        ? page["@odata.nextLink"].replace(/^https:\/\/graph\.microsoft\.com\/v1\.0/, "")
+        : null;
+
+      for (const msg of messages) {
+        if (!msg.hasAttachments) continue;
+        // Subject form: "Document Upload — {name} — {category}"
+        const subj = String(msg.subject || "");
+        const parts = subj.split(" — ");
+        if (parts.length < 3) continue;
+        const name = parts[1];
+        const category = parts.slice(2).join(" — ");
+
+        let attachments: any[] = [];
+        try {
+          const att: any = await client
+            .api(`/users/${SENDER_EMAIL}/messages/${msg.id}/attachments`)
+            .get();
+          attachments = att.value || [];
+        } catch (err: any) {
+          errors++;
+          if (sampleErrors.length < 10)
+            sampleErrors.push(`msg ${msg.id}: list attachments failed — ${err?.message || err}`);
+          continue;
+        }
+
+        for (const att of attachments) {
+          if (att["@odata.type"] !== "#microsoft.graph.fileAttachment") continue;
+          const attName = String(att.name || "");
+          const matchKey = key(name, category, attName);
+          const target = missingByKey.get(matchKey);
+          if (!target) continue;
+          if (seenDocIds.has(target.id)) continue;
+
+          try {
+            const contentBytes = att.contentBytes as string | undefined;
+            if (!contentBytes) {
+              errors++;
+              if (sampleErrors.length < 10)
+                sampleErrors.push(`${target.id}: attachment had no contentBytes`);
+              continue;
+            }
+            const buffer = Buffer.from(contentBytes, "base64");
+            const absolute = path.join(uploadsDir, target.basename);
+            await fs.promises.writeFile(absolute, buffer);
+
+            const mirrored = await uploadFromDisk(target.basename);
+            if (!mirrored) {
+              errors++;
+              if (sampleErrors.length < 10)
+                sampleErrors.push(`${target.id}: written to disk but bucket mirror failed`);
+              continue;
+            }
+            seenDocIds.add(target.id);
+            recovered++;
+          } catch (err: any) {
+            errors++;
+            if (sampleErrors.length < 10)
+              sampleErrors.push(`${target.id}: ${err?.message || err}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      errors++;
+      if (sampleErrors.length < 10)
+        sampleErrors.push(`page fetch failed — ${err?.message || err}`);
+      break;
+    }
+  }
+
+  const noMailboxMatch = missingByKey.size - seenDocIds.size;
+  return {
+    scanned,
+    recovered,
+    noMailboxMatch,
+    mailboxMisses: noMailboxMatch,
+    errors,
+    messagesScanned,
+    sampleErrors,
+  };
+}
+
 // Bounded retry with exponential backoff. The fire-and-forget mirror
 // has a small "crash window" where a container that dies in the seconds
 // between disk-write and bucket-upload could lose the file. Three quick
