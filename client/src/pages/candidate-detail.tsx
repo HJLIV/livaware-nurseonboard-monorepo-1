@@ -1946,7 +1946,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                     {doc.expiryDate && (
                       <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
                     )}
-                    <DocumentAiIndicator status={doc.aiStatus} />
+                    <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
                     {doc.filePath && (
                       <Button variant="ghost" size="icon" className="h-7 w-7" asChild tooltip="Open this document in a new tab.">
                         <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
@@ -2071,7 +2071,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <DocumentAiIndicator status={doc.aiStatus} />
+                      <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
                       {doc.filePath && (
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild tooltip="Open this proof-of-address document in a new tab.">
                           <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
@@ -2613,7 +2613,7 @@ function TrainingTab({ candidateId, candidateName }: { candidateId: string; cand
                   <DocumentLink doc={doc} />
                 </div>
                 {doc.uploadedBy === "nurse" && <PortalBadge />}
-                <DocumentAiIndicator status={doc.aiStatus} />
+                <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
                 <DocumentDeleteButton
                   docId={doc.id}
                   filename={doc.originalFilename || doc.filename}
@@ -3641,7 +3641,7 @@ function IndemnityTab({ candidateId, candidateName }: { candidateId: string; can
                         <DocumentLink doc={doc} />
                       </div>
                       {doc.uploadedBy === "nurse" && <PortalBadge />}
-                      <DocumentAiIndicator status={doc.aiStatus} />
+                      <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
                       <DocumentDeleteButton
                         docId={doc.id}
                         filename={doc.originalFilename || doc.filename}
@@ -3702,7 +3702,35 @@ function IndemnityTab({ candidateId, candidateName }: { candidateId: string; can
   );
 }
 
-function DocumentAiIndicator({ status }: { status?: string | null }) {
+function DocumentAiIndicator({ status, issues }: { status?: string | null; issues?: unknown }) {
+  // Detect the admin_approved marker written by POST /api/documents/:id/approve
+  // so manually-cleared documents render a distinct "Manual check OK" badge
+  // instead of looking identical to an AI auto-pass.
+  const approvalMarker = Array.isArray(issues)
+    ? (issues as any[]).find(
+        (e) => e && typeof e === "object" && e.code === "admin_approved",
+      )
+    : null;
+  if (approvalMarker) {
+    const note = typeof approvalMarker.note === "string" ? approvalMarker.note : "";
+    const by = typeof approvalMarker.approvedBy === "string" ? approvalMarker.approvedBy : "";
+    const tooltip = [
+      by ? `Approved by ${by}` : "Approved by admin",
+      note ? `Note: ${note}` : null,
+    ]
+      .filter(Boolean)
+      .join(" — ");
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/50"
+        title={tooltip}
+        data-testid="badge-admin-approved"
+      >
+        <CheckCircle className="h-3 w-3 mr-1" /> Manual check OK
+      </Badge>
+    );
+  }
   if (!status) return null;
   if (status === "pending") {
     return (
@@ -4291,7 +4319,7 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-foreground">{doc.type || doc.filename}</p>
-                      <DocumentAiIndicator status={doc.aiStatus} />
+                      <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
                     </div>
                     {doc.filePath ? (
                       <DocumentLink doc={doc} />
