@@ -295,7 +295,7 @@ export async function recoverMissingFilesFromSharePoint(): Promise<{
   const { db } = await import("./db");
   const { documents, nurses } = await import("@shared/schema");
   const { eq } = await import("drizzle-orm");
-  const { getUncachableSharePointClient, getDriveApiBase, ROOT_FOLDER, sanitizeName } =
+  const { getUncachableSharePointClient, resolveDriveApiBase, ROOT_FOLDER, sanitizeName } =
     await import("./sharepoint");
 
   const allDocs = await db
@@ -343,7 +343,8 @@ export async function recoverMissingFilesFromSharePoint(): Promise<{
     try {
       if (!client) {
         client = await getUncachableSharePointClient();
-        driveBase = getDriveApiBase();
+        driveBase = await resolveDriveApiBase(client);
+        console.log(`[object-storage] SharePoint recovery using drive base: ${driveBase}`);
       }
 
       let nurseName = nurseNameCache.get(doc.nurseId) ?? undefined;

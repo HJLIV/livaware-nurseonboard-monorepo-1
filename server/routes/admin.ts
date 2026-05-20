@@ -802,6 +802,18 @@ export function registerNurseRoutes(app: Express) {
     }
   });
 
+  // ─── Diagnostic: what SharePoint target are we hitting? ─────────────
+  app.get("/api/admin/sharepoint-target", requireSuperAdmin, async (_req, res) => {
+    try {
+      const { describeSharepointTarget } = await import("../sharepoint");
+      const target = await describeSharepointTarget();
+      res.json(target);
+    } catch (err: any) {
+      console.error("[SharePoint] target diagnostic failed:", err);
+      res.status(500).json({ message: err?.message || "Diagnostic failed" });
+    }
+  });
+
   // ─── Document Recovery: pull historic files back from SharePoint ────
   // One-off recovery for files that were lost off ephemeral container
   // disk before the Object Storage layer existed. Walks the documents

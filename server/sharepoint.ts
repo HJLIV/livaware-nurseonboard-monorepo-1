@@ -63,6 +63,34 @@ const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
 
 const SHAREPOINT_SITE_ID = process.env.SHAREPOINT_SITE_ID || '';
 const SHAREPOINT_DRIVE_ID = process.env.SHAREPOINT_DRIVE_ID || '';
+const SHAREPOINT_SITE_URL = process.env.SHAREPOINT_SITE_URL || '';
+
+// When the operator gives us a site URL like
+// https://livaware.sharepoint.com/sites/onboarding2 we can resolve it
+// to a site id via Graph (`GET /sites/{hostname}:/{server-relative-path}`)
+// once and cache it for the process lifetime. This avoids the
+// alternative of asking the operator to hunt down a site GUID.
+let resolvedSiteIdFromUrl: string | null = null;
+async function resolveSiteIdFromUrl(client: Client): Promise<string | null> {
+  if (resolvedSiteIdFromUrl) return resolvedSiteIdFromUrl;
+  if (!SHAREPOINT_SITE_URL) return null;
+  try {
+    const u = new URL(SHAREPOINT_SITE_URL);
+    const hostname = u.hostname;
+    const serverPath = u.pathname.replace(/^\/+|\/+$/g, '');
+    const result: any = await client
+      .api(`/sites/${hostname}:/${serverPath}`)
+      .get();
+    if (result?.id) {
+      resolvedSiteIdFromUrl = result.id;
+      console.log(`[SharePoint] resolved site URL ${SHAREPOINT_SITE_URL} → ${result.id}`);
+      return result.id;
+    }
+  } catch (err: any) {
+    console.error(`[SharePoint] failed to resolve site URL ${SHAREPOINT_SITE_URL}:`, err?.message || err);
+  }
+  return null;
+}
 
 export function getDriveApiBase(): string {
   if (SHAREPOINT_SITE_ID && SHAREPOINT_DRIVE_ID) {
@@ -71,7 +99,50 @@ export function getDriveApiBase(): string {
   if (SHAREPOINT_SITE_ID) {
     return `/sites/${SHAREPOINT_SITE_ID}/drive`;
   }
+  if (resolvedSiteIdFromUrl) {
+    return `/sites/${resolvedSiteIdFromUrl}/drive`;
+  }
   return '/me/drive';
+}
+
+// Async variant that will lazily resolve a site URL the first time
+// it's called. Callers that can `await` should prefer this over the
+// sync `getDriveApiBase()` so they don't fall back to `/me/drive`
+// when only SHAREPOINT_SITE_URL is configured.
+export async function resolveDriveApiBase(client: Client): Promise<string> {
+  if (SHAREPOINT_SITE_ID) return getDriveApiBase();
+  if (SHAREPOINT_SITE_URL) {
+    const id = await resolveSiteIdFromUrl(client);
+    if (id) return `/sites/${id}/drive`;
+  }
+  return '/me/drive';
+}
+
+// Diagnostic helper — returns what the recovery tooling will actually
+// hit so the operator can confirm config before running a big job.
+export async function describeSharepointTarget(): Promise<{
+  hasSiteId: boolean;
+  hasDriveId: boolean;
+  hasSiteUrl: boolean;
+  resolvedDriveBase: string;
+  siteUrl: string | null;
+}> {
+  let resolvedDriveBase = getDriveApiBase();
+  if (!SHAREPOINT_SITE_ID && SHAREPOINT_SITE_URL) {
+    try {
+      const client = await getUncachableSharePointClient();
+      resolvedDriveBase = await resolveDriveApiBase(client);
+    } catch {
+      // leave the sync fallback
+    }
+  }
+  return {
+    hasSiteId: !!SHAREPOINT_SITE_ID,
+    hasDriveId: !!SHAREPOINT_DRIVE_ID,
+    hasSiteUrl: !!SHAREPOINT_SITE_URL,
+    resolvedDriveBase,
+    siteUrl: SHAREPOINT_SITE_URL || null,
+  };
 }
 
 export function sanitizeName(name: string): string {
