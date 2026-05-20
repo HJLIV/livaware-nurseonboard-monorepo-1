@@ -1061,7 +1061,6 @@ export const MANDATORY_TRAINING_MODULES = [
   { name: "Conflict Resolution / De-escalation", renewalFrequency: "3 years" },
   { name: "Mental Capacity Act & DoLS Awareness", renewalFrequency: "3 years" },
   { name: "Prevent Duty (Counter-Terrorism Awareness)", renewalFrequency: "3 years" },
-  { name: "Modern Slavery Awareness", renewalFrequency: "3 years" },
   { name: "Duty of Candour", renewalFrequency: "3 years" },
   { name: "Lone Working Safety", renewalFrequency: "Annual" },
 ] as const;
@@ -1187,7 +1186,6 @@ export const INDUCTION_POLICIES = [
   "Duty of Candour Policy",
   "Freedom to Speak Up / Whistleblowing Policy",
   "Lone Working Policy",
-  "Modern Slavery Statement",
   "Prevent Duty Awareness",
   "Information Governance Policy",
   "Clinical Governance Framework",

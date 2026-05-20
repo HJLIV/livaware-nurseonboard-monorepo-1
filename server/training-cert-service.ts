@@ -42,7 +42,6 @@ const MODULE_KEYWORDS: Record<string, string[]> = {
   "Conflict Resolution / De-escalation": ["conflict resolution", "de-escalation", "de escalation", "conflict management"],
   "Mental Capacity Act & DoLS Awareness": ["mental capacity", "dols", "deprivation of liberty", "mca"],
   "Prevent Duty (Counter-Terrorism Awareness)": ["prevent duty", "prevent training", "counter-terrorism", "counter terrorism", "prevent awareness"],
-  "Modern Slavery Awareness": ["modern slavery", "human trafficking"],
   "Duty of Candour": ["duty of candour", "duty of candor", "candour"],
   "Lone Working Safety": ["lone working", "lone worker"],
 };

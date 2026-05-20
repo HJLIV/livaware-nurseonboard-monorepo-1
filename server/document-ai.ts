@@ -257,7 +257,7 @@ commonly misclassified category):
   "Infection Prevention and Control", "IPC", "Information Governance",
   "GDPR", "Equality, Diversity and Inclusion", "EDI", "Mental Capacity
   Act", "MCA", "DoLS", "Prevent", "Conflict Resolution", "Duty of
-  Candour", "Lone Working", "Modern Slavery".
+  Candour", "Lone Working".
 - Do NOT downgrade to "other" just because the layout is unusual, the
   certificate is on page 2+, or the issuing body is unfamiliar — if it
   shows training topic + person + date, it is a training_certificate.
