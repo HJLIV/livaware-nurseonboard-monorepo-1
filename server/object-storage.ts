@@ -329,9 +329,15 @@ export async function recoverMissingFilesFromSharePoint(): Promise<{
     if (fs.existsSync(path.join(uploadsDir, basename))) continue;
     if (await existsInBucket(basename)) continue;
 
+    // We deliberately do NOT skip when sharepointUrl is null. That
+    // column only gets written when the original async upload's
+    // callback succeeded — plenty of files made it into SharePoint
+    // (the upload uses conflictBehavior=rename so it almost always
+    // succeeds) without ever recording the webUrl back. The folder
+    // path is deterministic, so we probe it either way and count the
+    // "no recorded URL but recovered anyway" wins separately.
     if (!doc.sharepointUrl) {
       noSharepointUrl++;
-      continue;
     }
 
     try {
