@@ -802,6 +802,24 @@ export function registerNurseRoutes(app: Express) {
     }
   });
 
+  // ─── Document Recovery: pull historic files back from SharePoint ────
+  // One-off recovery for files that were lost off ephemeral container
+  // disk before the Object Storage layer existed. Walks the documents
+  // table, finds any whose file is missing from BOTH local disk and the
+  // bucket, and re-downloads them from the SharePoint archive copy.
+  // Idempotent — safe to re-run.
+  app.post("/api/admin/recover-from-sharepoint", requireSuperAdmin, async (_req, res) => {
+    try {
+      const { recoverMissingFilesFromSharePoint } = await import("../object-storage");
+      const result = await recoverMissingFilesFromSharePoint();
+      console.log("[object-storage] SharePoint recovery complete:", result);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[object-storage] SharePoint recovery failed:", err);
+      res.status(500).json({ message: err?.message || "Recovery failed" });
+    }
+  });
+
   // ─── Document Recovery: orphan files ────────────────────────────────
   app.get("/api/admin/orphan-uploads", requireAdmin, async (_req, res) => {
     try {

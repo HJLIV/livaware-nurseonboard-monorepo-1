@@ -274,6 +274,126 @@ export async function backfillUploadsToBucket(): Promise<void> {
   }
 }
 
+// SharePoint recovery — for files that were lost before this layer
+// existed (i.e. flagged by backfill pass 2) but were successfully
+// archived to SharePoint by the legacy mirror. We reconstruct the
+// SharePoint folder path from the same convention used at upload
+// (`NurseOnboarding/{safeName}_{candidateId}/{safeCategory}/{safeFilename}`),
+// download via Microsoft Graph, write to /uploads, then mirror into
+// the bucket so all containers (and future restarts) can serve it.
+//
+// Best-effort and idempotent: skips docs already present locally or in
+// the bucket, and skips docs that have no sharepointUrl recorded.
+export async function recoverMissingFilesFromSharePoint(): Promise<{
+  scanned: number;
+  recovered: number;
+  noSharepointUrl: number;
+  sharepointMisses: number;
+  errors: number;
+  sampleErrors: string[];
+}> {
+  const { db } = await import("./db");
+  const { documents, nurses } = await import("@shared/schema");
+  const { eq } = await import("drizzle-orm");
+  const { getUncachableSharePointClient, getDriveApiBase, ROOT_FOLDER, sanitizeName } =
+    await import("./sharepoint");
+
+  const allDocs = await db
+    .select({
+      id: documents.id,
+      nurseId: documents.nurseId,
+      filePath: documents.filePath,
+      originalFilename: documents.originalFilename,
+      filename: documents.filename,
+      category: documents.category,
+      sharepointUrl: documents.sharepointUrl,
+    })
+    .from(documents);
+
+  let scanned = 0;
+  let recovered = 0;
+  let noSharepointUrl = 0;
+  let sharepointMisses = 0;
+  let errors = 0;
+  const sampleErrors: string[] = [];
+
+  let client: any = null;
+  let driveBase = "";
+  const nurseNameCache = new Map<string, string | null>();
+
+  for (const doc of allDocs) {
+    if (!doc.filePath) continue;
+    const basename = path.basename(doc.filePath);
+    scanned++;
+
+    if (fs.existsSync(path.join(uploadsDir, basename))) continue;
+    if (await existsInBucket(basename)) continue;
+
+    if (!doc.sharepointUrl) {
+      noSharepointUrl++;
+      continue;
+    }
+
+    try {
+      if (!client) {
+        client = await getUncachableSharePointClient();
+        driveBase = getDriveApiBase();
+      }
+
+      let nurseName = nurseNameCache.get(doc.nurseId) ?? undefined;
+      if (nurseName === undefined) {
+        const [n] = await db
+          .select({ fullName: nurses.fullName })
+          .from(nurses)
+          .where(eq(nurses.id, doc.nurseId))
+          .limit(1);
+        nurseName = n?.fullName || null;
+        nurseNameCache.set(doc.nurseId, nurseName);
+      }
+      if (!nurseName) {
+        sharepointMisses++;
+        continue;
+      }
+
+      const safeName = sanitizeName(nurseName);
+      const safeCategory = sanitizeName(doc.category || "general");
+      const safeFilename = sanitizeName(doc.originalFilename || basename);
+      const remotePath = `${ROOT_FOLDER}/${safeName}_${doc.nurseId}/${safeCategory}/${safeFilename}`;
+
+      const stream: any = await client
+        .api(`${driveBase}/root:/${remotePath}:/content`)
+        .getStream();
+
+      const absolute = path.join(uploadsDir, basename);
+      await new Promise<void>((resolve, reject) => {
+        const out = fs.createWriteStream(absolute);
+        stream.pipe(out);
+        out.on("finish", () => resolve());
+        out.on("error", reject);
+        stream.on("error", reject);
+      });
+
+      const mirrored = await uploadFromDisk(basename);
+      if (!mirrored) {
+        errors++;
+        if (sampleErrors.length < 10) sampleErrors.push(`${doc.id}: downloaded but bucket mirror failed`);
+        continue;
+      }
+      recovered++;
+    } catch (err: any) {
+      const msg = err?.statusCode === 404 ? "not in SharePoint" : err?.message || String(err);
+      if (err?.statusCode === 404) {
+        sharepointMisses++;
+      } else {
+        errors++;
+      }
+      if (sampleErrors.length < 10) sampleErrors.push(`${doc.id}: ${msg}`);
+    }
+  }
+
+  return { scanned, recovered, noSharepointUrl, sharepointMisses, errors, sampleErrors };
+}
+
 // Bounded retry with exponential backoff. The fire-and-forget mirror
 // has a small "crash window" where a container that dies in the seconds
 // between disk-write and bucket-upload could lose the file. Three quick
