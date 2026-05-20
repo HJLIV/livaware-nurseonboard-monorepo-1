@@ -101,8 +101,19 @@ const REVIEW_CODES = new Set([
   "chase_reply_auto_attached",
 ]);
 
+// Codes we intentionally hide here because they represent admin/automated
+// markers rather than something needing review (e.g. manual category
+// overrides, auto-attached confirmations the admin already actioned).
+const STICKY_CODES = new Set([
+  "manual_category_override",
+  "manual_unassigned",
+]);
+
 function reviewMessage(issues: AiIssueEntry[] | null): { code: string; message: string } {
   if (issues && Array.isArray(issues)) {
+    // Prefer one of the well-known review codes first so the existing
+    // colour-coding (rose for chase-reply failures, amber otherwise) still
+    // works for those rows.
     for (const entry of issues) {
       if (entry && typeof entry === "object" && entry.code && REVIEW_CODES.has(entry.code)) {
         return {
@@ -111,8 +122,22 @@ function reviewMessage(issues: AiIssueEntry[] | null): { code: string; message: 
         };
       }
     }
+    // Otherwise surface the first real AI issue (plain-text string OR a
+    // structured issue like name_mismatch / expired / illegible) so
+    // admins can see what the AI actually flagged.
+    for (const entry of issues) {
+      if (typeof entry === "string" && entry.trim()) {
+        return { code: "ai_issue", message: entry };
+      }
+      if (entry && typeof entry === "object") {
+        if (entry.code && STICKY_CODES.has(entry.code)) continue;
+        if (entry.message && entry.message.trim()) {
+          return { code: entry.code || "ai_issue", message: entry.message };
+        }
+      }
+    }
   }
-  return { code: "low_confidence_classification", message: "AI was not confident about this document's category." };
+  return { code: "ai_issue", message: "AI flagged this document for review." };
 }
 
 export default function DocumentsReviewPage() {
@@ -233,9 +258,11 @@ export default function DocumentsReviewPage() {
             Documents to review
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Documents the AI wasn't sure how to categorise. Pick the right
-            category from the dropdown — the row drops off the list once the
-            warning is cleared.
+            Every document the AI flagged with a warning or failure —
+            mis-categorisations, name mismatches, expired or illegible
+            certificates, and chase-reply auto-ingest queue items. Re-categorise,
+            unassign or reject — rows drop off the list once the flag is
+            cleared.
           </p>
         </div>
 

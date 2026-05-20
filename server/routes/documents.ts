@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { db } from "../db";
 import { documents, nurses } from "@shared/schema";
-import { eq, desc, and, ilike, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, or, ilike, gte, lte, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { uploadsDir, requireAdmin } from "../middleware";
 import { logAction } from "../services/audit";
@@ -462,16 +462,17 @@ export function registerDocumentRoutes(app: Express) {
     res.json({ ok: true, document: updated, cleared: removed.length });
   });
 
-  // ── Admin review queue: low-confidence AI classifications ─────────────
-  // Lists every document the AI flagged with `aiStatus = 'warning'` AND a
-  // `low_confidence_classification` issue, across all candidates. Used by
-  // the dedicated /documents/review screen so admins can blitz through
-  // mis-categorisations without opening each candidate page.
+  // ── Admin review queue: every document the AI is unhappy with ─────────
+  // Lists every document with `aiStatus IN ('warning', 'fail')` across all
+  // candidates. This is the single surface admins use to clear AI-flagged
+  // documents — low-confidence classifications, chase-reply auto-ingest
+  // markers, name mismatches, expired/illegible certificates, NMC parsing
+  // problems, etc. all land here.
   //
-  // The list naturally shrinks as admins re-categorise: PATCH
-  // /api/documents/:id/category resets `aiStatus` to null and replaces
-  // `aiIssues` with the manual override marker, so the row drops out of
-  // the queue on the next refetch.
+  // The list naturally shrinks as admins act on items: PATCH
+  // /api/documents/:id/category, the chase-reply auto-attach handlers,
+  // and the confirm-name-match endpoint all reset `aiStatus` and replace
+  // `aiIssues` so the row drops out of the queue on the next refetch.
   app.get("/api/admin/documents/review-queue", async (_req, res) => {
     const rows = await db
       .select({
@@ -494,17 +495,9 @@ export function registerDocumentRoutes(app: Express) {
       .from(documents)
       .innerJoin(nurses, eq(documents.nurseId, nurses.id))
       .where(
-        and(
+        or(
           eq(documents.aiStatus, "warning"),
-          // Include both the original low-confidence-classification flag
-          // and the chase-reply review markers so attachments auto-ingested
-          // from email replies show up here for admin review.
-          sql`(
-            ${documents.aiIssues} @> '[{"code":"low_confidence_classification"}]'::jsonb OR
-            ${documents.aiIssues} @> '[{"code":"chase_reply_low_confidence"}]'::jsonb OR
-            ${documents.aiIssues} @> '[{"code":"chase_reply_upsert_failed"}]'::jsonb OR
-            ${documents.aiIssues} @> '[{"code":"chase_reply_auto_attached"}]'::jsonb
-          )`,
+          eq(documents.aiStatus, "fail"),
         ),
       )
       .orderBy(desc(documents.uploadedAt));
