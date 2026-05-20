@@ -228,6 +228,46 @@ export default function DocumentsReviewPage() {
     },
   });
 
+  const approveDocument = useMutation({
+    mutationFn: async ({
+      docId,
+      category,
+      note,
+    }: {
+      docId: string;
+      category: string;
+      note: string;
+    }) => {
+      const res = await apiRequest("POST", `/api/documents/${docId}/approve`, {
+        category,
+        note: note || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      invalidateQueues();
+      const added: string[] = data?.trainingModulesAdded || [];
+      const removed: number = data?.removedTrainingRows || 0;
+      let description: string | undefined;
+      if (added.length > 0) {
+        description = `Auto-recorded ${added.length} training module${added.length === 1 ? "" : "s"}: ${added.join(", ")}.`;
+      } else if (removed > 0) {
+        description = `Cleared ${removed} stale training record${removed === 1 ? "" : "s"} after re-categorising.`;
+      } else {
+        description = `Saved as "${data?.toCategory}". The row has been cleared from the review queue.`;
+      }
+      toast({ title: "Document approved", description });
+      closeApproveDialog();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not approve document",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const rejectDocument = useMutation({
     mutationFn: async (docId: string) => {
       const res = await apiRequest("DELETE", `/api/documents/${docId}`);
@@ -488,9 +528,30 @@ export default function DocumentsReviewPage() {
                               type="button"
                               variant="ghost"
                               size="sm"
+                              className="h-7 px-2 text-[11px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                              onClick={() => openApproveDialog(doc)}
+                              disabled={
+                                approveDocument.isPending ||
+                                unassignDocument.isPending ||
+                                rejectDocument.isPending
+                              }
+                              data-testid={`btn-approve-${doc.id}`}
+                              title="Approve and auto-assign using the selected category"
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
                               className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                               onClick={() => setPendingAction({ kind: "unassign", doc })}
-                              disabled={unassignDocument.isPending || rejectDocument.isPending}
+                              disabled={
+                                approveDocument.isPending ||
+                                unassignDocument.isPending ||
+                                rejectDocument.isPending
+                              }
                               data-testid={`btn-unassign-${doc.id}`}
                               title="Keep on file but don't credit against any training module"
                             >
@@ -603,6 +664,120 @@ export default function DocumentsReviewPage() {
           )}
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={approveTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !approveDocument.isPending) closeApproveDialog();
+        }}
+      >
+        <DialogContent className="max-w-md" data-testid="dialog-approve-document">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-lg font-light tracking-tight flex items-center gap-2">
+              <Check className="h-4 w-4 text-emerald-500" />
+              Approve document
+            </DialogTitle>
+          </DialogHeader>
+          {approveTarget && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs space-y-1">
+                <p className="font-medium text-foreground truncate">
+                  {approveTarget.originalFilename || approveTarget.filename}
+                </p>
+                <p className="text-muted-foreground">{approveTarget.candidateName}</p>
+                {approveTarget.category && (
+                  <p className="text-muted-foreground/70">
+                    Currently classified as{" "}
+                    <span className="uppercase tracking-wider font-semibold text-muted-foreground">
+                      {approveTarget.category}
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="approve-category" className="text-xs font-medium">
+                  File this document as
+                </Label>
+                <Select
+                  value={approveCategory}
+                  onValueChange={setApproveCategory}
+                  disabled={approveDocument.isPending}
+                >
+                  <SelectTrigger
+                    id="approve-category"
+                    className="h-9 text-sm"
+                    data-testid="select-approve-category"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DOCUMENT_CATEGORY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-sm">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {approveCategory === "training_certificate" && (
+                  <p className="text-[11px] text-muted-foreground/80">
+                    Training modules referenced in the certificate will be
+                    auto-recorded on the candidate's training matrix.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="approve-note" className="text-xs font-medium">
+                  Note <span className="text-muted-foreground/60">(optional, max 500 chars)</span>
+                </Label>
+                <Textarea
+                  id="approve-note"
+                  value={approveNote}
+                  onChange={(e) => setApproveNote(e.target.value.slice(0, 500))}
+                  placeholder="e.g. Confirmed valid policy by phone with insurer on 19 May."
+                  rows={3}
+                  className="text-sm resize-none"
+                  disabled={approveDocument.isPending}
+                  data-testid="textarea-approve-note"
+                />
+                <p className="text-[11px] text-muted-foreground/60 text-right tabular-nums">
+                  {approveNote.length}/500
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={closeApproveDialog}
+                  disabled={approveDocument.isPending}
+                  data-testid="btn-cancel-approve"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={approveDocument.isPending}
+                  onClick={() =>
+                    approveDocument.mutate({
+                      docId: approveTarget.id,
+                      category: approveCategory,
+                      note: approveNote.trim(),
+                    })
+                  }
+                  data-testid="btn-confirm-approve"
+                >
+                  {approveDocument.isPending ? "Approving…" : "Approve & auto-assign"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={previewDoc !== null}
