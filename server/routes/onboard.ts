@@ -1414,6 +1414,13 @@ export function registerAdminRoutes(app: Express) {
       );
     }
     setNoCacheHeaders(res);
+    // Site-wide middleware sets X-Frame-Options: DENY, which blocks the
+    // admin "Documents to review" page from embedding files in an iframe
+    // for inline preview. Allow same-origin framing for this route only,
+    // and pair it with a CSP frame-ancestors directive so clickjacking
+    // protection stays scoped to our own origin.
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
     res.sendFile(filePath);
   });
 

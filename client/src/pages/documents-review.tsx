@@ -24,8 +24,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertTriangle,
   CheckCircle2,
+  Eye,
   ExternalLink,
   FileText,
   FolderOpen,
@@ -159,6 +166,12 @@ export default function DocumentsReviewPage() {
     | { kind: "unassign"; doc: ReviewRow }
     | null
   >(null);
+
+  // Inline file preview — clicking "Preview" opens the file in a modal so
+  // admins can read the document without leaving the queue. We render a
+  // PDF/image with an <iframe>; everything else falls back to a download
+  // link inside the dialog.
+  const [previewDoc, setPreviewDoc] = useState<ReviewRow | null>(null);
 
   const invalidateQueues = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/documents/review-queue"] });
@@ -425,16 +438,31 @@ export default function DocumentsReviewPage() {
 
                           <div className="flex items-center gap-2 justify-end flex-wrap">
                             {doc.filePath && (
-                              <a
-                                href={doc.filePath}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                                data-testid={`link-view-${doc.id}`}
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                View
-                              </a>
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-primary hover:text-primary"
+                                  onClick={() => setPreviewDoc(doc)}
+                                  data-testid={`btn-preview-${doc.id}`}
+                                  title="Preview the file inline without leaving this page"
+                                >
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Preview
+                                </Button>
+                                <a
+                                  href={doc.filePath}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                                  data-testid={`link-view-${doc.id}`}
+                                  title="Open the file in a new browser tab"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  Open
+                                </a>
+                              </>
                             )}
                             <Button
                               type="button"
@@ -555,6 +583,65 @@ export default function DocumentsReviewPage() {
           )}
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={previewDoc !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewDoc(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-5xl w-[95vw] h-[85vh] flex flex-col p-0 gap-0"
+          data-testid="dialog-preview-document"
+        >
+          <DialogHeader className="px-6 py-4 border-b border-border/40 shrink-0">
+            <DialogTitle className="font-serif text-lg font-light tracking-tight flex items-center gap-2 pr-8 truncate">
+              <FileText className="h-4 w-4 text-primary shrink-0" />
+              <span className="truncate">
+                {previewDoc?.originalFilename || previewDoc?.filename || "Document"}
+              </span>
+            </DialogTitle>
+            {previewDoc && (
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                <span className="truncate">{previewDoc.candidateName}</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="uppercase tracking-wider">
+                  {previewDoc.category || "uncategorised"}
+                </span>
+                {previewDoc.filePath && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <a
+                      href={previewDoc.filePath}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      data-testid="link-preview-open-new-tab"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open in new tab
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </DialogHeader>
+          <div className="flex-1 min-h-0 bg-muted/20">
+            {previewDoc?.filePath ? (
+              <iframe
+                src={previewDoc.filePath}
+                title={previewDoc.originalFilename || previewDoc.filename || "Document preview"}
+                className="w-full h-full border-0"
+                data-testid="iframe-preview"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                No file available to preview.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
