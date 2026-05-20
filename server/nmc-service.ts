@@ -104,6 +104,14 @@ export async function parseNmcPdf(buffer: Buffer): Promise<NmcPdfParseResult> {
   const pinMatch = text.match(pinRegex);
   if (pinMatch) {
     pin = pinMatch[1].toUpperCase();
+  } else {
+    // Fall back to matching a PIN that may contain stray spaces/hyphens
+    // introduced by the PDF text extraction (e.g. "18A 1234C").
+    const loosePinMatch = text.match(/\b(\d{2}[\s\-]?[A-Z][\s\-]?\d{4}[\s\-]?[A-Z])\b/i);
+    if (loosePinMatch) {
+      const candidate = normalisePinCandidate(loosePinMatch[1]);
+      if (validatePin(candidate)) pin = candidate;
+    }
   }
 
   const statusIdx = lines.findIndex(l => l.toLowerCase().includes("registration status"));
@@ -293,7 +301,20 @@ export async function parseNmcPdf(buffer: Buffer): Promise<NmcPdfParseResult> {
 }
 
 function isParseResultIncomplete(result: NmcPdfParseResult): boolean {
-  return !result.registrationStatus || !result.registeredName || !result.pin || (!result.renewalDate && !result.effectiveDate);
+  return !result.registrationStatus || !result.registeredName || (!result.renewalDate && !result.effectiveDate);
+}
+
+function describeMissingFields(result: NmcPdfParseResult): string[] {
+  const missing: string[] = [];
+  if (!result.registeredName) missing.push("registeredName");
+  if (!result.registrationStatus) missing.push("registrationStatus");
+  if (!result.renewalDate && !result.effectiveDate) missing.push("renewalDate/effectiveDate");
+  if (!result.pin) missing.push("pin");
+  return missing;
+}
+
+function normalisePinCandidate(value: string): string {
+  return value.replace(/[\s\-_.]/g, "").toUpperCase();
 }
 
 export async function extractNmcDataWithAI(pdfBuffer: Buffer): Promise<NmcPdfParseResult> {
@@ -377,7 +398,7 @@ Respond ONLY with valid JSON in this exact format:
   const location = typeof raw.location === "string" ? raw.location : "";
   const conditions = Array.isArray(raw.conditions) ? raw.conditions.filter((c: unknown): c is string => typeof c === "string") : [];
   const qualifications = Array.isArray(raw.qualifications) ? raw.qualifications.filter((q: unknown): q is string => typeof q === "string") : [];
-  const rawPin = typeof raw.pin === "string" ? raw.pin.trim().toUpperCase() : "";
+  const rawPin = typeof raw.pin === "string" ? normalisePinCandidate(raw.pin) : "";
 
   if (!registeredName && !registrationStatus) {
     throw new NmcVerificationError("AI could not identify registration details in this PDF.", "PARSE_ERROR");
@@ -430,13 +451,28 @@ export async function parseNmcPdfWithFallback(buffer: Buffer): Promise<NmcPdfPar
   try {
     const aiResult = await extractNmcDataWithAI(buffer);
     if (isParseResultIncomplete(aiResult)) {
-      console.warn("[NMC PDF] AI extraction returned incomplete data");
+      const missing = describeMissingFields(aiResult);
+      console.warn(
+        "[NMC PDF] AI extraction returned incomplete data — missing:",
+        missing.join(", "),
+        "(name=",
+        JSON.stringify(aiResult.registeredName),
+        "status=",
+        JSON.stringify(aiResult.registrationStatus),
+        "pin=",
+        JSON.stringify(aiResult.pin),
+        ")",
+      );
       throw new NmcVerificationError(
-        "AI extraction returned incomplete registration details. Please ensure the PDF is a valid NMC register download.",
+        `AI extraction could not read these fields from the PDF: ${missing.join(", ")}. Please ensure the PDF is the full NMC register download (not a screenshot or cropped page).`,
         "PARSE_ERROR"
       );
     }
-    console.log("[NMC PDF] AI extraction succeeded");
+    if (!aiResult.pin) {
+      console.warn("[NMC PDF] AI extraction succeeded but PIN missing — returning for admin review");
+    } else {
+      console.log("[NMC PDF] AI extraction succeeded");
+    }
     return aiResult;
   } catch (aiErr) {
     if (aiErr instanceof NmcVerificationError) throw aiErr;
