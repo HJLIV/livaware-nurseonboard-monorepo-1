@@ -83,9 +83,20 @@ export function registerDocumentDownloadRoute(app: Express) {
     }
     const basename = path.basename(doc.filePath);
     const absolute = path.join(uploadsDir, basename);
-    if (!absolute.startsWith(uploadsDir) || !fs.existsSync(absolute)) {
+    if (!absolute.startsWith(uploadsDir)) {
       setNoCacheHeaders(res);
       return res.status(404).json({ message: "File not found on server" });
+    }
+    if (!fs.existsSync(absolute)) {
+      // Try to re-hydrate from the persistent bucket — disk is a hot
+      // cache; the durable copy lives in Replit Object Storage and may
+      // need to be pulled back down after a container restart / scale.
+      const { ensureLocalCopy } = await import("../object-storage");
+      const restored = await ensureLocalCopy(basename);
+      if (!restored) {
+        setNoCacheHeaders(res);
+        return res.status(404).json({ message: "File not found on server" });
+      }
     }
     setNoCacheHeaders(res);
     if (doc.mimeType) res.setHeader("Content-Type", doc.mimeType);
@@ -188,14 +199,26 @@ export function registerDocumentRoutes(app: Express) {
     }
 
     if (doc.filePath) {
+      const basename = path.basename(doc.filePath);
       try {
-        const basename = path.basename(doc.filePath);
         const absolute = path.join(uploadsDir, basename);
         if (absolute.startsWith(uploadsDir) && fs.existsSync(absolute)) {
           fs.unlinkSync(absolute);
         }
       } catch (e: any) {
         console.warn(`[Document Delete] Failed to remove file for ${docId}:`, e?.message || e);
+      }
+      // Mirror the disk delete into the persistent bucket so the file
+      // is gone from BOTH stores. Fire-and-forget — never block the
+      // user-visible reject action on a bucket round-trip.
+      try {
+        const { deleteFromBucket } = await import("../object-storage");
+        void deleteFromBucket(basename);
+      } catch (e: any) {
+        console.warn(
+          `[Document Delete] bucket delete dispatch failed for ${docId}:`,
+          e?.message || e,
+        );
       }
     }
 

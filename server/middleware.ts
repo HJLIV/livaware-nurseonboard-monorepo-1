@@ -11,7 +11,10 @@ import { eq, and, gt } from "drizzle-orm";
 export const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const multerStorage = multer.diskStorage({
+// Underlying disk storage — files still land on local disk first so
+// existing synchronous readers (document-extractor, sharepoint helper,
+// PDF generators, etc.) keep working without changes.
+const diskStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
@@ -19,6 +22,47 @@ const multerStorage = multer.diskStorage({
     cb(null, name);
   },
 });
+
+// Custom storage engine wrapping diskStorage: after the file is fully
+// on local disk, fire-and-forget mirror it into Replit Object Storage
+// so it survives container restarts / autoscale events. The bucket is
+// the durable source of truth; local disk is just a hot cache. See
+// `server/object-storage.ts` for the design rationale.
+const multerStorage: multer.StorageEngine = {
+  _handleFile(req, file, cb) {
+    diskStorage._handleFile(req, file, (err, info) => {
+      if (err || !info) return cb(err || new Error("multer disk write failed"));
+      const filename = (info as any).filename as string;
+      // Lazy import to avoid a circular dep (object-storage imports
+      // uploadsDir from this file).
+      import("./object-storage")
+        .then(({ triggerBucketMirror }) => triggerBucketMirror(filename))
+        .catch((mirrorErr) =>
+          console.error(
+            "[uploads] bucket mirror dispatch failed:",
+            (mirrorErr as Error)?.message || mirrorErr,
+          ),
+        );
+      cb(null, info);
+    });
+  },
+  _removeFile(req, file, cb) {
+    diskStorage._removeFile(req, file, (err) => {
+      const filename = (file as any).filename as string | undefined;
+      if (filename) {
+        import("./object-storage")
+          .then(({ deleteFromBucket }) => deleteFromBucket(filename))
+          .catch((delErr) =>
+            console.error(
+              "[uploads] bucket delete dispatch failed:",
+              (delErr as Error)?.message || delErr,
+            ),
+          );
+      }
+      cb(err);
+    });
+  },
+};
 
 const ALLOWED_TYPES = [
   "application/pdf",

@@ -152,6 +152,22 @@ app.use((req, res, next) => {
     }
   }
 
+  // Mirror every existing /uploads file into Replit Object Storage so
+  // files written before this layer existed stop being at risk on the
+  // next autoscale event. Best-effort + idempotent — skips files
+  // already in the bucket, logs anything missing from BOTH stores.
+  // Run in the background so it doesn't slow startup.
+  if (process.env.NODE_ENV !== "test") {
+    void (async () => {
+      try {
+        const { backfillUploadsToBucket } = await import("./object-storage");
+        await backfillUploadsToBucket();
+      } catch (err: any) {
+        console.error("[object-storage] startup backfill failed:", err?.message || err);
+      }
+    })();
+  }
+
   // Background scheduler for the two automated chase jobs:
   //   - Weekly bulk chase email (toggleable, default off)
   //   - Mailbox reply scan       (toggleable, default on, default 30 min)

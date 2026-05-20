@@ -1407,11 +1407,20 @@ export function registerAdminRoutes(app: Express) {
 
     const filePath = path.join(uploadsDir, filename);
     if (!fs.existsSync(filePath)) {
-      return renderUnavailable(
-        404,
-        "File unavailable",
-        "This file is no longer available on the server. It may have been removed or never finished uploading.",
-      );
+      // Local disk on this container doesn't have the file — try to
+      // re-hydrate it from Replit Object Storage. On autoscale, files
+      // written on a different container only live in the bucket from
+      // this container's point of view until ensureLocalCopy fetches
+      // them.
+      const { ensureLocalCopy } = await import("../object-storage");
+      const restored = await ensureLocalCopy(filename);
+      if (!restored) {
+        return renderUnavailable(
+          404,
+          "File unavailable",
+          "This file is no longer available on the server. It may have been removed or never finished uploading.",
+        );
+      }
     }
     setNoCacheHeaders(res);
     // Site-wide middleware sets X-Frame-Options: DENY, which blocks the
