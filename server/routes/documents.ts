@@ -496,6 +496,140 @@ export function registerDocumentRoutes(app: Express) {
   // /api/documents/:id/category, the chase-reply auto-attach handlers,
   // and the confirm-name-match endpoint all reset `aiStatus` and replace
   // `aiIssues` so the row drops out of the queue on the next refetch.
+  // ── Admin approval ─────────────────────────────────────────────────────
+  // Confirms a flagged document is genuine and applies the chosen category
+  // (which auto-attaches mandatory training rows when the category is
+  // `training_certificate`). Clears the review flag (aiStatus → pass) so
+  // the row drops off /documents-review, records an optional short note
+  // against the document AND in the audit trail.
+  app.post("/api/documents/:id/approve", requireAdmin, async (req, res) => {
+    const docId = String(req.params.id);
+    const rawCategory = typeof req.body?.category === "string" ? req.body.category.trim() : "";
+    const rawNote = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+    if (!ALLOWED_CATEGORIES.has(rawCategory)) {
+      return res.status(400).json({
+        message: `Invalid category. Must be one of: ${Array.from(ALLOWED_CATEGORIES).join(", ")}`,
+      });
+    }
+    if (rawNote.length > 500) {
+      return res.status(400).json({ message: "Note must be 500 characters or fewer." });
+    }
+
+    const doc = await storage.getDocument(docId);
+    if (!doc) return res.status(404).json({ message: "Document not found" });
+
+    const fromCategory = doc.category || "other";
+    const categoryChanged = fromCategory !== rawCategory;
+    const agent = agentFor(req);
+    const nowIso = new Date().toISOString();
+
+    // Build the approval marker. Replaces noisy AI flags so the candidate
+    // detail page shows a clean "approved by admin" indicator instead of
+    // the old amber warning.
+    const approvalMarker: Record<string, unknown> = {
+      code: "admin_approved",
+      message: rawNote
+        ? `Approved by ${agent} as "${rawCategory}". Note: ${rawNote}`
+        : `Approved by ${agent} as "${rawCategory}".`,
+      category: rawCategory,
+      fromCategory,
+      approvedBy: agent,
+      approvedAt: nowIso,
+    };
+    if (rawNote) approvalMarker.note = rawNote;
+
+    // Keep any non-review structured issues (e.g. extracted dates) for
+    // context but drop everything the review queue keys off so the row
+    // can leave the queue cleanly.
+    const prior = Array.isArray(doc.aiIssues) ? (doc.aiIssues as any[]) : [];
+    const filtered = prior.filter(
+      (e) =>
+        !e ||
+        typeof e !== "object" ||
+        (e.code !== "chase_reply_low_confidence" &&
+          e.code !== "chase_reply_upsert_failed" &&
+          e.code !== "chase_reply_auto_attached" &&
+          e.code !== "low_confidence_classification" &&
+          e.code !== "manual_unassigned" &&
+          e.code !== "manual_category_override" &&
+          e.code !== "admin_approved"),
+    );
+
+    const updates: Record<string, unknown> = {
+      category: rawCategory,
+      aiStatus: "pass",
+      aiIssues: [...filtered, approvalMarker],
+      aiAnalyzedAt: new Date(),
+    };
+
+    let updated = await storage.updateDocument(docId, updates as any);
+
+    // If we're moving AWAY from training_certificate, clear any mandatory
+    // training rows previously auto-recorded from this doc.
+    let removedTrainingRows = 0;
+    if (categoryChanged && fromCategory === "training_certificate" && rawCategory !== "training_certificate") {
+      try {
+        removedTrainingRows = await storage.deleteMandatoryTrainingByDocumentId(docId);
+      } catch (e: any) {
+        console.warn(`[Document Approve] Failed to clean training rows for ${docId}:`, e?.message || e);
+      }
+    }
+
+    // If the (new) category is training_certificate, run the cert pipeline
+    // so training modules get auto-attached on approval. Only re-runs when
+    // the category actually changed — re-approving a doc already at
+    // training_certificate doesn't need to redo the extraction.
+    let trainingAdded: string[] = [];
+    if (
+      categoryChanged &&
+      rawCategory === "training_certificate" &&
+      doc.filePath &&
+      doc.mimeType
+    ) {
+      const basename = path.basename(doc.filePath);
+      const absolutePath = path.join(uploadsDir, basename);
+      if (fs.existsSync(absolutePath)) {
+        try {
+          trainingAdded = await applyTrainingCertExtraction({
+            nurseId: doc.nurseId,
+            documentId: docId,
+            absolutePath,
+            mimeType: doc.mimeType,
+          });
+        } catch (e: any) {
+          console.warn(`[Document Approve] Cert extraction failed for ${docId}:`, e?.message || e);
+        }
+      } else {
+        console.warn(
+          `[Document Approve] File missing on disk for ${docId} at ${absolutePath}; skipping cert extraction.`,
+        );
+      }
+    }
+
+    await logAction(doc.nurseId, "documents", "document_approved", agent, {
+      documentId: docId,
+      type: doc.type,
+      filename: doc.originalFilename || doc.filename,
+      fromCategory,
+      toCategory: rawCategory,
+      categoryChanged,
+      note: rawNote || null,
+      removedTrainingRows,
+      trainingModulesAdded: trainingAdded,
+    });
+
+    res.json({
+      ok: true,
+      document: updated,
+      fromCategory,
+      toCategory: rawCategory,
+      categoryChanged,
+      removedTrainingRows,
+      trainingModulesAdded: trainingAdded,
+      note: rawNote || null,
+    });
+  });
+
   app.get("/api/admin/documents/review-queue", async (_req, res) => {
     const rows = await db
       .select({

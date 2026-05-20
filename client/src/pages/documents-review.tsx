@@ -29,9 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   AlertTriangle,
   CheckCircle2,
+  Check,
   Eye,
   ExternalLink,
   FileText,
@@ -166,6 +169,23 @@ export default function DocumentsReviewPage() {
     | { kind: "unassign"; doc: ReviewRow }
     | null
   >(null);
+
+  // Approve dialog state — separate from the destructive-confirm dialog
+  // because it carries form fields (category + optional note) the admin
+  // edits before submission.
+  const [approveTarget, setApproveTarget] = useState<ReviewRow | null>(null);
+  const [approveCategory, setApproveCategory] = useState<string>("other");
+  const [approveNote, setApproveNote] = useState<string>("");
+
+  const openApproveDialog = (doc: ReviewRow) => {
+    setApproveTarget(doc);
+    setApproveCategory(doc.category || "other");
+    setApproveNote("");
+  };
+  const closeApproveDialog = () => {
+    setApproveTarget(null);
+    setApproveNote("");
+  };
 
   // Inline file preview — clicking "Preview" opens the file in a modal so
   // admins can read the document without leaving the queue. We render a
