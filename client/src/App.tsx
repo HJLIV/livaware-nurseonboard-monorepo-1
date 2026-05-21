@@ -128,9 +128,22 @@ function SuperAdminRoute({ component: Component }: { component: React.ComponentT
 // untouched. Returns null while probing so we don't briefly flash the
 // dashboard before redirecting.
 function RootRedirectGate({ children }: { children: React.ReactNode }) {
+  // Admin session check — when the user has an admin/super_admin cookie
+  // (e.g. just signed in via Microsoft SSO), admin always wins over a
+  // stale portal cookie left over from earlier testing. Otherwise an
+  // SSO'd admin would be bounced into a random nurse's portal.
+  const { data: adminAuth, isLoading: adminLoading } = useQuery<
+    { authenticated: boolean; role?: string } | null
+  >({
+    queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 0,
+    retry: false,
+  });
   const { data, isLoading } = useQuery<{ authenticated: boolean } | null>({
     queryKey: ["/api/portal/auth/me"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: !adminLoading && !adminAuth?.authenticated,
     staleTime: 0,
     retry: false,
   });
@@ -140,10 +153,12 @@ function RootRedirectGate({ children }: { children: React.ReactNode }) {
   const { data: portalUrl, isLoading: urlLoading } = useQuery<{ url: string } | null>({
     queryKey: ["/api/portal/auth/portal-url"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-    enabled: !!data?.authenticated,
+    enabled: !adminAuth?.authenticated && !!data?.authenticated,
     staleTime: 0,
     retry: false,
   });
+  if (adminLoading) return <LoadingSpinner />;
+  if (adminAuth?.authenticated) return <>{children}</>;
   if (isLoading) return <LoadingSpinner />;
   if (data?.authenticated) {
     if (urlLoading) return <LoadingSpinner />;
