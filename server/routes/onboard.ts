@@ -542,7 +542,13 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/candidates/:id/documents", async (req, res) => {
     const result = await storage.getDocuments(param(req, "id"));
-    res.json(result);
+    const { isFileKnownMissing } = await import("../object-storage");
+    const annotated = result.map((doc: any) => {
+      if (!doc?.filePath) return doc;
+      const filename = path.basename(doc.filePath);
+      return isFileKnownMissing(filename) ? { ...doc, fileMissing: true } : doc;
+    });
+    res.json(annotated);
   });
 
   app.post("/api/candidates/:id/documents", async (req, res) => {

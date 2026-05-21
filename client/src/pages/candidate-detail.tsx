@@ -61,7 +61,10 @@ import type {
   InductionPolicy, ProfessionalIndemnity, AuditLog, Document
 } from "@shared/schema";
 
+import { FileMissingBadge } from "@/components/shared/file-missing-badge";
+
 function DocumentLink({ doc }: { doc: any }) {
+  if (doc.fileMissing) return <FileMissingBadge id={doc.id} />;
   if (!doc.filePath) return null;
   return (
     <span className="inline-flex items-center gap-2">
@@ -1533,7 +1536,7 @@ function DbsTab({ candidateId }: { candidateId: string }) {
           <InfoRow label="Update Service" value={verification.updateServiceSubscribed ? "Subscribed" : "Not subscribed"} />
           <InfoRow label="Check Result" value={verification.checkResult} />
         </div>
-        {verificationSourceDoc && verificationSourceDoc.filePath && (
+        {verificationSourceDoc && verificationSourceDoc.filePath && !(verificationSourceDoc as any).fileMissing && (
           <div className="rounded-md border border-emerald-900/40 bg-emerald-950/20 p-3 text-xs text-muted-foreground flex items-center gap-2" data-testid="dbs-verified-source-doc">
             <FileCheck className="h-4 w-4 text-emerald-400" />
             <span>Verified from</span>
@@ -1661,7 +1664,8 @@ function DbsTab({ candidateId }: { candidateId: string }) {
                   })()}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
-                  {selectedDoc.filePath && (
+                  {(selectedDoc as any).fileMissing && <FileMissingBadge id={selectedDoc.id} />}
+                  {selectedDoc.filePath && !(selectedDoc as any).fileMissing && (
                     <Button asChild variant="outline" size="sm" data-testid={`button-open-dbs-doc-${selectedDoc.id}`}>
                       <a href={selectedDoc.filePath} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5 mr-1" />
@@ -1902,7 +1906,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
         {rtwDocs.length > 0 && (
           <div className="space-y-2">
             {rtwDocs.map((doc: any) => {
-              const isImage = doc.mimeType?.startsWith("image/") && !!doc.filePath;
+              const isImage = doc.mimeType?.startsWith("image/") && !!doc.filePath && !doc.fileMissing;
               return (
               <div key={doc.id} className="rounded-lg border border-card-border" data-testid={`doc-rtw-${doc.id}`}>
                 <div className="flex items-center justify-between p-3">
@@ -1947,7 +1951,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       <Badge variant="outline" className="text-xs">Expires: {doc.expiryDate}</Badge>
                     )}
                     <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
-                    {doc.filePath && (
+                    {doc.filePath && !doc.fileMissing && (
                       <Button variant="ghost" size="icon" className="h-7 w-7" asChild tooltip="Open this document in a new tab.">
                         <a href={doc.filePath} target="_blank" rel="noopener noreferrer" data-testid={`button-view-rtw-${doc.id}`}>
                           <ExternalLink className="h-3.5 w-3.5" />
@@ -2040,7 +2044,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
               return (
                 <div key={doc.id} className={`rounded-lg border ${borderClass}`} data-testid={`doc-poa-${doc.id}`}>
                   <div className="flex items-center gap-3 p-3">
-                    {isImage && doc.filePath ? (
+                    {isImage && doc.filePath && !doc.fileMissing ? (
                       <img src={doc.filePath} alt="Proof of address" className="h-12 w-12 rounded object-cover border border-border shrink-0" />
                     ) : (
                       <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
@@ -2048,7 +2052,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      {doc.filePath ? (
+                      {doc.filePath && !doc.fileMissing ? (
                         <a
                           href={doc.filePath}
                           target="_blank"
@@ -2061,6 +2065,9 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                       ) : (
                         <p className="text-sm font-medium truncate">{doc.originalFilename || doc.filename}</p>
                       )}
+                      {doc.fileMissing && (
+                        <div className="mt-1"><FileMissingBadge id={doc.id} /></div>
+                      )}
                       {doc.expiryDate ? (
                         <span className={`text-[10px] ${expired ? "text-red-500" : "text-emerald-600"}`}>
                           Dated: {new Date(doc.expiryDate).toLocaleDateString("en-GB")}
@@ -2072,7 +2079,7 @@ function RightToWorkTab({ candidateId, candidateName }: { candidateId: string; c
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <DocumentAiIndicator status={doc.aiStatus} issues={doc.aiIssues} />
-                      {doc.filePath && (
+                      {doc.filePath && !doc.fileMissing && (
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" asChild tooltip="Open this proof-of-address document in a new tab.">
                           <a href={doc.filePath} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" /></a>
                         </Button>
@@ -4343,7 +4350,7 @@ function DocumentsTab({ candidateId, candidateName }: { candidateId: string; can
                       </a>
                     </Button>
                   )}
-                  {doc.filePath && (
+                  {doc.filePath && !doc.fileMissing && (
                     <Button variant="ghost" size="icon" className="h-7 w-7" asChild tooltip="Open this document in a new tab.">
                       <a href={doc.filePath} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5" />

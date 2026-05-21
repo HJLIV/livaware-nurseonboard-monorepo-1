@@ -23,6 +23,7 @@ import {
   Calendar,
   X,
 } from "lucide-react";
+import { FileMissingBadge } from "@/components/shared/file-missing-badge";
 
 interface DocumentRow {
   id: string;
@@ -38,6 +39,7 @@ interface DocumentRow {
   aiStatus: string | null;
   uploadedAt: string;
   candidateName: string;
+  fileMissing?: boolean;
 }
 
 interface Pagination {
@@ -294,7 +296,9 @@ export default function DocumentsPage() {
                       </div>
 
                       <div className="flex items-center justify-end gap-2">
-                        {doc.filePath ? (
+                        {doc.fileMissing ? (
+                          <FileMissingBadge id={doc.id} />
+                        ) : doc.filePath ? (
                           <a
                             href={doc.filePath}
                             target="_blank"

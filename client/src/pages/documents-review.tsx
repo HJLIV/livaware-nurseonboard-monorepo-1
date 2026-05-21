@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { FileMissingBadge } from "@/components/shared/file-missing-badge";
 
 // Categories the admin can choose from for a manual override. Mirrors the
 // server's ALLOWED_CATEGORIES set in routes/documents.ts and the dictionary
@@ -87,6 +88,7 @@ interface ReviewRow {
   aiIssues: AiIssueEntry[] | null;
   uploadedAt: string;
   candidateName: string;
+  fileMissing?: boolean;
 }
 
 function formatDate(dateStr: string) {
@@ -385,7 +387,7 @@ export default function DocumentsReviewPage() {
                       >
                         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_220px_auto] gap-4 items-start">
                           <div className="flex items-start gap-3 min-w-0">
-                            {doc.mimeType?.startsWith("image/") && doc.filePath ? (
+                            {doc.mimeType?.startsWith("image/") && doc.filePath && !doc.fileMissing ? (
                               <a
                                 href={doc.filePath}
                                 target="_blank"
@@ -497,7 +499,8 @@ export default function DocumentsReviewPage() {
                           </div>
 
                           <div className="flex items-center gap-2 justify-end flex-wrap">
-                            {doc.filePath && (
+                            {doc.fileMissing && <FileMissingBadge id={doc.id} />}
+                            {doc.filePath && !doc.fileMissing && (
                               <>
                                 <Button
                                   type="button"

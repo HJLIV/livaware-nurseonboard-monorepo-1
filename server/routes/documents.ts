@@ -171,8 +171,15 @@ export function registerDocumentRoutes(app: Express) {
 
     const total = countResult[0]?.count ?? 0;
 
+    const { isFileKnownMissing } = await import("../object-storage");
+    const annotated = rows.map((r) => {
+      if (!r.filePath) return r;
+      const filename = path.basename(r.filePath);
+      return isFileKnownMissing(filename) ? { ...r, fileMissing: true } : r;
+    });
+
     res.json({
-      data: rows,
+      data: annotated,
       pagination: {
         page,
         limit,
@@ -659,7 +666,14 @@ export function registerDocumentRoutes(app: Express) {
       )
       .orderBy(desc(documents.uploadedAt));
 
-    res.json({ data: rows, total: rows.length });
+    const { isFileKnownMissing } = await import("../object-storage");
+    const path = await import("path");
+    const annotated = rows.map((r) => {
+      if (!r.filePath) return r;
+      const filename = path.basename(r.filePath);
+      return isFileKnownMissing(filename) ? { ...r, fileMissing: true } : r;
+    });
+    res.json({ data: annotated, total: annotated.length });
   });
 
   app.get("/api/admin/documents/filters", async (_req, res) => {

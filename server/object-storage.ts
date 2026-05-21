@@ -86,6 +86,7 @@ export async function uploadFromDisk(filename: string): Promise<boolean> {
       );
       return false;
     }
+    clearFileMissing(filename);
     return true;
   } catch (err) {
     console.error(
@@ -111,12 +112,38 @@ export async function existsInBucket(filename: string): Promise<boolean> {
   }
 }
 
+// Set of filenames that we have positively identified as missing from
+// BOTH local disk and the bucket — populated at boot by backfill pass 2
+// and topped up whenever ensureLocalCopy fails with a not-found. Used
+// by the documents API to flag broken file rows in the UI so admins
+// see "File missing — re-upload required" instead of a link that 404s.
+const knownMissingFiles = new Set<string>();
+
+export function isFileKnownMissing(filename: string): boolean {
+  return knownMissingFiles.has(filename);
+}
+
+export function getKnownMissingFiles(): string[] {
+  return Array.from(knownMissingFiles);
+}
+
+function markFileMissing(filename: string) {
+  knownMissingFiles.add(filename);
+}
+
+function clearFileMissing(filename: string) {
+  knownMissingFiles.delete(filename);
+}
+
 // Download a file from the bucket into `<uploadsDir>/<filename>` if it
 // isn't already on disk. Returns true if the file is now present on
 // disk (either because it already was, or because we just fetched it).
 export async function ensureLocalCopy(filename: string): Promise<boolean> {
   const absolute = path.join(uploadsDir, filename);
-  if (fs.existsSync(absolute)) return true;
+  if (fs.existsSync(absolute)) {
+    clearFileMissing(filename);
+    return true;
+  }
   const client = getClient();
   if (!client) return false;
   try {
@@ -136,10 +163,13 @@ export async function ensureLocalCopy(filename: string): Promise<boolean> {
           `[object-storage] ensureLocalCopy failed for ${filename}:`,
           message,
         );
+      } else {
+        markFileMissing(filename);
       }
       return false;
     }
     console.log(`[object-storage] re-hydrated ${filename} from bucket`);
+    clearFileMissing(filename);
     return true;
   } catch (err) {
     console.error(
@@ -255,6 +285,7 @@ export async function backfillUploadsToBucket(): Promise<void> {
       const inBucket = await existsInBucket(filename);
       if (inBucket) continue;
       lostCount++;
+      markFileMissing(filename);
       if (lostSamples.length < 10) lostSamples.push(`${id}:${filename}`);
     }
     if (lostCount > 0) {
