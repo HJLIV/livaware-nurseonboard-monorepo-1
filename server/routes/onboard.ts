@@ -1,6 +1,6 @@
 import type { Express, Request } from "express";
 import { storage } from "../storage";
-import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin } from "../middleware";
+import { upload, uploadsDir, magicLinkLimiter, uploadLimiter, requireAdmin, isSuperAdmin } from "../middleware";
 import { isShareCodeDoc, isValidRtwDoc } from "@shared/rtw-evidence";
 import { isProofOfAddressWithinThreeMonths } from "@shared/poa-validity";
 import { sendApplicantWelcomeEmail, sendOutstandingNudgeEmail, sendSignInReminderEmail, sendReferenceRequestEmail, getDefaultReferenceEmailBody, getReminderReferenceEmailBody } from "../outlook";
@@ -290,6 +290,13 @@ export function registerAdminRoutes(app: Express) {
     else if ((conditions || []).length > 0 || statusLower.includes("caution") || statusLower.includes("condition")) verificationStatus = "escalated";
     else if (statusLower.includes("lapsed") || statusLower.includes("expired")) verificationStatus = "failed";
 
+    // Super-admin sits at the top of the escalation chain — when they
+    // confirm an NMC check themselves, "escalated" is treated as their
+    // own final accept. "failed" still stands (genuine disqualifier).
+    if (verificationStatus === "escalated" && isSuperAdmin(req)) {
+      verificationStatus = "verified";
+    }
+
     let resolvedFilePath: string | null = null;
     if (uploadedFilename) {
       const safeName = path.basename(uploadedFilename);
@@ -447,6 +454,14 @@ export function registerAdminRoutes(app: Express) {
       } else if (!checkResult.isClear) {
         verificationStatus = "escalated";
         checkResultText = "Certificate has existing information — review recommended";
+      }
+
+      // Super-admin is the top of the escalation chain — their live-check
+      // result is treated as the final word; "escalated" auto-promotes to
+      // "verified" so no further admin review is needed.
+      if (verificationStatus === "escalated" && isSuperAdmin(req)) {
+        verificationStatus = "verified";
+        checkResultText = `${checkResultText} (accepted by super-admin)`;
       }
 
       const dbsData = {
