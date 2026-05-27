@@ -948,7 +948,7 @@ function EmailTemplateEditor({
 }
 
 function AllEmailTemplatesCard() {
-  const { data, isLoading } = useQuery<{ items: EmailTemplateListItem[] }>({
+  const { data, isLoading, error } = useQuery<{ items: EmailTemplateListItem[] }>({
     queryKey: ["/api/admin/email-templates"],
   });
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -985,8 +985,17 @@ function AllEmailTemplatesCard() {
       </CardHeader>
       <CardContent className="space-y-5">
         {isLoading ? (
-          <div className="py-6 flex justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
+          </div>
+        ) : error ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+            Could not load templates — your session may have expired.{" "}
+            <a href="/" className="underline">Sign in again</a> and reload this page.
+          </div>
+        ) : !data?.items?.length ? (
+          <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            No editable templates registered.
           </div>
         ) : (
           (["nurse", "internal", "broadcast"] as const).map((cat) =>
