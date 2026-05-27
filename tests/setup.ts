@@ -5,6 +5,8 @@ process.env.ADMIN_USERNAME = "admin";
 process.env.ADMIN_PASSWORD = "admin";
 process.env.TEAM_USERNAME = "team";
 process.env.TEAM_PASSWORD = "teampass";
+process.env.SUPER_ADMIN_USERNAME = "superadmin";
+process.env.SUPER_ADMIN_PASSWORD = "superpass";
 process.env.SESSION_SECRET = "test-secret-key-for-vitest";
 
 beforeAll(async () => {

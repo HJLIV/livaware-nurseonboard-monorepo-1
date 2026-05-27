@@ -229,5 +229,9 @@ export async function registerRoutes(
   const { registerDeclarationRoutes } = await import("./routes/declarations");
   registerDeclarationRoutes(app);
 
+  // === SUPERVISION & APPRAISALS (task 162) ===
+  const { registerSupervisionRoutes } = await import("./routes/supervisions");
+  registerSupervisionRoutes(app);
+
   return httpServer;
 }

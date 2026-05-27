@@ -13,7 +13,8 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision"]);
+export const supervisionTypeEnum = pgEnum("supervision_type", ["supervision", "appraisal", "reflection", "other"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
 // Onboard enums
@@ -991,6 +992,37 @@ export type InsertPolicy = z.infer<typeof insertPolicySchema>;
 export type PolicyAcknowledgement = typeof policyAcknowledgements.$inferSelect;
 export type InsertPolicyAcknowledgement = z.infer<typeof insertPolicyAcknowledgementSchema>;
 export type PolicyReadEvent = typeof policyReadEvents.$inferSelect;
+
+// ==================== NURSE SUPERVISIONS (task 162) ====================
+// Per-nurse log of 1:1 supervision calls, appraisals, and reflective
+// conversations. Admin-only — never surfaced via the nurse portal. The
+// optional attachment is stored through the same multer + object-storage
+// path as other nurse documents but kept *out* of the `documents` table
+// so the nurse can't pull it down via /api/documents/:id/download.
+export const nurseSupervisions = pgTable("nurse_supervisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  type: supervisionTypeEnum("type").notNull(),
+  title: text("title"),
+  conversationDate: text("conversation_date").notNull(),
+  notes: text("notes").notNull(),
+  attachmentFilename: text("attachment_filename"),
+  attachmentOriginalFilename: text("attachment_original_filename"),
+  attachmentMimeType: text("attachment_mime_type"),
+  attachmentSize: integer("attachment_size"),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedBy: text("updated_by"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("nurse_supervisions_nurse_id_idx").on(table.nurseId),
+  index("nurse_supervisions_conversation_date_idx").on(table.conversationDate),
+]);
+export const insertNurseSupervisionSchema = createInsertSchema(nurseSupervisions).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type NurseSupervision = typeof nurseSupervisions.$inferSelect;
+export type InsertNurseSupervision = z.infer<typeof insertNurseSupervisionSchema>;
 
 // ==================== STAGE DISPLAY NAMES ====================
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {

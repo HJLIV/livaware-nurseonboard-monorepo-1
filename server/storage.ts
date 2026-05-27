@@ -29,6 +29,7 @@ import {
   type EducationHistory, type InsertEducationHistory,
   type EqualOpportunities, type InsertEqualOpportunities,
   emailTemplates, type EmailTemplate, type InsertEmailTemplate,
+  nurseSupervisions, type NurseSupervision, type InsertNurseSupervision,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -155,6 +156,13 @@ export interface IStorage {
   getAllNmcVerifications(): Promise<NmcVerification[]>;
   getAllDbsVerifications(): Promise<DbsVerification[]>;
   getAllOnboardingStates(): Promise<OnboardingState[]>;
+
+  // Supervision & Appraisals (task 162) — admin-only per-nurse log.
+  listSupervisionsByNurse(nurseId: string): Promise<NurseSupervision[]>;
+  getSupervision(id: string): Promise<NurseSupervision | undefined>;
+  createSupervision(data: InsertNurseSupervision): Promise<NurseSupervision>;
+  updateSupervision(id: string, data: Partial<InsertNurseSupervision>): Promise<NurseSupervision | undefined>;
+  deleteSupervision(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -753,6 +761,45 @@ export class DatabaseStorage implements IStorage {
       .where(eq(scheduledJobRuns.id, id))
       .limit(1);
     return row;
+  }
+
+  // ─── Supervision & Appraisals (task 162) ──────────────────────────
+  async listSupervisionsByNurse(nurseId: string): Promise<NurseSupervision[]> {
+    return db
+      .select()
+      .from(nurseSupervisions)
+      .where(eq(nurseSupervisions.nurseId, nurseId))
+      .orderBy(desc(nurseSupervisions.conversationDate), desc(nurseSupervisions.createdAt));
+  }
+
+  async getSupervision(id: string): Promise<NurseSupervision | undefined> {
+    const [row] = await db
+      .select()
+      .from(nurseSupervisions)
+      .where(eq(nurseSupervisions.id, id))
+      .limit(1);
+    return row;
+  }
+
+  async createSupervision(data: InsertNurseSupervision): Promise<NurseSupervision> {
+    const [row] = await db.insert(nurseSupervisions).values(data).returning();
+    return row;
+  }
+
+  async updateSupervision(
+    id: string,
+    data: Partial<InsertNurseSupervision>,
+  ): Promise<NurseSupervision | undefined> {
+    const [row] = await db
+      .update(nurseSupervisions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(nurseSupervisions.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteSupervision(id: string): Promise<void> {
+    await db.delete(nurseSupervisions).where(eq(nurseSupervisions.id, id));
   }
 }
 

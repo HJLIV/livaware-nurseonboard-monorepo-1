@@ -52,7 +52,8 @@ import { useAuth } from "@/lib/auth";
 import { useAuthRole } from "@/lib/use-auth-role";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback, useRef } from "react";
-import { Pencil, Save, X, Lock as LockIcon, Unlock } from "lucide-react";
+import { Pencil, Save, X, Lock as LockIcon, Unlock, MessageSquare } from "lucide-react";
+import { SupervisionPanel } from "@/components/admin/supervision-panel";
 import { ONBOARDING_STEPS, COMPETENCY_MATRIX, MANDATORY_TRAINING_MODULES, INDUCTION_POLICIES, REFERENCE_QUESTIONS } from "@shared/schema";
 import { isProofOfAddressWithinThreeMonths, getProofOfAddressValidity } from "@shared/poa-validity";
 import type {
@@ -5433,8 +5434,12 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
     initialParams.section === "preboard" || initialParams.section === "compliance" || initialParams.section === "onboarding"
       ? initialParams.section
       : "onboarding";
-  const initialSectionAny = (initialParams.section === "invoices" ? "invoices" : initialSection) as "preboard" | "onboarding" | "compliance" | "invoices";
-  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance" | "invoices">(initialSectionAny);
+  const initialSectionAny = (initialParams.section === "invoices"
+    ? "invoices"
+    : initialParams.section === "supervision"
+      ? "supervision"
+      : initialSection) as "preboard" | "onboarding" | "compliance" | "invoices" | "supervision";
+  const [section, setSection] = useState<"preboard" | "onboarding" | "compliance" | "invoices" | "supervision">(initialSectionAny);
   const { isSuperAdmin } = useAuthRole();
   const initialOnboardingTab = initialParams.tab && VALID_ONBOARDING_TABS.has(initialParams.tab) ? initialParams.tab : "identity";
   const initialComplianceTab = initialParams.tab && VALID_COMPLIANCE_TABS.has(initialParams.tab) ? initialParams.tab : "induction";
@@ -5491,6 +5496,16 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
           <FileText className="h-3.5 w-3.5" />
           Invoices
         </Button>
+        <Button
+          variant={section === "supervision" ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setSection("supervision")}
+          data-testid="button-section-supervision"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          Supervision
+        </Button>
       </div>
 
       {section === "onboarding" && (
@@ -5539,6 +5554,10 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
 
       {section === "invoices" && (
         <CandidateInvoicesSection candidateId={candidateId} candidate={candidate} />
+      )}
+
+      {section === "supervision" && (
+        <SupervisionPanel nurseId={candidateId} />
       )}
 
       {section === "compliance" && (
