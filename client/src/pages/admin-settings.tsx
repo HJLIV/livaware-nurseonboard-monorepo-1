@@ -948,8 +948,11 @@ function EmailTemplateEditor({
 }
 
 function AllEmailTemplatesCard() {
-  const { data, isLoading, error } = useQuery<{ items: EmailTemplateListItem[] }>({
+  const { data, isLoading, error, refetch } = useQuery<{ items: EmailTemplateListItem[] }>({
     queryKey: ["/api/admin/email-templates"],
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
   });
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
@@ -989,9 +992,13 @@ function AllEmailTemplatesCard() {
             <Loader2 className="h-4 w-4 animate-spin" /> Loading templates…
           </div>
         ) : error ? (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
-            Could not load templates — your session may have expired.{" "}
-            <a href="/" className="underline">Sign in again</a> and reload this page.
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200 flex items-center justify-between gap-3">
+            <span>
+              Could not load templates ({(error as Error).message || "request failed"}).
+            </span>
+            <Button size="sm" variant="outline" onClick={() => refetch()}>
+              Retry
+            </Button>
           </div>
         ) : !data?.items?.length ? (
           <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
