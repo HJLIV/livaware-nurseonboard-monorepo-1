@@ -875,17 +875,32 @@ export function registerNurseRoutes(app: Express) {
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });
     const now = new Date();
     const note = typeof req.body?.note === "string" ? req.body.note : undefined;
-    await db.update(nurses).set({
-      onboardingUnlockedAt: now,
-      onboardingUnlockedBy: agentFor(req),
-      onboardingLockedReason: null,
-      updatedAt: now,
-    }).where(eq(nurses.id, req.params.id));
+    // Conditional update: only this request wins the locked→unlocked
+    // transition. Prevents racing the auto-unlocker into a double email.
+    const updated = await db
+      .update(nurses)
+      .set({
+        onboardingUnlockedAt: now,
+        onboardingUnlockedBy: agentFor(req),
+        onboardingLockedReason: null,
+        updatedAt: now,
+      })
+      .where(and(eq(nurses.id, req.params.id), isNull(nurses.onboardingUnlockedAt)))
+      .returning({ id: nurses.id });
     await logAction(nurse.id, "admin", "onboarding_unlocked", agentFor(req), {
       mode: "manual_admin",
       previouslyUnlocked: !!nurse.onboardingUnlockedAt,
       note,
     });
+    // Only fire the notification email if THIS request was the one that
+    // actually flipped the gate. If auto-unlock or another admin won the
+    // race, the email has already gone (or is going) from there.
+    if (updated.length > 0) {
+      const { notifyOnboardingUnlocked } = await import("../services/onboarding-gate");
+      void notifyOnboardingUnlocked(nurse.id, "manual_admin").catch((err) => {
+        console.error("[admin] notifyOnboardingUnlocked (manual) failed:", err.message);
+      });
+    }
     const state = await getGateState(req.params.id);
     res.json(state);
   });

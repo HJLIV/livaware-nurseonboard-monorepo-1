@@ -148,6 +148,98 @@ export async function sendPortalInviteEmail(
   });
 }
 
+// ─── Onboarding-unlocked email ───────────────────────────────────────
+// Sent when a nurse passes the three onboarding prerequisites (preboard
+// exam, ≥1 competency declaration, admin CV review) and the gate flips
+// from locked → unlocked, OR when an admin manually unlocks. Lets them
+// know the Induction & Training section (handbook, policies, SOP,
+// Skills Arcade) is now open and waiting for them.
+const ONBOARDING_UNLOCKED_SUBJECT =
+  "Livaware — Your onboarding is unlocked";
+
+export async function sendOnboardingUnlockedEmail(
+  recipientEmail: string,
+  recipientName: string,
+  portalUrl: string,
+) {
+  const client = await getGraphClient();
+  const firstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
+
+  const htmlBody = `
+    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
+      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 36px 32px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
+        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">You're through compliance</p>
+        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
+        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
+      </div>
+
+      <div style="padding: 36px 32px 28px;">
+        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 16px;">
+          Great news — your compliance checks are complete and we've now unlocked the next part of your portal. The Induction &amp; Training section is open and waiting for you.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 24px;">
+          When you have a quiet 30 minutes, please sign in and work through it. Each section saves automatically, so you can pause and come back any time.
+        </p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 16px 56px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.20em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(200, 169, 110, 0.25);">
+            Open My Portal
+          </a>
+        </div>
+
+        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all; text-align: center; margin: 0 0 28px;">
+          Or paste this link into your browser:<br />
+          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
+        </p>
+
+        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
+          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">What's now waiting for you</p>
+          <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
+            <li><strong style="color: #F0ECE4;">Employee handbook &amp; induction</strong> — please read and acknowledge.</li>
+            <li><strong style="color: #F0ECE4;">Policies</strong> — sign off on the current versions of our SOPs and policies.</li>
+            <li><strong style="color: #F0ECE4;">Mandatory training</strong> — any outstanding modules to upload or complete.</li>
+            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short scenarios to round out your profile.</li>
+          </ul>
+        </div>
+
+        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 16px 20px; border-radius: 6px; margin: 0 0 24px;">
+          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in any time</p>
+          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0;">
+            You don't need to keep this email. Visit <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a> any time and enter your email — we'll send you a 6-digit code to sign in straight away.
+          </p>
+        </div>
+
+        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.7; margin: 0 0 8px;">
+          If anything's unclear or you'd like a hand, just reply to this email and someone from our onboarding team will get back to you.
+        </p>
+
+        <p style="font-size: 14px; color: #E0DCD4; margin-top: 28px; line-height: 1.7;">
+          Thanks for getting through compliance,<br />
+          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
+        </p>
+      </div>
+
+      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
+        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
+      </div>
+    </div>
+  `;
+
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: ONBOARDING_UNLOCKED_SUBJECT,
+      body: { contentType: "HTML", content: htmlBody },
+      toRecipients: [
+        { emailAddress: { address: recipientEmail, name: recipientName } },
+      ],
+    },
+    saveToSentItems: true,
+  });
+}
+
 // ─── Applicant welcome email ─────────────────────────────────────────
 // First-touch email sent when admin registers a new applicant. Warmer
 // and more on-brand than the generic portal-invite email because this
