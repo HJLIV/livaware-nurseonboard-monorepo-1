@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -735,15 +735,35 @@ interface AnnouncementSendResult {
   failed: { nurseId: string; email: string; error: string }[];
 }
 
-interface EmailTemplateRow {
-  key: string;
-  subject: string;
-  bodyHtml: string;
-  bodyText: string;
-  updatedAt: string;
-  updatedBy: string | null;
-  defaults: { subject: string; bodyHtml: string; bodyText: string };
+interface TemplateField {
+  name: string;
+  label: string;
+  kind: "text" | "textarea" | "list";
+  default: string;
+  help?: string;
+  rows?: number;
 }
+interface TemplateTokenDef {
+  name: string;
+  description: string;
+}
+interface EmailTemplateDetail {
+  key: string;
+  label: string;
+  description: string;
+  category: "nurse" | "internal" | "broadcast";
+  tokens: TemplateTokenDef[];
+  defaultSubject: string;
+  fields: TemplateField[];
+  current: {
+    subject: string;
+    fields: Record<string, string>;
+    updatedAt: string | null;
+    updatedBy: string | null;
+  };
+  defaults: { subject: string; fields: Record<string, string> };
+}
+interface EmailTemplateListItem extends Omit<EmailTemplateDetail, "defaults"> {}
 
 function EmailTemplateEditor({
   templateKey,
@@ -755,24 +775,23 @@ function EmailTemplateEditor({
   templateKey: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  previewQueryKey: string;
-  tokensHelp: string;
+  previewQueryKey?: string;
+  tokensHelp?: string;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: tpl, isLoading } = useQuery<EmailTemplateRow>({
+  const { data: tpl, isLoading } = useQuery<EmailTemplateDetail>({
     queryKey: [`/api/admin/email-templates/${templateKey}`],
     enabled: open,
   });
   const [subject, setSubject] = useState("");
-  const [bodyHtml, setBodyHtml] = useState("");
-  const [bodyText, setBodyText] = useState("");
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
 
   useEffect(() => {
     if (tpl) {
-      setSubject(tpl.subject);
-      setBodyHtml(tpl.bodyHtml);
-      setBodyText(tpl.bodyText);
+      setSubject(tpl.current.subject);
+      setFields({ ...tpl.current.fields });
     }
   }, [tpl]);
 
@@ -780,15 +799,15 @@ function EmailTemplateEditor({
     mutationFn: async () => {
       const res = await apiRequest("PUT", `/api/admin/email-templates/${templateKey}`, {
         subject,
-        bodyHtml,
-        bodyText,
+        fields,
       });
-      return (await res.json()) as EmailTemplateRow;
+      return await res.json();
     },
     onSuccess: () => {
-      toast({ title: "Template saved", description: "Future sends will use the updated copy." });
+      toast({ title: "Template saved", description: "Future sends will use the updated wording." });
       qc.invalidateQueries({ queryKey: [`/api/admin/email-templates/${templateKey}`] });
-      qc.invalidateQueries({ queryKey: [previewQueryKey] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/email-templates"] });
+      if (previewQueryKey) qc.invalidateQueries({ queryKey: [previewQueryKey] });
       onOpenChange(false);
     },
     onError: (err: any) => {
@@ -799,16 +818,28 @@ function EmailTemplateEditor({
   const resetToDefault = () => {
     if (!tpl) return;
     setSubject(tpl.defaults.subject);
-    setBodyHtml(tpl.defaults.bodyHtml);
-    setBodyText(tpl.defaults.bodyText);
+    setFields({ ...tpl.defaults.fields });
+  };
+
+  const loadPreview = async () => {
+    try {
+      const res = await apiRequest("GET", `/api/admin/email-templates/${templateKey}/preview`);
+      const data = await res.json();
+      setPreviewHtml(data.html as string);
+    } catch (err: any) {
+      toast({ title: "Preview failed", description: err?.message || "Unknown error", variant: "destructive" });
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit email template</DialogTitle>
-          <DialogDescription>{tokensHelp}</DialogDescription>
+          <DialogTitle>{tpl?.label || "Edit email template"}</DialogTitle>
+          <DialogDescription>
+            {tpl?.description || tokensHelp ||
+              "Edit the wording below. Each section is plain text — the platform handles the layout, colours, and buttons for you."}
+          </DialogDescription>
         </DialogHeader>
         {isLoading || !tpl ? (
           <div className="py-12 flex justify-center">
@@ -816,8 +847,20 @@ function EmailTemplateEditor({
           </div>
         ) : (
           <div className="space-y-4">
+            {tpl.tokens.length > 0 && (
+              <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
+                <p className="font-medium mb-1.5">Tokens you can use anywhere</p>
+                <ul className="space-y-1 text-muted-foreground">
+                  {tpl.tokens.map((t) => (
+                    <li key={t.name}>
+                      <code className="px-1 py-0.5 rounded bg-muted text-[#C8A96E]">{t.name}</code> — {t.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="space-y-1.5">
-              <Label htmlFor="tpl-subject">Subject</Label>
+              <Label htmlFor="tpl-subject">Subject line</Label>
               <Input
                 id="tpl-subject"
                 value={subject}
@@ -825,48 +868,68 @@ function EmailTemplateEditor({
                 data-testid="input-template-subject"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tpl-html">HTML body</Label>
-              <Textarea
-                id="tpl-html"
-                value={bodyHtml}
-                onChange={(e) => setBodyHtml(e.target.value)}
-                rows={18}
-                className="font-mono text-xs"
-                data-testid="textarea-template-html"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="tpl-text">Plain-text body</Label>
-              <Textarea
-                id="tpl-text"
-                value={bodyText}
-                onChange={(e) => setBodyText(e.target.value)}
-                rows={10}
-                className="font-mono text-xs"
-                data-testid="textarea-template-text"
-              />
-            </div>
+            {tpl.fields.map((f) => (
+              <div key={f.name} className="space-y-1.5">
+                <Label htmlFor={`tpl-field-${f.name}`}>{f.label}</Label>
+                {f.kind === "text" ? (
+                  <Input
+                    id={`tpl-field-${f.name}`}
+                    value={fields[f.name] ?? ""}
+                    onChange={(e) => setFields((p) => ({ ...p, [f.name]: e.target.value }))}
+                    data-testid={`input-template-field-${f.name}`}
+                  />
+                ) : (
+                  <Textarea
+                    id={`tpl-field-${f.name}`}
+                    value={fields[f.name] ?? ""}
+                    onChange={(e) => setFields((p) => ({ ...p, [f.name]: e.target.value }))}
+                    rows={f.rows || (f.kind === "list" ? 6 : 5)}
+                    data-testid={`textarea-template-field-${f.name}`}
+                  />
+                )}
+                {f.help && <p className="text-[11px] text-muted-foreground">{f.help}</p>}
+                {f.kind === "list" && (
+                  <p className="text-[11px] text-muted-foreground">
+                    One bullet point per line. Use "Title — body" to get a bold title before the dash.
+                  </p>
+                )}
+              </div>
+            ))}
             <p className="text-[11px] text-muted-foreground">
-              Last updated by <strong>{tpl.updatedBy || "—"}</strong>{" "}
-              {tpl.updatedAt ? `at ${new Date(tpl.updatedAt).toLocaleString()}` : ""}
+              Last updated by <strong>{tpl.current.updatedBy || "—"}</strong>
+              {tpl.current.updatedAt ? ` at ${new Date(tpl.current.updatedAt).toLocaleString()}` : ""}
             </p>
-            <div className="flex justify-between gap-2 pt-2">
-              <Button
-                variant="ghost"
-                onClick={resetToDefault}
-                disabled={save.isPending}
-                tooltip="Reload the built-in default copy into these fields (does not save until you press Save)."
-              >
-                Reset to default
-              </Button>
+            {previewHtml && (
+              <div className="rounded border border-border/60 overflow-hidden">
+                <iframe title="Email preview" srcDoc={previewHtml} className="w-full h-[50vh] bg-white" />
+              </div>
+            )}
+            <div className="flex justify-between gap-2 pt-2 flex-wrap">
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={resetToDefault}
+                  disabled={save.isPending}
+                  tooltip="Reload the built-in default wording into these fields (does not save until you press Save)."
+                >
+                  Reset to default
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={loadPreview}
+                  disabled={save.isPending}
+                  data-testid="button-preview-template"
+                >
+                  <Mail className="h-4 w-4 mr-2" /> Preview
+                </Button>
+              </div>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={save.isPending}>
                   Cancel
                 </Button>
                 <Button
                   onClick={() => save.mutate()}
-                  disabled={save.isPending || !subject || !bodyHtml || !bodyText}
+                  disabled={save.isPending || !subject.trim()}
                   data-testid="button-save-template"
                 >
                   {save.isPending ? (
@@ -881,6 +944,102 @@ function EmailTemplateEditor({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AllEmailTemplatesCard() {
+  const { data, isLoading } = useQuery<{ items: EmailTemplateListItem[] }>({
+    queryKey: ["/api/admin/email-templates"],
+  });
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    const out: Record<string, EmailTemplateListItem[]> = { nurse: [], internal: [], broadcast: [] };
+    for (const t of data?.items || []) {
+      (out[t.category] ||= []).push(t);
+    }
+    return out;
+  }, [data]);
+
+  const sectionLabel: Record<string, string> = {
+    nurse: "Nurse-facing emails",
+    internal: "Internal notifications",
+    broadcast: "Broadcast announcements",
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start gap-3">
+          <Mail className="h-5 w-5 text-[#C8A96E] mt-1" />
+          <div>
+            <CardTitle>Editable email templates</CardTitle>
+            <CardDescription className="mt-1">
+              Every transactional email the platform sends. Edit the wording — section by section, in
+              plain English — and the design wraps around it automatically. Tokens like{" "}
+              <code className="px-1 py-0.5 rounded bg-muted text-[#C8A96E] text-[11px]">{"{{NAME}}"}</code>{" "}
+              are filled in per recipient.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <div className="py-6 flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          (["nurse", "internal", "broadcast"] as const).map((cat) =>
+            grouped[cat] && grouped[cat].length > 0 ? (
+              <div key={cat} className="space-y-2">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
+                  {sectionLabel[cat]}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {grouped[cat].map((t) => (
+                    <div
+                      key={t.key}
+                      className="rounded-md border border-border/60 bg-muted/20 p-3 flex flex-col justify-between gap-2"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{t.label}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                          {t.description}
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] text-muted-foreground/80">
+                          {t.current.updatedBy
+                            ? `Last edited by ${t.current.updatedBy}`
+                            : "Using built-in default wording"}
+                        </p>
+                        <SuperAdminGate>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingKey(t.key)}
+                            data-testid={`button-edit-template-${t.key}`}
+                          >
+                            <Save className="h-3.5 w-3.5 mr-1.5" /> Edit
+                          </Button>
+                        </SuperAdminGate>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null
+          )
+        )}
+        {editingKey && (
+          <EmailTemplateEditor
+            templateKey={editingKey}
+            open={!!editingKey}
+            onOpenChange={(v) => !v && setEditingKey(null)}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1338,6 +1497,8 @@ export default function AdminSettingsPage() {
       </div>
 
       <SuperAdminViewOnlyBanner />
+
+      <AllEmailTemplatesCard />
 
       <PlatformAnnouncementCard outlookConfigured={outlookConfigured} />
 

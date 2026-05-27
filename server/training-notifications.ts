@@ -112,6 +112,11 @@ export async function computeOutstandingTrainingForNurse(nurseId: string): Promi
 // 2. Email rendering + sending
 // ─────────────────────────────────────────────────────────────────────────
 
+// NOTE: The canonical editable defaults for the chase template now live in
+// the unified email-template registry (server/email-templates.ts, key
+// `training_chase`). These two exports remain for back-compat with the
+// admin-reports route + scheduler + tests; they mirror the registry
+// defaults verbatim. If you change the prose, change it in the registry.
 export const TRAINING_CHASE_DEFAULT_SUBJECT =
   "Outstanding mandatory training — action required";
 

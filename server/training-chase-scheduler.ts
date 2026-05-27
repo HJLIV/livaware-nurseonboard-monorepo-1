@@ -273,10 +273,23 @@ export async function runWeeklyTrainingChase(opts: {
     result.skippedOutlookNotConfigured = true;
   }
 
-  const template = {
+  // Resolve the editable template from the unified registry so scheduled
+  // sends honour /settings edits. Falls back to built-in defaults if the
+  // row hasn't been customised yet.
+  const { resolveTemplate } = await import("./email-templates");
+  let template = {
     subject: TRAINING_CHASE_DEFAULT_SUBJECT,
     body: TRAINING_CHASE_DEFAULT_BODY,
   };
+  try {
+    const tpl = await resolveTemplate("training_chase");
+    template = {
+      subject: tpl.subject || TRAINING_CHASE_DEFAULT_SUBJECT,
+      body: tpl.fields.body || TRAINING_CHASE_DEFAULT_BODY,
+    };
+  } catch (e: any) {
+    result.errors.push(`Could not resolve training_chase template, using defaults: ${e?.message || String(e)}`);
+  }
 
   const candidates = result.skippedOutlookNotConfigured ? [] : await storage.getCandidates();
   const lastByNurse: Map<string, TrainingNotification> = result.skippedOutlookNotConfigured

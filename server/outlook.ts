@@ -1,5 +1,6 @@
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { Client } from "@microsoft/microsoft-graph-client";
+import { renderEmail } from "./email-templates";
 
 const TENANT_ID = process.env.AZURE_AD_TENANT_ID;
 const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID;
@@ -40,15 +41,27 @@ export function isOutlookConfigured(): boolean {
   return !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET);
 }
 
-const PORTAL_INVITE_SUBJECT = "Livaware Ltd — Your Secure Portal Link";
-const PORTAL_INVITE_SUBTITLE = "Livaware Ltd — Secure Nurse Portal";
-const PORTAL_INVITE_BUTTON_LABEL = "Open Your Portal";
-const PORTAL_INVITE_INFO_TITLE = "What to have handy";
-const PORTAL_INVITE_INFO_ITEMS = [
-  "Your NMC PIN, if you have one",
-  "A right-to-work document (passport, visa or share code)",
-  "Any training or qualification certificates you'd like on file",
-];
+function formatExpiry(d: Date): string {
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+async function sendViaTemplate(opts: {
+  key: string;
+  tokens: Record<string, string>;
+  to: { email: string; name: string };
+  subjectOverride?: string;
+}): Promise<void> {
+  const client = await getGraphClient();
+  const rendered = await renderEmail(opts.key, opts.tokens);
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message: {
+      subject: opts.subjectOverride || rendered.subject,
+      body: { contentType: "HTML", content: rendered.html },
+      toRecipients: [{ emailAddress: { address: opts.to.email, name: opts.to.name } }],
+    },
+    saveToSentItems: true,
+  });
+}
 
 export async function sendPortalInviteEmail(
   recipientEmail: string,
@@ -58,607 +71,177 @@ export async function sendPortalInviteEmail(
   _stage?: string,
 ) {
   void _stage;
-  const client = await getGraphClient();
-
-  const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  const infoItems = PORTAL_INVITE_INFO_ITEMS.map(item => `<li>${item}</li>`).join("\n            ");
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px; letter-spacing: -0.01em;">NurseOnboard</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">${PORTAL_INVITE_SUBTITLE}</p>
-      </div>
-
-      <div style="padding: 32px;">
-        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          Here is your secure personal link to the Livaware nurse portal. You can use it to pick up wherever you left off, update your details, or share anything we still need from you.
-        </p>
-
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
-            ${PORTAL_INVITE_BUTTON_LABEL}
-          </a>
-        </div>
-
-        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all;">
-          If the button above does not work, copy and paste this link into your browser:<br />
-          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">${PORTAL_INVITE_INFO_TITLE}</p>
-          <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.8; margin: 0; padding-left: 20px;">
-            ${infoItems}
-          </ul>
-          <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; margin: 12px 0 0;">
-            Only share these if you need to — the portal will let you know what (if anything) is still outstanding.
-          </p>
-        </div>
-
-        <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          This link is personal to you — please do not share it with anyone else. It's a one-time invite that signs you in on this device. After that, you'll sign in any time using your email and a 6-digit code we send you, so you can come back from any device. (For reference, the invite link itself expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong>.)
-        </p>
-
-        <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          If you have any questions or difficulty accessing the portal, please contact our onboarding team.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
-          Kind regards,<br />
-          <strong style="color: #F0ECE4;">Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
-          Livaware Ltd — Secure Nurse Onboarding &middot; CQC Regulation 19 / Schedule 3 Compliant
-        </p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
-          This is an automated message. Please do not reply directly to this email.
-        </p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: PORTAL_INVITE_SUBJECT,
-      body: {
-        contentType: 'HTML',
-        content: htmlBody,
-      },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: recipientEmail,
-            name: recipientName,
-          },
-        },
-      ],
+  await sendViaTemplate({
+    key: "portal_invite",
+    tokens: {
+      NAME: recipientName,
+      FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+      PORTAL_URL: portalUrl,
+      EXPIRY: formatExpiry(expiresAt),
     },
-    saveToSentItems: true,
+    to: { email: recipientEmail, name: recipientName },
   });
 }
-
-// ─── Onboarding-unlocked email ───────────────────────────────────────
-// Sent when a nurse passes the three onboarding prerequisites (preboard
-// exam, ≥1 competency declaration, admin CV review) and the gate flips
-// from locked → unlocked, OR when an admin manually unlocks. Lets them
-// know the Induction & Training section (handbook, policies, SOP,
-// Skills Arcade) is now open and waiting for them.
-const ONBOARDING_UNLOCKED_SUBJECT =
-  "Livaware — Your onboarding is unlocked";
 
 export async function sendOnboardingUnlockedEmail(
-  recipientEmail: string,
-  recipientName: string,
-  portalUrl: string,
-) {
-  const client = await getGraphClient();
-  const firstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 36px 32px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">You're through compliance</p>
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
-      </div>
-
-      <div style="padding: 36px 32px 28px;">
-        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 16px;">
-          Great news — your compliance checks are complete and we've now unlocked the next part of your portal. The Induction &amp; Training section is open and waiting for you.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 24px;">
-          When you have a quiet 30 minutes, please sign in and work through it. Each section saves automatically, so you can pause and come back any time.
-        </p>
-
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 16px 56px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.20em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(200, 169, 110, 0.25);">
-            Open My Portal
-          </a>
-        </div>
-
-        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all; text-align: center; margin: 0 0 28px;">
-          Or paste this link into your browser:<br />
-          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">What's now waiting for you</p>
-          <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
-            <li><strong style="color: #F0ECE4;">Employee handbook &amp; induction</strong> — please read and acknowledge.</li>
-            <li><strong style="color: #F0ECE4;">Policies</strong> — sign off on the current versions of our SOPs and policies.</li>
-            <li><strong style="color: #F0ECE4;">Mandatory training</strong> — any outstanding modules to upload or complete.</li>
-            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short scenarios to round out your profile.</li>
-          </ul>
-        </div>
-
-        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 16px 20px; border-radius: 6px; margin: 0 0 24px;">
-          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in any time</p>
-          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0;">
-            You don't need to keep this email. Visit <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a> any time and enter your email — we'll send you a 6-digit code to sign in straight away.
-          </p>
-        </div>
-
-        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.7; margin: 0 0 8px;">
-          If anything's unclear or you'd like a hand, just reply to this email and someone from our onboarding team will get back to you.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 28px; line-height: 1.7;">
-          Thanks for getting through compliance,<br />
-          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: ONBOARDING_UNLOCKED_SUBJECT,
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [
-        { emailAddress: { address: recipientEmail, name: recipientName } },
-      ],
-    },
-    saveToSentItems: true,
-  });
-}
-
-// ─── Applicant welcome email ─────────────────────────────────────────
-// First-touch email sent when admin registers a new applicant. Warmer
-// and more on-brand than the generic portal-invite email because this
-// is the candidate's first contact with Livaware — should set the tone
-// for the rest of the journey.
-const APPLICANT_WELCOME_SUBJECT = "Welcome to Livaware — your journey starts here";
-
-export async function sendApplicantWelcomeEmail(
-  recipientEmail: string,
-  recipientName: string,
-  portalUrl: string,
-  expiresAt: Date,
-) {
-  const client = await getGraphClient();
-
-  const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  // Use only the first name in the greeting to feel less like a form letter.
-  const firstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-
-      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 36px 32px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Your journey starts here</p>
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 28px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
-      </div>
-
-      <div style="padding: 36px 32px 28px;">
-        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 16px;">
-          A warm welcome to Livaware, and thank you for taking the first step with us. We're delighted you're considering joining our team of nurses, and we've set everything up so that getting to know us is as straightforward as possible.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 24px;">
-          Your secure personal portal is ready — it's where you'll complete each step of your application in your own time, at your own pace. Tap the button below to open it for the first time and you'll be signed in straight away on this device.
-        </p>
-
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 16px 56px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.20em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(200, 169, 110, 0.25);">
-            Open My Portal
-          </a>
-        </div>
-
-        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all; text-align: center; margin: 0 0 28px;">
-          Or paste this link into your browser:<br />
-          <a href="${portalUrl}" style="color: #C8A96E; text-decoration: underline;">${portalUrl}</a>
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">Your three steps with us</p>
-          <ol style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
-            <li><strong style="color: #F0ECE4;">A short clinical assessment</strong> — around 10–15 minutes online. A friendly first look at how you approach real-world scenarios; you can pause and come back to it any time.</li>
-            <li><strong style="color: #F0ECE4;">Share your documents</strong> — passport, right-to-work, NMC PIN and any training certificates. Upload from your phone or laptop, whichever's easier.</li>
-            <li><strong style="color: #F0ECE4;">Skills Arcade</strong> — short interactive scenarios so you can show us how you think on the floor, and we get a sense of where you'll shine.</li>
-          </ol>
-        </div>
-
-        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 16px 20px; border-radius: 6px; margin: 0 0 24px;">
-          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in again, any time</p>
-          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0 0 10px;">
-            You don't need to keep this email to come back. Whenever you'd like to continue, just visit <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a> and enter your email address — we'll send you a 6-digit code to sign in straight away, from any phone, tablet or laptop.
-          </p>
-          <p style="font-size: 12px; color: #B0AAA0; line-height: 1.7; margin: 0;">
-            This first invite link is personal to you, so please keep it private. For reference, it expires on <strong style="color: #C8A96E;">${expiryFormatted}</strong> — but the email-and-code sign-in above always works.
-          </p>
-        </div>
-
-        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.7; margin: 0 0 8px;">
-          If anything's unclear or you hit a snag along the way, just reply to this email and a real person on our onboarding team will get back to you.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 28px; line-height: 1.7;">
-          Looking forward to getting to know you,<br />
-          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
-          Livaware Ltd — Secure Nurse Onboarding &middot; CQC Regulation 19 / Schedule 3 Compliant
-        </p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
-          Replies to this email reach our onboarding team directly.
-        </p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: APPLICANT_WELCOME_SUBJECT,
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [
-        { emailAddress: { address: recipientEmail, name: recipientName } },
-      ],
-    },
-    saveToSentItems: true,
-  });
-}
-
-// ─── Outstanding-items nudge email ───────────────────────────────────
-// Sent from the candidate-detail Actions menu when an admin wants to
-// give an already-registered nurse a gentle, personalised reminder of
-// what's still outstanding on their portal — without resending a fresh
-// portal link (because they can self-sign-in at onboard.livaware.co.uk
-// any time with email + 6-digit code).
-const OUTSTANDING_NUDGE_SUBJECT = "A gentle nudge from Livaware — a few things still to finish";
-
-export async function sendOutstandingNudgeEmail(
-  recipientEmail: string,
-  recipientName: string,
-  outstandingItems: string[],
-) {
-  const client = await getGraphClient();
-  const rawFirstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
-  const firstName = escapeHtml(rawFirstName);
-
-  const itemsHtml = outstandingItems.length
-    ? outstandingItems
-        .map(
-          (item) =>
-            `<li style="margin: 0 0 8px;"><span style="color: #F0ECE4; font-weight: 500;">${escapeHtml(item)}</span></li>`,
-        )
-        .join("")
-    : `<li style="color: #E0DCD4;">A few finishing touches to wrap things up.</li>`;
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-
-      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 32px 32px 28px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">A gentle nudge</p>
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 26px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
-      </div>
-
-      <div style="padding: 32px 32px 24px;">
-        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 22px;">
-          Just a friendly note from the Livaware onboarding team. We've had a look at your portal and there are a small number of things still to finish — nothing urgent, but if you can find a spare ten minutes it would help us move you along to the next stage.
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 20px 22px; border-radius: 0 6px 6px 0; margin: 0 0 26px;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">Still to finish</p>
-          <ul style="font-size: 13px; color: #E0DCD4; line-height: 1.7; margin: 0; padding-left: 22px;">
-            ${itemsHtml}
-          </ul>
-        </div>
-
-        <div style="background: rgba(200, 169, 110, 0.06); border: 1px solid rgba(200, 169, 110, 0.15); padding: 18px 20px; border-radius: 6px; margin: 0 0 24px;">
-          <p style="font-size: 12px; color: #C8A96E; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Signing in</p>
-          <p style="font-size: 13px; color: #E0DCD4; line-height: 1.75; margin: 0;">
-            Whenever you're ready, go to <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a>, type in your email, and we'll send you a 6-digit code to sign straight in. No password to remember, no link to dig out of an old email.
-          </p>
-        </div>
-
-        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.75; margin: 0 0 8px;">
-          If anything's unclear or you've already sorted one of these on your end, just reply to this email and a real person on our onboarding team will pick it up.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 26px; line-height: 1.7;">
-          With our thanks,<br />
-          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">Replies to this email reach our onboarding team directly.</p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: OUTSTANDING_NUDGE_SUBJECT,
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
-    },
-    saveToSentItems: true,
-  });
-}
-
-// ─── Sign-in reminder email ──────────────────────────────────────────
-// A deliberately tiny "you can come back any time" email — no portal
-// link inside, just the email + 6-digit-code instructions and the
-// onboard.livaware.co.uk URL. Useful when admin just wants to remind
-// a candidate that the door is open.
-const SIGN_IN_REMINDER_SUBJECT = "Your Livaware portal is always one sign-in away";
-
-export async function sendSignInReminderEmail(
-  recipientEmail: string,
-  recipientName: string,
-) {
-  const client = await getGraphClient();
-  const rawFirstName = (recipientName || "").trim().split(/\s+/)[0] || "there";
-  const firstName = escapeHtml(rawFirstName);
-  const safeEmail = escapeHtml(recipientEmail);
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-
-      <div style="background: linear-gradient(135deg, #0a0a2e 0%, #0d0d38 100%); padding: 32px 32px 28px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <p style="color: #C8A96E; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; margin: 0 0 8px; font-weight: 500;">Always one sign-in away</p>
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 26px; font-weight: 400; margin: 0 0 6px; letter-spacing: -0.01em;">Livaware</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Nurse Onboarding Portal</p>
-      </div>
-
-      <div style="padding: 32px 32px 24px;">
-        <p style="font-size: 17px; color: #F0ECE4; margin: 0 0 16px; font-family: 'Georgia', serif; font-weight: 400;">Hello ${firstName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin: 0 0 22px;">
-          A quick note to remind you that your Livaware portal is always open whenever you'd like to pick things up again — there's nothing to install, no password to reset, and no old email to dig out.
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #C8A96E; padding: 22px 24px; border-radius: 0 6px 6px 0; margin: 0 0 24px;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 14px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;">How to sign back in</p>
-          <ol style="font-size: 13px; color: #E0DCD4; line-height: 1.85; margin: 0; padding-left: 22px;">
-            <li>Go to <a href="https://onboard.livaware.co.uk" style="color: #C8A96E; text-decoration: underline; font-weight: 600;">onboard.livaware.co.uk</a></li>
-            <li>Type in this email address (<span style="color: #F0ECE4;">${safeEmail}</span>)</li>
-            <li>We'll send you a <strong style="color: #C8A96E;">6-digit code</strong> — pop it in and you're back in your portal</li>
-          </ol>
-        </div>
-
-        <p style="font-size: 13px; color: #B0AAA0; line-height: 1.75; margin: 0 0 8px;">
-          You can do this from any phone, tablet or laptop, and as many times as you like. If you ever change your email address, just reply to this email and we'll update our records.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 26px; line-height: 1.7;">
-          See you soon,<br />
-          <strong style="color: #F0ECE4;">The Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 18px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">Replies to this email reach our onboarding team directly.</p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: SIGN_IN_REMINDER_SUBJECT,
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
-    },
-    saveToSentItems: true,
-  });
-}
-
-// ─── Portal passwordless sign-in code email (task 107) ───────────────
-export async function sendPortalSignInCodeEmail(
-  recipientEmail: string,
-  recipientName: string,
-  code: string,
-  expiresAt: Date,
-) {
-  const client = await getGraphClient();
-  const minutesLeft = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px;">NurseOnboard</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Livaware Ltd — Sign-in code</p>
-      </div>
-      <div style="padding: 32px;">
-        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          Use the code below to sign back in to your Livaware nurse portal. It is valid for the next <strong style="color:#C8A96E;">${minutesLeft} minutes</strong> and can only be used once.
-        </p>
-        <div style="text-align:center; margin: 28px 0;">
-          <div style="display:inline-block; background:#0d0d38; border:1px solid #1e1e5a; padding:18px 32px; border-radius:8px; font-family:'Courier New', monospace; font-size:32px; letter-spacing:0.32em; color:#C8A96E; font-weight:600;">${code}</div>
-        </div>
-        <p style="font-size:13px; color:#8A8A94; line-height:1.6;">
-          If you did not request this code, you can safely ignore this email — your account stays locked until someone enters the code.
-        </p>
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
-          Kind regards,<br/><strong style="color:#F0ECE4;">Livaware Onboarding Team</strong>
-        </p>
-      </div>
-      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">Livaware Ltd — Secure Nurse Onboarding</p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">This is an automated message. Please do not reply directly to this email.</p>
-      </div>
-    </div>
-  `;
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: "Livaware Ltd — Your portal sign-in code",
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [{ emailAddress: { address: recipientEmail, name: recipientName } }],
-    },
-    saveToSentItems: true,
-  });
-}
-
-export async function sendDocumentUploadNotification(
-  candidateName: string,
-  category: string,
-  uploadedBy: string,
-  originalFilename: string,
-  fileBuffer: Buffer,
-  mimeType: string,
-) {
-  const client = await getGraphClient();
-
-  const timestamp = new Date().toLocaleString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-
-  const uploaderLabel = uploadedBy === "nurse" ? "Nurse (via portal)" : "Admin";
-
-  const htmlBody = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #020121;">Document Upload Notification</h2>
-      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-        <tr><td style="padding: 8px; font-weight: 600; color: #555;">Candidate</td><td style="padding: 8px;">${candidateName}</td></tr>
-        <tr><td style="padding: 8px; font-weight: 600; color: #555;">Document Category</td><td style="padding: 8px;">${category}</td></tr>
-        <tr><td style="padding: 8px; font-weight: 600; color: #555;">Filename</td><td style="padding: 8px;">${originalFilename}</td></tr>
-        <tr><td style="padding: 8px; font-weight: 600; color: #555;">Uploaded By</td><td style="padding: 8px;">${uploaderLabel}</td></tr>
-        <tr><td style="padding: 8px; font-weight: 600; color: #555;">Timestamp</td><td style="padding: 8px;">${timestamp}</td></tr>
-      </table>
-      <p style="font-size: 12px; color: #888;">This is an automated notification from NurseOnboard. The uploaded file is attached to this email.</p>
-    </div>
-  `;
-
-  const base64Content = fileBuffer.toString('base64');
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: `Document Upload — ${candidateName} — ${category}`,
-      body: {
-        contentType: 'HTML',
-        content: htmlBody,
+    recipientEmail: string,
+    recipientName: string,
+    portalUrl: string,
+  ) {
+    await sendViaTemplate({
+      key: "onboarding_unlocked",
+      tokens: {
+        NAME: recipientName,
+        FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+        PORTAL_URL: portalUrl,
       },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: SENDER_EMAIL,
-            name: 'Livaware Onboarding',
-          },
-        },
-      ],
-      attachments: [
-        {
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
+  export async function sendApplicantWelcomeEmail(
+    recipientEmail: string,
+    recipientName: string,
+    portalUrl: string,
+    expiresAt: Date,
+  ) {
+    await sendViaTemplate({
+      key: "applicant_welcome",
+      tokens: {
+        NAME: recipientName,
+        FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+        PORTAL_URL: portalUrl,
+        EXPIRY: formatExpiry(expiresAt),
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
+  export async function sendOutstandingNudgeEmail(
+    recipientEmail: string,
+    recipientName: string,
+    items: string[],
+  ) {
+    await sendViaTemplate({
+      key: "outstanding_nudge",
+      tokens: {
+        NAME: recipientName,
+        FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+        ITEMS_LIST: (items || []).filter(Boolean).join("\n"),
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
+  export async function sendSignInReminderEmail(
+    recipientEmail: string,
+    recipientName: string,
+  ) {
+    await sendViaTemplate({
+      key: "sign_in_reminder",
+      tokens: {
+        NAME: recipientName,
+        FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+        EMAIL: recipientEmail,
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
+  export async function sendPortalSignInCodeEmail(
+    recipientEmail: string,
+    recipientName: string,
+    code: string,
+    expiresAt: Date,
+  ) {
+    const minutesLeft = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
+    await sendViaTemplate({
+      key: "portal_sign_in_code",
+      tokens: {
+        NAME: recipientName,
+        CODE: code,
+        MINUTES: String(minutesLeft),
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
+  export async function sendDocumentUploadNotification(
+    candidateName: string,
+    category: string,
+    uploadedBy: string,
+    originalFilename: string,
+    fileBuffer: Buffer,
+    mimeType: string,
+  ) {
+    const client = await getGraphClient();
+    const timestamp = new Date().toLocaleString("en-GB", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    });
+    const uploaderLabel = uploadedBy === "nurse" ? "Nurse (via portal)" : "Admin";
+    const tokens = {
+      CANDIDATE_NAME: candidateName,
+      CATEGORY: category,
+      FILENAME: originalFilename,
+      UPLOADER: uploaderLabel,
+      TIMESTAMP: timestamp,
+    };
+    const { renderEmail } = await import("./email-templates");
+    const rendered = await renderEmail("document_upload_notification", tokens);
+
+    await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+      message: {
+        subject: rendered.subject,
+        body: { contentType: 'HTML', content: rendered.html },
+        toRecipients: [{ emailAddress: { address: SENDER_EMAIL, name: 'Livaware Onboarding' } }],
+        attachments: [{
           '@odata.type': '#microsoft.graph.fileAttachment',
           name: originalFilename,
           contentType: mimeType || 'application/octet-stream',
-          contentBytes: base64Content,
-        },
-      ],
-    },
-    saveToSentItems: false,
-  });
-}
+          contentBytes: fileBuffer.toString('base64'),
+        }],
+      },
+      saveToSentItems: false,
+    });
+  }
 
-// ─── Invoice submission email (task #134) ─────────────────────────────
-// Sent whenever a nurse (or admin on behalf) submits a timesheet invoice.
-// The PDF is attached and a copy of the email is dropped in Sent Items
-// so the audit trail in Outlook matches the in-app audit log.
-export async function sendInvoiceSubmittedEmail(opts: {
-  invoiceNumber: string;
-  nurseName: string;
-  nurseEmail: string;
-  totalAmountGbp: string;
-  totalHours: string;
-  pdfBuffer: Buffer;
-  recipientEmail?: string;
-}): Promise<void> {
-  const client = await getGraphClient();
-  const recipient = opts.recipientEmail || process.env.INVOICE_RECIPIENT_EMAIL || "invoices@livaware.co.uk";
-  const html = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: #020121; padding: 20px 28px; border-bottom: 3px solid #C8A96E;">
-        <h1 style="color:#F0ECE4; font-family: Georgia, serif; font-weight: 400; font-size: 22px; margin: 0;">Invoice ${opts.invoiceNumber}</h1>
-        <p style="color:#8A8A94; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; margin: 4px 0 0;">Livaware NurseOnboard — New submission</p>
-      </div>
-      <div style="padding: 24px 28px;">
-        <p style="font-size:14px; color:#222; margin: 0 0 16px;">A new nurse timesheet invoice has been submitted.</p>
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
-          <tr><td style="padding:6px 0; color:#666;">Invoice</td><td style="padding:6px 0; font-weight:600;">${opts.invoiceNumber}</td></tr>
-          <tr><td style="padding:6px 0; color:#666;">Nurse</td><td style="padding:6px 0;">${opts.nurseName} &lt;${opts.nurseEmail}&gt;</td></tr>
-          <tr><td style="padding:6px 0; color:#666;">Total hours</td><td style="padding:6px 0;">${opts.totalHours} h</td></tr>
-          <tr><td style="padding:6px 0; color:#666;">Total amount</td><td style="padding:6px 0; font-weight:600; color:#020121;">${opts.totalAmountGbp}</td></tr>
-        </table>
-        <p style="font-size:12px; color:#888; margin:18px 0 0;">The full invoice is attached as a PDF and is also available in the admin platform under Reports → Invoices.</p>
-      </div>
-    </div>
-  `;
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: `Invoice ${opts.invoiceNumber} — ${opts.nurseName}`,
-      body: { contentType: "HTML", content: html },
-      toRecipients: [{ emailAddress: { address: recipient, name: "Livaware Invoices" } }],
-      attachments: [{
-        "@odata.type": "#microsoft.graph.fileAttachment",
-        name: `${opts.invoiceNumber}.pdf`,
-        contentType: "application/pdf",
-        contentBytes: opts.pdfBuffer.toString("base64"),
-      }],
-    },
-    saveToSentItems: true,
-  });
-}
+  export async function sendInvoiceSubmittedEmail(opts: {
+    invoiceNumber: string;
+    nurseName: string;
+    nurseEmail: string;
+    totalAmountGbp: string;
+    totalHours: string;
+    pdfBuffer: Buffer;
+    recipientEmail?: string;
+  }): Promise<void> {
+    const client = await getGraphClient();
+    const recipient = opts.recipientEmail || process.env.INVOICE_RECIPIENT_EMAIL || "invoices@livaware.co.uk";
+    const tokens = {
+      INVOICE_NUMBER: opts.invoiceNumber,
+      NURSE_NAME: opts.nurseName,
+      NURSE_EMAIL: opts.nurseEmail,
+      TOTAL_HOURS: opts.totalHours,
+      TOTAL_AMOUNT: opts.totalAmountGbp,
+    };
+    const rendered = await renderEmail("invoice_submitted", tokens);
+    await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+      message: {
+        subject: rendered.subject,
+        body: { contentType: "HTML", content: rendered.html },
+        toRecipients: [{ emailAddress: { address: recipient, name: "Livaware Invoices" } }],
+        attachments: [{
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: `${opts.invoiceNumber}.pdf`,
+          contentType: "application/pdf",
+          contentBytes: opts.pdfBuffer.toString("base64"),
+        }],
+      },
+      saveToSentItems: true,
+    });
+  }
 
+  
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -765,209 +348,93 @@ With thanks for your time,
 Livaware Onboarding Team`;
 }
 
-export async function sendReferenceRequestEmail(
-  refereeEmail: string,
-  refereeName: string,
-  candidateName: string,
-  refereeFormUrl: string,
-  expiresAt: Date,
-  customSubject?: string,
-  customBody?: string
-) {
-  const client = await getGraphClient();
 
-  const expiryFormatted = expiresAt.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
-  const rawBody = customBody || getDefaultReferenceEmailBody(refereeName, candidateName);
-  const bodyText = rawBody.replace(/\[FORM_URL\]/g, refereeFormUrl);
-  const subject = customSubject || `Livaware Ltd — Reference Request for ${candidateName}`;
-  const htmlBody = buildReferenceRequestHtml(bodyText, refereeFormUrl, expiryFormatted);
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject,
-      body: {
-        contentType: 'HTML',
-        content: htmlBody,
-      },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: refereeEmail,
-            name: refereeName,
-          },
+  export async function sendReferenceRequestEmail(
+    refereeEmail: string,
+    refereeName: string,
+    candidateName: string,
+    refereeFormUrl: string,
+    expiresAt: Date,
+    customSubject?: string,
+    customBody?: string,
+  ) {
+    // When the caller provides an explicit body (admin override / reminder
+    // template) we render it directly with the legacy reference scaffold so
+    // their per-instance prose wins. Otherwise we fall through to the
+    // template registry so the editable defaults are used.
+    if (customBody) {
+      const client = await getGraphClient();
+      const bodyText = customBody.replace(/\[FORM_URL\]/g, refereeFormUrl);
+      const subject = customSubject || `Livaware Ltd — Reference Request for ${candidateName}`;
+      const htmlBody = buildReferenceRequestHtml(bodyText, refereeFormUrl, formatExpiry(expiresAt));
+      await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+        message: {
+          subject,
+          body: { contentType: 'HTML', content: htmlBody },
+          toRecipients: [{ emailAddress: { address: refereeEmail, name: refereeName } }],
         },
-      ],
-    },
-    saveToSentItems: true,
-  });
-}
-
-export async function sendNurseInviteEmail(
-  recipientEmail: string,
-  recipientName: string,
-  tempPassword: string,
-  invitedBy: string
-) {
-  const client = await getGraphClient();
-
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px; letter-spacing: -0.01em;">NurseOnboard</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Livaware Ltd — Skills Arcade Invitation</p>
-      </div>
-
-      <div style="padding: 32px;">
-        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${recipientName},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          You have been invited by ${invitedBy} to join the Livaware Skills Arcade — our online training and competency platform for nursing professionals.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          Please use the credentials below to log in and begin your assigned training modules.
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">Your Login Credentials</p>
-          <p style="font-size: 14px; color: #E0DCD4; margin: 4px 0;"><strong style="color: #F0ECE4;">Email:</strong> ${recipientEmail}</p>
-          <p style="font-size: 14px; color: #E0DCD4; margin: 4px 0;"><strong style="color: #F0ECE4;">Temporary Password:</strong> ${tempPassword}</p>
-        </div>
-
-        <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          For security, please change your password after your first login. If you have any questions, contact the onboarding team.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
-          Kind regards,<br />
-          <strong style="color: #F0ECE4;">Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
-          Livaware Ltd — Secure Nurse Onboarding &middot; Skills Arcade
-        </p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
-          This is an automated message. Please do not reply directly to this email.
-        </p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject: `Livaware Skills Arcade — Your Login Credentials`,
-      body: {
-        contentType: 'HTML',
-        content: htmlBody,
+        saveToSentItems: true,
+      });
+      return;
+    }
+    await sendViaTemplate({
+      key: "reference_request",
+      tokens: {
+        REFEREE_NAME: refereeName,
+        CANDIDATE_NAME: candidateName,
+        FORM_URL: refereeFormUrl,
+        EXPIRY: formatExpiry(expiresAt),
       },
-      toRecipients: [
-        {
-          emailAddress: {
-            address: recipientEmail,
-            name: recipientName,
-          },
-        },
-      ],
-    },
-    saveToSentItems: true,
-  });
-}
+      to: { email: refereeEmail, name: refereeName },
+      subjectOverride: customSubject,
+    });
+  }
 
-export async function sendArcadeAssignmentEmail(opts: {
-  recipientEmail: string;
-  recipientName: string;
-  moduleNames: string[];
-  assignedBy: string;
-  portalUrl: string;
-  expiryFormatted: string;
-}) {
-  const client = await getGraphClient();
-  const moduleListHtml = opts.moduleNames
-    .map(
-      (m) =>
-        `<li style="font-size: 14px; color: #E0DCD4; line-height: 1.85; margin-bottom: 4px;">${escapeHtml(m)}</li>`,
-    )
-    .join("");
-  const subjectModules =
-    opts.moduleNames.length === 1
-      ? opts.moduleNames[0]
-      : `${opts.moduleNames.length} new modules`;
-  const subject = `Skills Arcade — ${subjectModules} assigned to you`;
-  const htmlBody = `
-    <div style="font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #020121;">
-      <div style="background: #0a0a2e; padding: 28px 32px; text-align: center; border-bottom: 1px solid #1e1e5a;">
-        <h1 style="color: #F0ECE4; font-family: 'Georgia', serif; font-size: 24px; font-weight: 400; margin: 0 0 4px; letter-spacing: -0.01em;">NurseOnboard</h1>
-        <p style="color: #8A8A94; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0;">Livaware Ltd — Skills Arcade Assignment</p>
-      </div>
+  export async function sendNurseInviteEmail(
+    recipientEmail: string,
+    recipientName: string,
+    tempPassword: string,
+    invitedBy: string,
+  ) {
+    await sendViaTemplate({
+      key: "nurse_invite",
+      tokens: {
+        NAME: recipientName,
+        EMAIL: recipientEmail,
+        PASSWORD: tempPassword,
+        INVITED_BY: invitedBy,
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
 
-      <div style="padding: 32px;">
-        <p style="font-size: 16px; color: #F0ECE4; margin-bottom: 8px;">Dear ${escapeHtml(opts.recipientName)},</p>
-
-        <p style="font-size: 14px; color: #E0DCD4; line-height: 1.85;">
-          ${escapeHtml(opts.assignedBy)} has assigned you ${
-            opts.moduleNames.length === 1
-              ? "a new clinical scenario"
-              : `${opts.moduleNames.length} new clinical scenarios`
-          } to complete in your Skills Arcade.
-        </p>
-
-        <div style="background: #0d0d38; border-left: 3px solid #b8944e; padding: 18px 20px; border-radius: 0 6px 6px 0; margin: 24px 0;">
-          <p style="font-size: 11px; color: #C8A96E; margin: 0 0 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;">New modules</p>
-          <ul style="margin: 0; padding-left: 20px;">
-            ${moduleListHtml}
-          </ul>
-        </div>
-
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${opts.portalUrl}" style="display: inline-block; background-color: #C8A96E; background-image: linear-gradient(135deg, #C8A96E, #b8944e); color: #020121; text-decoration: none; padding: 14px 52px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;">
-            Open Skills Arcade
-          </a>
-        </div>
-
-        <p style="font-size: 12px; color: #8A8A94; line-height: 1.6; word-break: break-all;">
-          If the button above does not work, copy and paste this link into your browser:<br />
-          <a href="${opts.portalUrl}" style="color: #C8A96E; text-decoration: underline;">${opts.portalUrl}</a>
-        </p>
-
-        <p style="font-size: 13px; color: #8A8A94; line-height: 1.6;">
-          This link is personal to you — please do not share it. It will expire on <strong style="color: #C8A96E;">${opts.expiryFormatted}</strong>. You can save your progress at any time and come back to it later.
-        </p>
-
-        <p style="font-size: 14px; color: #E0DCD4; margin-top: 24px;">
-          Kind regards,<br />
-          <strong style="color: #F0ECE4;">Livaware Onboarding Team</strong>
-        </p>
-      </div>
-
-      <div style="background: #0a0a2e; padding: 16px 32px; text-align: center; border-top: 1px solid #1e1e5a;">
-        <p style="font-size: 11px; color: #8A8A94; margin: 0;">
-          Livaware Ltd — Secure Nurse Onboarding &middot; Skills Arcade
-        </p>
-        <p style="font-size: 11px; color: #8A8A94; margin: 4px 0 0;">
-          This is an automated message. Please do not reply directly to this email.
-        </p>
-      </div>
-    </div>
-  `;
-
-  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-    message: {
-      subject,
-      body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [
-        { emailAddress: { address: opts.recipientEmail, name: opts.recipientName } },
-      ],
-    },
-    saveToSentItems: true,
-  });
-}
+  export async function sendArcadeAssignmentEmail(opts: {
+    recipientEmail: string;
+    recipientName: string;
+    moduleNames: string[];
+    assignedBy: string;
+    portalUrl: string;
+    expiryFormatted: string;
+  }) {
+    const subjectModules =
+      opts.moduleNames.length === 1
+        ? opts.moduleNames[0]
+        : `${opts.moduleNames.length} new modules`;
+    await sendViaTemplate({
+      key: "arcade_assignment",
+      tokens: {
+        NAME: opts.recipientName,
+        ASSIGNED_BY: opts.assignedBy,
+        MODULE_COUNT: String(opts.moduleNames.length),
+        MODULES_LIST: opts.moduleNames.join("\n"),
+        PORTAL_URL: opts.portalUrl,
+        EXPIRY: opts.expiryFormatted,
+      },
+      to: { email: opts.recipientEmail, name: opts.recipientName },
+      subjectOverride: `Skills Arcade — ${subjectModules} assigned to you`,
+    });
+  }
+  
 
 // ─────────────────────────────────────────────────────────────────────────
 // Mailbox reading (document recovery): list messages with attachments from a

@@ -418,6 +418,7 @@ export class DatabaseStorage implements IStorage {
           subject: data.subject,
           bodyHtml: data.bodyHtml,
           bodyText: data.bodyText,
+          fields: (data as any).fields ?? null,
           updatedBy: data.updatedBy ?? null,
           updatedAt: new Date(),
         },

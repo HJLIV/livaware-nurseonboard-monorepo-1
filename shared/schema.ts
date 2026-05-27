@@ -1565,6 +1565,11 @@ export const emailTemplates = pgTable("email_templates", {
   subject: text("subject").notNull(),
   bodyHtml: text("body_html").notNull(),
   bodyText: text("body_text").notNull(),
+  // Per-section plain-text fields (preferred over bodyHtml/bodyText for
+  // structured templates — the renderer assembles these into the branded
+  // HTML envelope so admins never touch markup). Shape per template is
+  // defined in server/email-templates.ts.
+  fields: jsonb("fields"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   updatedBy: text("updated_by"),
 });

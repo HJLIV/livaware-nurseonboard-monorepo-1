@@ -810,13 +810,21 @@ export function registerAdminReportsRoutes(app: Express) {
         }),
       );
 
+      // Load the editable template (subject + body) from the unified
+      // registry so /settings edits are honoured. Falls back to the
+      // built-in defaults if no row has been saved yet.
+      const { resolveTemplate } = await import("../email-templates");
+      const tpl = await resolveTemplate("training_chase");
+      const tplSubject = tpl.subject || TRAINING_CHASE_DEFAULT_SUBJECT;
+      const tplBody = tpl.fields.body || TRAINING_CHASE_DEFAULT_BODY;
+
       const sample = items[0];
       const sampleExpiry = sample?.portalExpiresAt
         ? new Date(sample.portalExpiresAt)
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const samplePreview = sample
         ? renderChaseEmail(
-            { subject: TRAINING_CHASE_DEFAULT_SUBJECT, body: TRAINING_CHASE_DEFAULT_BODY },
+            { subject: tplSubject, body: tplBody },
             {
               nurseName: sample.name,
               modules: sample.modules,
@@ -824,12 +832,12 @@ export function registerAdminReportsRoutes(app: Express) {
               portalExpiresAt: sampleExpiry,
             },
           )
-        : { subject: TRAINING_CHASE_DEFAULT_SUBJECT, body: TRAINING_CHASE_DEFAULT_BODY };
+        : { subject: tplSubject, body: tplBody };
 
       res.json({
         outlookConfigured: isOutlookConfigured(),
-        defaultSubject: TRAINING_CHASE_DEFAULT_SUBJECT,
-        defaultBody: TRAINING_CHASE_DEFAULT_BODY,
+        defaultSubject: tplSubject,
+        defaultBody: tplBody,
         tokens: ["{{NAME}}", "{{MODULES_LIST}}", "{{COUNT}}", "{{PORTAL_URL}}", "{{PORTAL_EXPIRY}}"],
         items,
         samplePreview,
@@ -850,9 +858,17 @@ export function registerAdminReportsRoutes(app: Express) {
       if (!Array.isArray(nurseIds) || nurseIds.length === 0) {
         return res.status(400).json({ message: "nurseIds[] is required" });
       }
+      const { resolveTemplate } = await import("../email-templates");
+      const tpl = await resolveTemplate("training_chase");
       const template = {
-        subject: typeof subject === "string" && subject.trim() ? subject : TRAINING_CHASE_DEFAULT_SUBJECT,
-        body: typeof body === "string" && body.trim() ? body : TRAINING_CHASE_DEFAULT_BODY,
+        subject:
+          typeof subject === "string" && subject.trim()
+            ? subject
+            : tpl.subject || TRAINING_CHASE_DEFAULT_SUBJECT,
+        body:
+          typeof body === "string" && body.trim()
+            ? body
+            : tpl.fields.body || TRAINING_CHASE_DEFAULT_BODY,
       };
       const portalBaseUrl = portalBaseUrlFromReq(req);
       const sentBy = agentNameFor(req);
