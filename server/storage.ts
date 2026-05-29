@@ -34,10 +34,6 @@ import {
   hbcCourses, type HbcCourse, type InsertHbcCourse,
   hbcCandidateLinks, type HbcCandidateLink, type InsertHbcCandidateLink,
   hbcTrainingResults, type HbcTrainingResult, type InsertHbcTrainingResult,
-  lmsCourses, type LmsCourse, type InsertLmsCourse,
-  lmsLessons, type LmsLesson, type InsertLmsLesson,
-  lmsQuizQuestions, type LmsQuizQuestion, type InsertLmsQuizQuestion,
-  lmsCourseAssignments, type LmsCourseAssignment, type InsertLmsCourseAssignment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -104,29 +100,6 @@ export interface IStorage {
   upsertHbcCandidateLink(data: InsertHbcCandidateLink): Promise<HbcCandidateLink>;
   getHbcTrainingResults(nurseId: string): Promise<HbcTrainingResult[]>;
   replaceHbcTrainingResults(nurseId: string, rows: InsertHbcTrainingResult[]): Promise<HbcTrainingResult[]>;
-
-  // LMS (Training Courses)
-  getLmsCourses(includeInactive?: boolean): Promise<LmsCourse[]>;
-  getLmsCourse(id: string): Promise<LmsCourse | undefined>;
-  createLmsCourse(data: InsertLmsCourse): Promise<LmsCourse>;
-  updateLmsCourse(id: string, data: Partial<InsertLmsCourse>): Promise<LmsCourse | undefined>;
-  deleteLmsCourse(id: string): Promise<void>;
-  getLmsLessons(courseId: string): Promise<LmsLesson[]>;
-  createLmsLesson(data: InsertLmsLesson): Promise<LmsLesson>;
-  updateLmsLesson(id: string, data: Partial<InsertLmsLesson>): Promise<LmsLesson | undefined>;
-  deleteLmsLesson(id: string): Promise<void>;
-  getLmsQuizQuestions(courseId: string): Promise<LmsQuizQuestion[]>;
-  createLmsQuizQuestion(data: InsertLmsQuizQuestion): Promise<LmsQuizQuestion>;
-  updateLmsQuizQuestion(id: string, data: Partial<InsertLmsQuizQuestion>): Promise<LmsQuizQuestion | undefined>;
-  deleteLmsQuizQuestion(id: string): Promise<void>;
-  getLmsAssignments(): Promise<LmsCourseAssignment[]>;
-  getLmsAssignmentsForCourse(courseId: string): Promise<LmsCourseAssignment[]>;
-  getLmsAssignmentsForNurse(nurseId: string): Promise<LmsCourseAssignment[]>;
-  getLmsAssignment(id: string): Promise<LmsCourseAssignment | undefined>;
-  getLmsAssignmentByCourseNurse(courseId: string, nurseId: string): Promise<LmsCourseAssignment | undefined>;
-  createLmsAssignment(data: InsertLmsCourseAssignment): Promise<LmsCourseAssignment>;
-  updateLmsAssignment(id: string, data: Partial<InsertLmsCourseAssignment>): Promise<LmsCourseAssignment | undefined>;
-  deleteLmsAssignment(id: string): Promise<void>;
 
   getDashboardStats(): Promise<{
     total: number;
@@ -984,116 +957,6 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // ==================== LMS (Training Courses) ====================
-  async getLmsCourses(includeInactive = false): Promise<LmsCourse[]> {
-    if (includeInactive) {
-      return db.select().from(lmsCourses).orderBy(desc(lmsCourses.createdAt));
-    }
-    return db.select().from(lmsCourses).where(eq(lmsCourses.isActive, true)).orderBy(desc(lmsCourses.createdAt));
-  }
-
-  async getLmsCourse(id: string): Promise<LmsCourse | undefined> {
-    const [row] = await db.select().from(lmsCourses).where(eq(lmsCourses.id, id)).limit(1);
-    return row;
-  }
-
-  async createLmsCourse(data: InsertLmsCourse): Promise<LmsCourse> {
-    const [row] = await db.insert(lmsCourses).values(data).returning();
-    return row;
-  }
-
-  async updateLmsCourse(id: string, data: Partial<InsertLmsCourse>): Promise<LmsCourse | undefined> {
-    const [row] = await db
-      .update(lmsCourses)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(lmsCourses.id, id))
-      .returning();
-    return row;
-  }
-
-  async deleteLmsCourse(id: string): Promise<void> {
-    await db.delete(lmsCourses).where(eq(lmsCourses.id, id));
-  }
-
-  async getLmsLessons(courseId: string): Promise<LmsLesson[]> {
-    return db.select().from(lmsLessons).where(eq(lmsLessons.courseId, courseId)).orderBy(lmsLessons.orderIndex);
-  }
-
-  async createLmsLesson(data: InsertLmsLesson): Promise<LmsLesson> {
-    const [row] = await db.insert(lmsLessons).values(data).returning();
-    return row;
-  }
-
-  async updateLmsLesson(id: string, data: Partial<InsertLmsLesson>): Promise<LmsLesson | undefined> {
-    const [row] = await db.update(lmsLessons).set(data).where(eq(lmsLessons.id, id)).returning();
-    return row;
-  }
-
-  async deleteLmsLesson(id: string): Promise<void> {
-    await db.delete(lmsLessons).where(eq(lmsLessons.id, id));
-  }
-
-  async getLmsQuizQuestions(courseId: string): Promise<LmsQuizQuestion[]> {
-    return db.select().from(lmsQuizQuestions).where(eq(lmsQuizQuestions.courseId, courseId)).orderBy(lmsQuizQuestions.orderIndex);
-  }
-
-  async createLmsQuizQuestion(data: InsertLmsQuizQuestion): Promise<LmsQuizQuestion> {
-    const [row] = await db.insert(lmsQuizQuestions).values(data).returning();
-    return row;
-  }
-
-  async updateLmsQuizQuestion(id: string, data: Partial<InsertLmsQuizQuestion>): Promise<LmsQuizQuestion | undefined> {
-    const [row] = await db.update(lmsQuizQuestions).set(data).where(eq(lmsQuizQuestions.id, id)).returning();
-    return row;
-  }
-
-  async deleteLmsQuizQuestion(id: string): Promise<void> {
-    await db.delete(lmsQuizQuestions).where(eq(lmsQuizQuestions.id, id));
-  }
-
-  async getLmsAssignments(): Promise<LmsCourseAssignment[]> {
-    return db.select().from(lmsCourseAssignments).orderBy(desc(lmsCourseAssignments.assignedAt));
-  }
-
-  async getLmsAssignmentsForCourse(courseId: string): Promise<LmsCourseAssignment[]> {
-    return db.select().from(lmsCourseAssignments).where(eq(lmsCourseAssignments.courseId, courseId));
-  }
-
-  async getLmsAssignmentsForNurse(nurseId: string): Promise<LmsCourseAssignment[]> {
-    return db
-      .select()
-      .from(lmsCourseAssignments)
-      .where(eq(lmsCourseAssignments.nurseId, nurseId))
-      .orderBy(desc(lmsCourseAssignments.assignedAt));
-  }
-
-  async getLmsAssignment(id: string): Promise<LmsCourseAssignment | undefined> {
-    const [row] = await db.select().from(lmsCourseAssignments).where(eq(lmsCourseAssignments.id, id)).limit(1);
-    return row;
-  }
-
-  async getLmsAssignmentByCourseNurse(courseId: string, nurseId: string): Promise<LmsCourseAssignment | undefined> {
-    const [row] = await db
-      .select()
-      .from(lmsCourseAssignments)
-      .where(and(eq(lmsCourseAssignments.courseId, courseId), eq(lmsCourseAssignments.nurseId, nurseId)))
-      .limit(1);
-    return row;
-  }
-
-  async createLmsAssignment(data: InsertLmsCourseAssignment): Promise<LmsCourseAssignment> {
-    const [row] = await db.insert(lmsCourseAssignments).values(data).returning();
-    return row;
-  }
-
-  async updateLmsAssignment(id: string, data: Partial<InsertLmsCourseAssignment>): Promise<LmsCourseAssignment | undefined> {
-    const [row] = await db.update(lmsCourseAssignments).set(data).where(eq(lmsCourseAssignments.id, id)).returning();
-    return row;
-  }
-
-  async deleteLmsAssignment(id: string): Promise<void> {
-    await db.delete(lmsCourseAssignments).where(eq(lmsCourseAssignments.id, id));
-  }
 }
 
 export const storage = new DatabaseStorage();

@@ -986,18 +986,6 @@ export function buildPortalGroups({
               : () => selectOnboardingStep("training"),
           },
           {
-            key: "training:livaware_modules",
-            label: "Livaware training modules",
-            status: trainingLocked
-              ? ("locked" as PortalItemStatus)
-              : ("in_progress" as PortalItemStatus),
-            disabled: trainingLocked,
-            hint: trainingLocked ? trainingHint : "Assigned training courses & certificates",
-            onClick: trainingLocked
-              ? undefined
-              : () => { window.location.href = `/portal/courses`; },
-          },
-          {
             key: "training:internal_training",
             label: "Internal Training",
             status: trainingLocked

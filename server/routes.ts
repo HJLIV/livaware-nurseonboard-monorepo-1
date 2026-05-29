@@ -217,10 +217,6 @@ export async function registerRoutes(
   const { registerHbcRoutes } = await import("./routes/hbc");
   registerHbcRoutes(app);
 
-  // === TRAINING COURSES (LMS) ===
-  const { registerLmsRoutes } = await import("./routes/lms");
-  registerLmsRoutes(app);
-
   // === DOCUMENTS BROWSER ===
   const { registerDocumentRoutes } = await import("./routes/documents");
   registerDocumentRoutes(app);

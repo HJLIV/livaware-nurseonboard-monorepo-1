@@ -146,12 +146,6 @@ const sections: NavSectionDef[] = [
         adminOnly: true,
       },
       {
-        label: "Training courses",
-        href: "/reports/lms",
-        icon: GraduationCap,
-        adminOnly: true,
-      },
-      {
         label: "Internal training",
         href: "/reports/internal-training",
         icon: GraduationCap,
@@ -176,12 +170,6 @@ const sections: NavSectionDef[] = [
         label: "Skills Arcade modules",
         href: "/arcade/admin/modules",
         icon: Shield,
-        adminOnly: true,
-      },
-      {
-        label: "Course builder",
-        href: "/arcade/admin/courses",
-        icon: GraduationCap,
         adminOnly: true,
       },
       {
