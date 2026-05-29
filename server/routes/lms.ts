@@ -184,6 +184,32 @@ export function registerLmsRoutes(app: Express): void {
     }
   });
 
+  // Nurse-faithful preview for admins: same shape the portal serves to a nurse
+  // (quiz answer keys stripped) so the Course Builder can render exactly what
+  // the nurse sees without leaking correctIndex into a less-privileged context.
+  app.get("/api/admin/lms/courses/:id/preview", async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id);
+      const course = await storage.getLmsCourse(id);
+      if (!course) return res.status(404).json({ error: "not_found" });
+      const [lessons, questions] = await Promise.all([
+        storage.getLmsLessons(id),
+        storage.getLmsQuizQuestions(id),
+      ]);
+      res.json({
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        passThreshold: course.passThreshold,
+        certificateEnabled: course.certificateEnabled,
+        lessons: lessons.map((l) => ({ id: l.id, title: l.title, content: l.content, orderIndex: l.orderIndex })),
+        questions: questions.map((q) => ({ id: q.id, prompt: q.prompt, options: q.options, orderIndex: q.orderIndex })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: "lms_error", message: (err as Error).message });
+    }
+  });
+
   app.put("/api/admin/lms/courses/:id", async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id);

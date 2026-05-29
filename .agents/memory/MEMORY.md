@@ -1,0 +1,1 @@
+- [LMS nurse-preview answer keys](lms-preview-answer-keys.md) — admin "preview as nurse" for quizzes must use a sanitized endpoint; raw admin course detail leaks correctIndex.

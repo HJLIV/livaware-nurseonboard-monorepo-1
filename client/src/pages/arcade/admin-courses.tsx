@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, GraduationCap, Link2, Loader2, Pencil, Users } from "lucide-react";
+import { Plus, Trash2, GraduationCap, Link2, Loader2, Pencil, Users, Eye, CheckCircle2, Circle, Download, ArrowLeft } from "lucide-react";
 
 type SourceType = "internal" | "hbc" | "arcade" | "mandatory";
 
@@ -77,6 +77,7 @@ export default function AdminCoursesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyCourse());
   const [assignFor, setAssignFor] = useState<CourseRow | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const coursesQuery = useQuery<CourseRow[]>({
     queryKey: ["/api/admin/lms/courses"],
@@ -178,6 +179,13 @@ export default function AdminCoursesPage() {
                     {c.sourceType !== "internal" && "Linked course"}
                     {` · ${c.completedCount}/${c.assignedCount} completed`}
                   </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {c.sourceType === "internal" && (
+                    <Button variant="outline" size="sm" onClick={() => setPreviewId(c.id)} data-testid={`button-preview-${c.id}`}>
+                      <Eye className="h-4 w-4 mr-1" /> Preview as nurse
+                    </Button>
+                  )}
                 </div>
                 <SuperAdminGate>
                   <div className="flex items-center gap-1 shrink-0">
@@ -284,7 +292,114 @@ export default function AdminCoursesPage() {
       </Dialog>
 
       {assignFor && <AssignDialog course={assignFor} onClose={() => setAssignFor(null)} onAssigned={() => { qc.invalidateQueries({ queryKey: ["/api/admin/lms/courses"] }); }} />}
+
+      {previewId && <NursePreviewDialog courseId={previewId} onClose={() => setPreviewId(null)} />}
     </div>
+  );
+}
+
+interface PreviewLesson { id: string; title: string; content: string; orderIndex: number }
+interface PreviewQuestion { id: string; prompt: string; options: string[]; orderIndex: number }
+interface PreviewCourse {
+  id: string; title: string; description: string;
+  passThreshold: number | null; certificateEnabled: boolean;
+  lessons: PreviewLesson[]; questions: PreviewQuestion[];
+}
+
+function NursePreviewDialog({ courseId, onClose }: { courseId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useQuery<PreviewCourse>({
+    queryKey: [`/api/admin/lms/courses/${courseId}/preview`],
+    queryFn: async () => (await apiRequest("GET", `/api/admin/lms/courses/${courseId}/preview`)).json(),
+  });
+
+  const lessons = (data?.lessons || []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const questions = (data?.questions || []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Eye className="h-4 w-4" /> Nurse preview</DialogTitle>
+          <DialogDescription>
+            This is exactly what the nurse sees in their training portal. Nothing here is interactive or saved.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <Skeleton className="h-64 w-full" />
+        ) : isError || !data ? (
+          <div className="py-10 text-center text-sm text-destructive">Could not load this course preview. Please try again.</div>
+        ) : (
+          <div className="space-y-5">
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+              <ArrowLeft className="h-3.5 w-3.5" /> All courses
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60">Training course</p>
+              <h1 className="font-serif text-3xl font-light tracking-tight">{data.title}</h1>
+              {data.description && <p className="text-sm text-muted-foreground mt-1">{data.description}</p>}
+            </div>
+
+            <div className="space-y-3">
+              {lessons.map((l, i) => (
+                <Card key={l.id} data-testid={`preview-lesson-${l.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Circle className="h-5 w-5 text-muted-foreground/40 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <div className="font-medium">{i + 1}. {l.title}</div>
+                        <div className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{l.content}</div>
+                        <Button size="sm" className="mt-3" disabled>Mark as read</Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {questions.length > 0 && (
+              <Card>
+                <CardContent className="p-5 space-y-4">
+                  <div>
+                    <h2 className="font-serif text-xl font-light">Quiz</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Answer all questions{typeof data.passThreshold === "number" ? ` — pass mark ${data.passThreshold}%` : ""}.
+                    </p>
+                  </div>
+                  <fieldset disabled className="space-y-4">
+                    {questions.map((q, qi) => (
+                      <div key={q.id} className="space-y-2" data-testid={`preview-question-${q.id}`}>
+                        <div className="font-medium text-sm">Q{qi + 1}. {q.prompt}</div>
+                        <div className="space-y-1.5 pl-1">
+                          {q.options.map((opt, oi) => (
+                            <label key={oi} className="flex items-center gap-2 text-sm">
+                              <input type="radio" name={`preview-${q.id}`} disabled /> {opt}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </fieldset>
+                  <Button disabled>Submit quiz</Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {data.certificateEnabled && (
+              <Card>
+                <CardContent className="p-4 text-sm text-muted-foreground flex items-center gap-2">
+                  <Download className="h-4 w-4" /> On completion the nurse can download a branded certificate here.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close preview</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
