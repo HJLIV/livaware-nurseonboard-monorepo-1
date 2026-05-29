@@ -1,124 +1,59 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { storage } from "../server/storage";
 
 /**
- * Seeds the first course in the Palliative Care series using the real
- * "End of Life Care Fundamentals" training content supplied by Livaware
- * (Training-Livaware-Palliative-Care export, module 1 of 8).
+ * Seeds the full Palliative Care training course (all 8 modules) using the
+ * real training content supplied by Livaware (Training-Livaware-Palliative-Care
+ * export).
  *
- * The portal course player renders lesson content as plain text
- * (whitespace-pre-wrap), so the source HTML has been faithfully converted
- * to clean, readable plain text and split into lessons by the module's
- * natural sections. A short knowledge-check quiz drawn from this content
- * is included (the source app had no quiz data of its own).
+ * The 8 source modules are converted from their original HTML to clean,
+ * readable plain text (the portal course player renders lesson content as
+ * plain text with whitespace-pre-wrap) and stored in
+ * scripts/data/palliative-care-lessons.json. Each module becomes one lesson.
+ * A knowledge-check quiz drawn from the content of every module is included
+ * (the source app had no quiz data of its own).
  *
- * Idempotent: re-running replaces the course's lessons/questions so the
- * content always matches this file. Also cleans up the earlier placeholder
- * course if it is still present.
+ * Idempotent: re-running finds the existing course (by current or earlier
+ * title), refreshes its title/description, and replaces all lessons/questions
+ * so the content always matches this file. Also cleans up the earlier
+ * placeholder course if it is still present.
  *
  * Run with:  npx tsx scripts/seed-palliative-care-course.ts
  */
 
-const COURSE_TITLE = "Palliative Care 1 — End of Life Care Fundamentals";
+const COURSE_TITLE = "Palliative Care — End of Life Care Programme";
 
-// Title of the earlier placeholder course, removed on re-seed if present.
+// Earlier titles this course has had, matched so the seed is idempotent and
+// upgrades an existing course in place rather than creating a duplicate.
+const PREVIOUS_TITLES = [
+  "Palliative Care 1 — End of Life Care Fundamentals",
+];
+
+// Title of the very first placeholder course, removed on re-seed if present.
 const LEGACY_PLACEHOLDER_TITLE =
   "Palliative Care 1 — Principles of Palliative & End-of-Life Care";
 
 const COURSE_DESCRIPTION =
-  "The first course in the palliative care series. Core concepts of palliative and end-of-life care: defining end of life care, identifying people approaching the end of life, the quality standards that underpin good care, the common disease trajectories, and how quality is measured.";
+  "The complete palliative and end-of-life care training programme, covering all eight modules: end of life care fundamentals, pain assessment and management, advance care planning, symptom management, communication skills, care of the dying, ethical and legal considerations, and bereavement and support.";
 
-const LESSONS: { title: string; content: string }[] = [
-  {
-    title: "Defining end of life care",
-    content: `Definition of End of Life Care (GMC 2010)
+type Lesson = { title: string; content: string };
 
-People are 'approaching the end of life' when they are likely to die within the next 12 months. This includes people whose death is imminent (expected within a few hours or days) and those with:
-
-- Advanced, progressive, incurable conditions
-- General frailty and co-existing conditions that mean they are expected to die within 12 months
-- Existing conditions if they are at risk of dying from a sudden acute crisis
-- Life-threatening acute conditions caused by sudden catastrophic events
-
-Recognising that someone is approaching the end of life is the first step in making sure their care is planned around their needs and wishes, rather than reacting to crises as they happen.`,
-  },
-  {
-    title: "Identifying people approaching the end of life",
-    content: `Gold Standards Framework (GSF) Prognostic Indicators
-
-The Gold Standards Framework sets out three key triggers that help teams identify people who are approaching the end of life:
-
-1. The Surprise Question: "Would you be surprised if this patient were to die in the next few months, weeks, days?"
-
-2. General Indicators: Deterioration, increasing need, or choice for no further active care.
-
-3. Specific Clinical Indicators: Disease-specific prognostic markers.
-
-Using these triggers in a systematic way helps make sure people are identified in a timely manner, so that advance care planning and supportive care can begin early.`,
-  },
-  {
-    title: "Quality standards for end of life care",
-    content: `Four quality statements describe what good end of life care looks like:
-
-Quality Statement 1 — Identification
-People approaching the end of life are identified in a timely way and their needs are assessed. This includes the use of prognostic indicators and systematic identification processes.
-
-Quality Statement 2 — Advance Care Planning
-People identified as approaching the end of life, and their families and carers, are offered advance care planning, including discussions about preferences, values and goals of care.
-
-Quality Statement 3 — Coordinated Care
-People approaching the end of life receive coordinated care that meets their individual needs, using a multi-disciplinary approach with clear communication pathways.
-
-Quality Statement 4 — Out-of-Hours Care
-People approaching the end of life have access to high-quality care at all times, with 24/7 access to specialist advice and emergency care plans.`,
-  },
-  {
-    title: "Disease trajectories and prognostication",
-    content: `Understanding the typical patterns of decline helps the team anticipate needs and plan care.
-
-Cancer trajectory (around 20% of deaths)
-Characterised by relatively high function until a rapid decline in the final weeks or months.
-- Prognostic indicators: progressive weight loss over 10%, performance status decline, disease progression despite treatment.
-- Timeline: often 2–6 months from diagnosis of advanced disease.
-- Management: symptom control, treatment decision-making, psychosocial support.
-
-Organ failure trajectory (around 20% of deaths)
-Gradual decline with periodic acute exacerbations and partial recovery.
-- Examples: heart failure, COPD, chronic kidney disease, liver disease.
-- Challenges: uncertain prognosis, frequent hospital admissions.
-- Management: optimise medical management, advance care planning, rehabilitation.
-
-Frailty / dementia trajectory (around 40% of deaths)
-Prolonged gradual decline with increasing dependency over years.
-- Characteristics: progressive functional decline, recurrent infections, swallowing difficulties.
-- Prognosis: very unpredictable timing, often years of decline.
-- Management: comfort care, family support, dignity preservation.
-
-Sudden death (around 20% of deaths)
-Unexpected death with little or no warning period.
-- Examples: sudden cardiac death, stroke, major trauma, pulmonary embolism.
-- Preparation: general advance care planning for high-risk patients.
-- Support: immediate bereavement support for families.`,
-  },
-  {
-    title: "Measuring quality of care",
-    content: `Key performance indicators help services measure the quality of end of life care. Measurable outcomes include:
-
-- Proportion of patients with advance care plans documented
-- Percentage of patients dying in their preferred place of care
-- Hospital admission rates in the last month of life
-- Family satisfaction with care coordination
-- Time from identification to specialist palliative care referral
-- Documentation of spiritual and cultural needs assessment
-
-Tracking these outcomes helps teams understand where care is working well and where it can be improved.`,
-  },
-];
+const LESSONS: Lesson[] = (
+  JSON.parse(
+    readFileSync(
+      join(process.cwd(), "scripts", "data", "palliative-care-lessons.json"),
+      "utf8",
+    ),
+  ) as { title: string; content: string }[]
+).map((l) => ({ title: l.title, content: l.content }));
 
 const QUESTIONS: {
   prompt: string;
   options: string[];
   correctIndex: number;
 }[] = [
+  // Module 1 — End of Life Care Fundamentals
   {
     prompt:
       "According to the GMC (2010), people are 'approaching the end of life' when they are likely to die within:",
@@ -138,42 +73,139 @@ const QUESTIONS: {
   },
   {
     prompt:
-      "Quality Statement 1 for end of life care is concerned with:",
+      "Which trajectory is typically associated with conditions such as heart failure and COPD?",
+    options: ["Cancer", "Organ failure", "Sudden death", "None of these"],
+    correctIndex: 1,
+  },
+  // Module 2 — Pain Assessment and Management
+  {
+    prompt:
+      "In the PQRST pain assessment method, the 'S' stands for:",
+    options: ["Site only", "Severity", "Spiritual", "Sedation"],
+    correctIndex: 1,
+  },
+  {
+    prompt:
+      "The WHO analgesic ladder core principles are best summarised as:",
     options: [
-      "Timely identification of people approaching the end of life and assessment of their needs",
-      "Discharge planning only",
-      "Reducing staff costs",
-      "Restricting visiting hours",
+      "By the clock, by the mouth, by the ladder",
+      "As required only",
+      "Strongest drug first",
+      "Injections before tablets",
     ],
     correctIndex: 0,
   },
   {
     prompt:
-      "The frailty / dementia trajectory is best described as:",
+      "Which symptom should laxatives be started for at the same time as commencing an opioid, because tolerance to it does not develop?",
+    options: ["Nausea", "Drowsiness", "Constipation", "Respiratory depression"],
+    correctIndex: 2,
+  },
+  // Module 3 — Advance Care Planning
+  {
+    prompt:
+      "What does DNACPR stand for in advance care planning?",
     options: [
-      "High function until a rapid decline in the final weeks",
-      "Sudden, unexpected death",
-      "A prolonged, gradual decline with increasing dependency over years",
-      "A short illness lasting only days",
+      "Do Not Attempt Cardiopulmonary Resuscitation",
+      "Daily Nursing And Care Planning Record",
+      "Discharge Notice And Care Plan Review",
+      "Do Not Allow Critical Patient Referral",
+    ],
+    correctIndex: 0,
+  },
+  {
+    prompt:
+      "A Lasting Power of Attorney for health and welfare allows:",
+    options: [
+      "A clinician to overrule the patient at any time",
+      "An appointed person to make health and welfare decisions when capacity is lost",
+      "The family to access the patient's bank accounts",
+      "The hospital to discharge the patient automatically",
+    ],
+    correctIndex: 1,
+  },
+  // Module 4 — Symptom Management
+  {
+    prompt:
+      "Which first-line anti-emetic is prokinetic and used for gastric stasis, but should be avoided in bowel obstruction?",
+    options: ["Cyclizine", "Metoclopramide", "Ondansetron", "Haloperidol"],
+    correctIndex: 1,
+  },
+  {
+    prompt:
+      "Which is recommended as a first-line, non-pharmacological intervention for breathlessness?",
+    options: [
+      "Routine high-flow oxygen for everyone",
+      "Fan therapy (cool air flow over the face) and upright positioning",
+      "Strict bed rest in a warm room",
+      "Immediate sedation",
+    ],
+    correctIndex: 1,
+  },
+  // Module 5 — Communication Skills
+  {
+    prompt:
+      "In the SPIKES framework for breaking bad news, the 'P' stands for:",
+    options: ["Prescription", "Perception", "Prognosis", "Privacy"],
+    correctIndex: 1,
+  },
+  // Module 6 — Care of the Dying
+  {
+    prompt:
+      "Anticipatory prescribing in the last days of life means:",
+    options: [
+      "Prescribing medication in advance so symptoms can be relieved quickly without delay",
+      "Withholding all medication until symptoms are severe",
+      "Only prescribing antibiotics",
+      "Stopping all comfort medication",
+    ],
+    correctIndex: 0,
+  },
+  {
+    prompt:
+      "Noisy respiratory secretions at the end of life ('death rattle') are:",
+    options: [
+      "Always a sign of severe patient distress requiring intubation",
+      "Often more distressing for the family than for the patient, managed with positioning and antisecretory drugs",
+      "Best treated with aggressive deep suctioning in all cases",
+      "A reason to start artificial hydration",
+    ],
+    correctIndex: 1,
+  },
+  // Module 7 — Ethical and Legal Considerations
+  {
+    prompt:
+      "Which is a core principle of the Mental Capacity Act?",
+    options: [
+      "Capacity must be proven before anyone can make a decision",
+      "People may not make decisions others consider unwise",
+      "Every adult is presumed to have capacity unless proven otherwise",
+      "Best interests never apply",
     ],
     correctIndex: 2,
   },
   {
     prompt:
-      "Which trajectory is typically associated with conditions such as heart failure and COPD?",
-    options: ["Cancer", "Organ failure", "Sudden death", "None of these"],
-    correctIndex: 1,
-  },
-  {
-    prompt:
-      "Which of the following is a recognised key performance indicator for quality end of life care?",
+      "The four-part functional test of capacity is whether a person can understand, retain, use/weigh, and:",
     options: [
-      "Percentage of patients dying in their preferred place of care",
-      "Number of beds in the ward",
-      "Average length of staff lunch breaks",
-      "Colour of the patient's room",
+      "Communicate their decision",
+      "Read and write",
+      "Name their next of kin",
+      "Walk unaided",
     ],
     correctIndex: 0,
+  },
+  // Module 8 — Bereavement and Support
+  {
+    prompt:
+      "Which of the following is a recognised warning sign of complicated grief that should prompt referral?",
+    options: [
+      "Sadness in the first week after a death",
+      "Intense grief persisting beyond 12 months with significant functional impairment",
+      "Attending the funeral",
+      "Talking about the person who died",
+    ],
+    correctIndex: 1,
   },
 ];
 
@@ -185,9 +217,11 @@ async function clearCourseContent(courseId: string) {
 }
 
 async function main() {
-  const existing = await storage.getLmsCourses();
+  // Include inactive courses so re-running always upgrades the existing course
+  // in place rather than creating a duplicate.
+  const existing = await storage.getLmsCourses(true);
 
-  // Remove the earlier placeholder course if it is still around.
+  // Remove the earliest placeholder course if it is still around.
   const placeholder = existing.find(
     (c) => c.title.trim().toLowerCase() === LEGACY_PLACEHOLDER_TITLE.toLowerCase(),
   );
@@ -197,12 +231,24 @@ async function main() {
     console.log(`Removed legacy placeholder course (id=${placeholder.id}).`);
   }
 
-  let course = existing.find(
-    (c) => c.title.trim().toLowerCase() === COURSE_TITLE.toLowerCase(),
+  const matchTitles = [COURSE_TITLE, ...PREVIOUS_TITLES].map((t) =>
+    t.trim().toLowerCase(),
+  );
+  let course = existing.find((c) =>
+    matchTitles.includes(c.title.trim().toLowerCase()),
   );
 
   if (course) {
     await clearCourseContent(course.id);
+    const updated = await storage.updateLmsCourse(course.id, {
+      title: COURSE_TITLE,
+      description: COURSE_DESCRIPTION,
+      category: "Palliative Care",
+      passThreshold: 80,
+      certificateEnabled: true,
+      isActive: true,
+    });
+    if (updated) course = updated;
     console.log(`Course already exists (id=${course.id}) — refreshing its content.`);
   } else {
     course = await storage.createLmsCourse({
