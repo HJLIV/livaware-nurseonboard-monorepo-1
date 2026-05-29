@@ -1,111 +1,116 @@
 import { storage } from "../server/storage";
 
 /**
- * Seeds the first course in the Palliative Care series:
- * "Palliative Care 1 — Principles of Palliative & End-of-Life Care".
+ * Seeds the first course in the Palliative Care series using the real
+ * "End of Life Care Fundamentals" training content supplied by Livaware
+ * (Training-Livaware-Palliative-Care export, module 1 of 8).
  *
- * Idempotent: if a course with the same title already exists it is left
- * untouched (no duplicate is created).
+ * The portal course player renders lesson content as plain text
+ * (whitespace-pre-wrap), so the source HTML has been faithfully converted
+ * to clean, readable plain text and split into lessons by the module's
+ * natural sections. A short knowledge-check quiz drawn from this content
+ * is included (the source app had no quiz data of its own).
+ *
+ * Idempotent: re-running replaces the course's lessons/questions so the
+ * content always matches this file. Also cleans up the earlier placeholder
+ * course if it is still present.
  *
  * Run with:  npx tsx scripts/seed-palliative-care-course.ts
  */
 
-const COURSE_TITLE =
+const COURSE_TITLE = "Palliative Care 1 — End of Life Care Fundamentals";
+
+// Title of the earlier placeholder course, removed on re-seed if present.
+const LEGACY_PLACEHOLDER_TITLE =
   "Palliative Care 1 — Principles of Palliative & End-of-Life Care";
+
+const COURSE_DESCRIPTION =
+  "The first course in the palliative care series. Core concepts of palliative and end-of-life care: defining end of life care, identifying people approaching the end of life, the quality standards that underpin good care, the common disease trajectories, and how quality is measured.";
 
 const LESSONS: { title: string; content: string }[] = [
   {
-    title: "What is palliative care?",
-    content: `Palliative care is an approach that improves the quality of life of patients and their families facing the problems associated with life-limiting illness. It does this through the prevention and relief of suffering by means of early identification, careful assessment, and treatment of pain and other problems — physical, psychosocial and spiritual (World Health Organization).
+    title: "Defining end of life care",
+    content: `Definition of End of Life Care (GMC 2010)
 
-Key principles:
+People are 'approaching the end of life' when they are likely to die within the next 12 months. This includes people whose death is imminent (expected within a few hours or days) and those with:
 
-- It affirms life and regards dying as a normal process.
-- It intends neither to hasten nor postpone death.
-- It integrates the psychological and spiritual aspects of patient care.
-- It offers a support system to help patients live as actively as possible until death.
-- It offers a support system to help the family cope during the patient's illness and in their own bereavement.
+- Advanced, progressive, incurable conditions
+- General frailty and co-existing conditions that mean they are expected to die within 12 months
+- Existing conditions if they are at risk of dying from a sudden acute crisis
+- Life-threatening acute conditions caused by sudden catastrophic events
 
-Palliative care is not the same as end-of-life care. Palliative care can be provided alongside curative or life-prolonging treatment at any stage of a serious illness. End-of-life care is the palliative care delivered in the last weeks, days and hours of a person's life.
-
-Palliative care is everyone's business — it is delivered by generalist clinicians (such as community nurses and GPs) with support, where needed, from specialist palliative care teams.`,
+Recognising that someone is approaching the end of life is the first step in making sure their care is planned around their needs and wishes, rather than reacting to crises as they happen.`,
   },
   {
-    title: "Holistic assessment and the multidisciplinary team",
-    content: `Good palliative care begins with a holistic assessment that looks at the whole person, not just their diagnosis. A widely used framework considers four domains:
+    title: "Identifying people approaching the end of life",
+    content: `Gold Standards Framework (GSF) Prognostic Indicators
 
-1. Physical — pain, breathlessness, nausea, fatigue, appetite, mobility.
-2. Psychological — anxiety, depression, fear, adjustment to illness.
-3. Social — family, finances, housing, carer support, work.
-4. Spiritual — meaning, hope, faith, identity and legacy.
+The Gold Standards Framework sets out three key triggers that help teams identify people who are approaching the end of life:
 
-The multidisciplinary team (MDT) works together to meet these needs. Members can include:
+1. The Surprise Question: "Would you be surprised if this patient were to die in the next few months, weeks, days?"
 
-- Nurses (community, hospice, hospital and specialist palliative care nurses)
-- GPs and hospital doctors
-- Specialist palliative care consultants
-- Healthcare assistants
-- Physiotherapists and occupational therapists
-- Social workers
-- Chaplains and spiritual care leads
-- Pharmacists
+2. General Indicators: Deterioration, increasing need, or choice for no further active care.
 
-The nurse is often the constant point of contact and plays a central role in coordinating care, advocating for the patient, and ensuring the patient's and family's wishes are heard and recorded.
+3. Specific Clinical Indicators: Disease-specific prognostic markers.
 
-Person-centred care means decisions are made with the patient, not for them. Always involve the patient (and, with their consent, those important to them) in planning their care.`,
+Using these triggers in a systematic way helps make sure people are identified in a timely manner, so that advance care planning and supportive care can begin early.`,
   },
   {
-    title: "Common symptoms and comfort measures",
-    content: `Symptom control is a cornerstone of palliative care. The most common symptoms and the nurse's role in managing them include:
+    title: "Quality standards for end of life care",
+    content: `Four quality statements describe what good end of life care looks like:
 
-Pain
-- Assess regularly using a tool appropriate to the patient (e.g. numeric rating scale, or Abbey Pain Scale for those who cannot self-report).
-- Follow the WHO analgesic ladder; report uncontrolled pain promptly.
-- Remember that pain is not only physical — "total pain" includes emotional, social and spiritual distress.
+Quality Statement 1 — Identification
+People approaching the end of life are identified in a timely way and their needs are assessed. This includes the use of prognostic indicators and systematic identification processes.
 
-Breathlessness
-- Position the patient upright, use a handheld fan, keep the room cool and calm.
-- Reassure — anxiety and breathlessness feed each other.
+Quality Statement 2 — Advance Care Planning
+People identified as approaching the end of life, and their families and carers, are offered advance care planning, including discussions about preferences, values and goals of care.
 
-Nausea and vomiting
-- Identify the likely cause; offer small, frequent meals and good mouth care.
+Quality Statement 3 — Coordinated Care
+People approaching the end of life receive coordinated care that meets their individual needs, using a multi-disciplinary approach with clear communication pathways.
 
-Constipation
-- Anticipate it, especially with opioids; encourage fluids and report changes.
-
-Mouth care
-- Frequent, gentle oral care greatly improves comfort, particularly when a patient can no longer eat or drink.
-
-Anticipatory prescribing
-- For patients approaching the end of life, medicines for pain, agitation, breathlessness, nausea and respiratory secretions are often prescribed in advance ("just in case" medicines) so symptoms can be treated without delay.
-
-Always document symptoms, the actions you took, and the effect. Escalate to senior or specialist colleagues when symptoms are not controlled.`,
+Quality Statement 4 — Out-of-Hours Care
+People approaching the end of life have access to high-quality care at all times, with 24/7 access to specialist advice and emergency care plans.`,
   },
   {
-    title: "Communication, advance care planning and the dying phase",
-    content: `Sensitive communication is one of the most important skills in palliative care.
+    title: "Disease trajectories and prognostication",
+    content: `Understanding the typical patterns of decline helps the team anticipate needs and plan care.
 
-Communicating well
-- Use clear, simple language and avoid jargon and euphemisms that can confuse.
-- Allow silence; give the patient time to take in information and respond.
-- Listen more than you speak, and check understanding.
-- Be honest while remaining compassionate and hopeful about comfort and dignity.
+Cancer trajectory (around 20% of deaths)
+Characterised by relatively high function until a rapid decline in the final weeks or months.
+- Prognostic indicators: progressive weight loss over 10%, performance status decline, disease progression despite treatment.
+- Timeline: often 2–6 months from diagnosis of advanced disease.
+- Management: symptom control, treatment decision-making, psychosocial support.
 
-Advance care planning (ACP)
-ACP is a voluntary process of discussion about future care between a person and their care providers. It may result in:
-- An Advance Statement (preferences and wishes).
-- An Advance Decision to Refuse Treatment (ADRT), which is legally binding.
-- Appointment of a Lasting Power of Attorney for health and welfare.
-- A recommendation such as a DNACPR or ReSPECT form regarding resuscitation.
+Organ failure trajectory (around 20% of deaths)
+Gradual decline with periodic acute exacerbations and partial recovery.
+- Examples: heart failure, COPD, chronic kidney disease, liver disease.
+- Challenges: uncertain prognosis, frequent hospital admissions.
+- Management: optimise medical management, advance care planning, rehabilitation.
 
-Recognising the dying phase
-Signs that a person may be entering the last days of life include profound weakness, being bedbound, only able to take sips of fluid, increasing drowsiness, and reduced consciousness. Recognising this allows the team to focus on comfort, stop non-essential interventions, and support the family.
+Frailty / dementia trajectory (around 40% of deaths)
+Prolonged gradual decline with increasing dependency over years.
+- Characteristics: progressive functional decline, recurrent infections, swallowing difficulties.
+- Prognosis: very unpredictable timing, often years of decline.
+- Management: comfort care, family support, dignity preservation.
 
-Care after death
-Provide dignified care of the body, follow local procedures, and offer the family time and bereavement support. Caring for the family is part of caring for the patient.
+Sudden death (around 20% of deaths)
+Unexpected death with little or no warning period.
+- Examples: sudden cardiac death, stroke, major trauma, pulmonary embolism.
+- Preparation: general advance care planning for high-risk patients.
+- Support: immediate bereavement support for families.`,
+  },
+  {
+    title: "Measuring quality of care",
+    content: `Key performance indicators help services measure the quality of end of life care. Measurable outcomes include:
 
-Looking after yourself
-Palliative care can be emotionally demanding. Use clinical supervision, peer support and reflection to maintain your own wellbeing.`,
+- Proportion of patients with advance care plans documented
+- Percentage of patients dying in their preferred place of care
+- Hospital admission rates in the last month of life
+- Family satisfaction with care coordination
+- Time from identification to specialist palliative care referral
+- Documentation of spiritual and cultural needs assessment
+
+Tracking these outcomes helps teams understand where care is working well and where it can be improved.`,
   },
 ];
 
@@ -115,89 +120,103 @@ const QUESTIONS: {
   correctIndex: number;
 }[] = [
   {
-    prompt: "Which statement best describes palliative care?",
+    prompt:
+      "According to the GMC (2010), people are 'approaching the end of life' when they are likely to die within:",
+    options: ["The next 12 months", "The next 5 years", "A few hours", "The next month only"],
+    correctIndex: 0,
+  },
+  {
+    prompt:
+      "Which of these is one of the three key triggers in the Gold Standards Framework?",
     options: [
-      "Care given only in the final hours of life",
-      "An approach that improves quality of life for people with life-limiting illness and their families",
-      "Treatment intended to hasten death",
-      "Care that can only be delivered by specialist consultants",
+      "The patient's age alone",
+      "The Surprise Question",
+      "The number of medications prescribed",
+      "The patient's postcode",
     ],
     correctIndex: 1,
   },
   {
-    prompt: "Palliative care can be provided:",
+    prompt:
+      "Quality Statement 1 for end of life care is concerned with:",
     options: [
-      "Only after all curative treatment has stopped",
-      "Only in a hospice setting",
-      "Alongside curative or life-prolonging treatment at any stage of a serious illness",
-      "Only by the patient's GP",
+      "Timely identification of people approaching the end of life and assessment of their needs",
+      "Discharge planning only",
+      "Reducing staff costs",
+      "Restricting visiting hours",
+    ],
+    correctIndex: 0,
+  },
+  {
+    prompt:
+      "The frailty / dementia trajectory is best described as:",
+    options: [
+      "High function until a rapid decline in the final weeks",
+      "Sudden, unexpected death",
+      "A prolonged, gradual decline with increasing dependency over years",
+      "A short illness lasting only days",
     ],
     correctIndex: 2,
   },
   {
     prompt:
-      "A holistic palliative assessment considers physical, psychological, social and which other domain?",
-    options: ["Financial only", "Spiritual", "Legal", "Dietary only"],
-    correctIndex: 1,
-  },
-  {
-    prompt: "The concept of 'total pain' recognises that pain can be:",
-    options: [
-      "Only physical",
-      "Physical, emotional, social and spiritual",
-      "Always relieved by a single medicine",
-      "Unimportant in palliative care",
-    ],
+      "Which trajectory is typically associated with conditions such as heart failure and COPD?",
+    options: ["Cancer", "Organ failure", "Sudden death", "None of these"],
     correctIndex: 1,
   },
   {
     prompt:
-      "Which of the following is a legally binding part of advance care planning?",
+      "Which of the following is a recognised key performance indicator for quality end of life care?",
     options: [
-      "An Advance Statement of wishes",
-      "A verbal comment to a friend",
-      "An Advance Decision to Refuse Treatment (ADRT)",
-      "A note in the nurse's personal diary",
+      "Percentage of patients dying in their preferred place of care",
+      "Number of beds in the ward",
+      "Average length of staff lunch breaks",
+      "Colour of the patient's room",
     ],
-    correctIndex: 2,
-  },
-  {
-    prompt:
-      "Which of these is a recognised sign that a person may be entering the last days of life?",
-    options: [
-      "Increased appetite and energy",
-      "Profound weakness, being bedbound and increasing drowsiness",
-      "Improved mobility",
-      "Reduced need for mouth care",
-    ],
-    correctIndex: 1,
+    correctIndex: 0,
   },
 ];
 
+async function clearCourseContent(courseId: string) {
+  const lessons = await storage.getLmsLessons(courseId);
+  for (const l of lessons) await storage.deleteLmsLesson(l.id);
+  const questions = await storage.getLmsQuizQuestions(courseId);
+  for (const q of questions) await storage.deleteLmsQuizQuestion(q.id);
+}
+
 async function main() {
   const existing = await storage.getLmsCourses();
-  const already = existing.find(
-    (c) => c.title.trim().toLowerCase() === COURSE_TITLE.toLowerCase(),
+
+  // Remove the earlier placeholder course if it is still around.
+  const placeholder = existing.find(
+    (c) => c.title.trim().toLowerCase() === LEGACY_PLACEHOLDER_TITLE.toLowerCase(),
   );
-  if (already) {
-    console.log(
-      `Course already exists (id=${already.id}) — nothing to do. Delete it first if you want to re-seed.`,
-    );
-    return;
+  if (placeholder) {
+    await clearCourseContent(placeholder.id);
+    await storage.deleteLmsCourse(placeholder.id);
+    console.log(`Removed legacy placeholder course (id=${placeholder.id}).`);
   }
 
-  const course = await storage.createLmsCourse({
-    title: COURSE_TITLE,
-    description:
-      "The first course in the palliative care series. An introduction to the principles of palliative and end-of-life care: what palliative care is, holistic assessment and the MDT, common symptoms and comfort measures, and communication, advance care planning and the dying phase.",
-    sourceType: "internal",
-    category: "Palliative Care",
-    passThreshold: 80,
-    certificateEnabled: true,
-    isActive: true,
-    createdBy: "seed script",
-  });
-  console.log(`Created course "${course.title}" (id=${course.id})`);
+  let course = existing.find(
+    (c) => c.title.trim().toLowerCase() === COURSE_TITLE.toLowerCase(),
+  );
+
+  if (course) {
+    await clearCourseContent(course.id);
+    console.log(`Course already exists (id=${course.id}) — refreshing its content.`);
+  } else {
+    course = await storage.createLmsCourse({
+      title: COURSE_TITLE,
+      description: COURSE_DESCRIPTION,
+      sourceType: "internal",
+      category: "Palliative Care",
+      passThreshold: 80,
+      certificateEnabled: true,
+      isActive: true,
+      createdBy: "seed script",
+    });
+    console.log(`Created course "${course.title}" (id=${course.id})`);
+  }
 
   for (let i = 0; i < LESSONS.length; i++) {
     const l = LESSONS[i];
