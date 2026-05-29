@@ -141,7 +141,7 @@ export default function AdminCoursesPage() {
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-end justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60">Skills Arcade</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60">Training</p>
           <h1 className="font-serif text-3xl font-light tracking-tight flex items-center gap-2">
             <GraduationCap className="h-7 w-7 text-primary" /> Training Courses
           </h1>
