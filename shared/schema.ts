@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms", "internal_training"]);
 export const supervisionTypeEnum = pgEnum("supervision_type", ["supervision", "appraisal", "reflection", "other"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
@@ -1023,6 +1023,43 @@ export const insertNurseSupervisionSchema = createInsertSchema(nurseSupervisions
 });
 export type NurseSupervision = typeof nurseSupervisions.$inferSelect;
 export type InsertNurseSupervision = z.infer<typeof insertNurseSupervisionSchema>;
+
+// ==================== INTERNAL TRAINING CERTIFICATES ====================
+// Roster-wide internal-training completion tracking. Nurses upload one
+// certificate per fixed training type (sourced from external platforms);
+// admins see a whole-roster traffic-light matrix and can download certs.
+// Deliberately simple — a fixed list of trainings, one cert per nurse per
+// training (re-upload replaces). No course click-through / LMS bloat.
+export const INTERNAL_TRAININGS = [
+  { key: "elearning_end_of_life", label: "E-learning for Health — End of Life" },
+  { key: "palliative_care_fundamentals", label: "Livaware Palliative Care Fundamentals" },
+  { key: "world_class_care_principles", label: "World Class Care Principles" },
+  { key: "acute_to_community_transition", label: "Acute-to-Community Transition" },
+] as const;
+export type InternalTrainingKey = (typeof INTERNAL_TRAININGS)[number]["key"];
+export const INTERNAL_TRAINING_KEYS = INTERNAL_TRAININGS.map((t) => t.key) as readonly InternalTrainingKey[];
+
+export const internalTrainingCertificates = pgTable("internal_training_certificates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  trainingKey: text("training_key").notNull(),
+  fileName: text("file_name").notNull(),
+  originalFileName: text("original_file_name"),
+  filePath: text("file_path").notNull(),
+  mimeType: text("mime_type"),
+  fileSize: integer("file_size"),
+  completedDate: text("completed_date"),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  uploadedBy: text("uploaded_by").notNull(),
+}, (table) => [
+  uniqueIndex("internal_training_nurse_key_idx").on(table.nurseId, table.trainingKey),
+  index("internal_training_nurse_id_idx").on(table.nurseId),
+]);
+export const insertInternalTrainingCertificateSchema = createInsertSchema(internalTrainingCertificates).omit({
+  id: true, uploadedAt: true,
+});
+export type InternalTrainingCertificate = typeof internalTrainingCertificates.$inferSelect;
+export type InsertInternalTrainingCertificate = z.infer<typeof insertInternalTrainingCertificateSchema>;
 
 // ==================== HEALTHIER BUSINESS GROUP (HBC) TRAINING SYNC ====================
 // Integration with the Healthier Business Group compliance/training portal

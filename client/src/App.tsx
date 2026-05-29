@@ -85,6 +85,8 @@ const PortalInvoicesPage = lazy(() => import("@/pages/portal/invoices"));
 const InvoicesReportPage = lazy(() => import("@/pages/reports/invoices"));
 const PortalCoursesPage = lazy(() => import("@/pages/portal/courses"));
 const LmsMatrixPage = lazy(() => import("@/pages/reports/lms-matrix"));
+const InternalTrainingMatrixPage = lazy(() => import("@/pages/reports/internal-training-matrix"));
+const PortalInternalTrainingPage = lazy(() => import("@/pages/portal/internal-training"));
 
 function LoadingSpinner() {
   return (
@@ -209,6 +211,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
         <Route path="/portal/invoices" component={() => <PortalInvoicesPage />} />
         <Route path="/portal/courses" component={() => <PortalCoursesPage />} />
+        <Route path="/portal/internal-training" component={() => <PortalInternalTrainingPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
         <Route path="/portal/section/:section" component={() => <PortalSectionPage />} />
         {import.meta.env.DEV && (
@@ -274,6 +277,7 @@ function AuthenticatedRouter() {
               <Route path="/reports/availability">{() => <AdminRoute component={AvailabilityMatrixPage} />}</Route>
               <Route path="/reports/invoices">{() => <AdminRoute component={InvoicesReportPage} />}</Route>
               <Route path="/reports/lms">{() => <AppLayout><AdminRoute component={LmsMatrixPage} /></AppLayout>}</Route>
+              <Route path="/reports/internal-training">{() => <AppLayout><AdminRoute component={InternalTrainingMatrixPage} /></AppLayout>}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>

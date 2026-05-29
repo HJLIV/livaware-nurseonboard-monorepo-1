@@ -241,5 +241,9 @@ export async function registerRoutes(
   const { registerSupervisionRoutes } = await import("./routes/supervisions");
   registerSupervisionRoutes(app);
 
+  // === INTERNAL TRAINING certificates (roster-wide completion matrix) ===
+  const { registerInternalTrainingRoutes } = await import("./routes/internal-training");
+  registerInternalTrainingRoutes(app);
+
   return httpServer;
 }

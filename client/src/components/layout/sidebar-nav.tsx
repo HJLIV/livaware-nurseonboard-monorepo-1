@@ -151,6 +151,12 @@ const sections: NavSectionDef[] = [
         icon: GraduationCap,
         adminOnly: true,
       },
+      {
+        label: "Internal training",
+        href: "/reports/internal-training",
+        icon: GraduationCap,
+        adminOnly: true,
+      },
     ],
   },
   {

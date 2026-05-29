@@ -998,6 +998,18 @@ export function buildPortalGroups({
               : () => { window.location.href = `/portal/courses`; },
           },
           {
+            key: "training:internal_training",
+            label: "Internal Training",
+            status: trainingLocked
+              ? ("locked" as PortalItemStatus)
+              : ("in_progress" as PortalItemStatus),
+            disabled: trainingLocked,
+            hint: trainingLocked ? trainingHint : "Upload your training completion certificates",
+            onClick: trainingLocked
+              ? undefined
+              : () => { window.location.href = `/portal/internal-training`; },
+          },
+          {
             key: "training:arcade",
             label: "Clinical Skills Arcade",
             status: trainingLocked

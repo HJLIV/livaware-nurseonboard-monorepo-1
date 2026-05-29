@@ -30,6 +30,7 @@ import {
   type EqualOpportunities, type InsertEqualOpportunities,
   emailTemplates, type EmailTemplate, type InsertEmailTemplate,
   nurseSupervisions, type NurseSupervision, type InsertNurseSupervision,
+  internalTrainingCertificates, type InternalTrainingCertificate, type InsertInternalTrainingCertificate,
   hbcCourses, type HbcCourse, type InsertHbcCourse,
   hbcCandidateLinks, type HbcCandidateLink, type InsertHbcCandidateLink,
   hbcTrainingResults, type HbcTrainingResult, type InsertHbcTrainingResult,
@@ -203,6 +204,13 @@ export interface IStorage {
   createSupervision(data: InsertNurseSupervision): Promise<NurseSupervision>;
   updateSupervision(id: string, data: Partial<InsertNurseSupervision>): Promise<NurseSupervision | undefined>;
   deleteSupervision(id: string): Promise<void>;
+
+  // Internal Training certificates — roster-wide completion tracking.
+  getAllInternalTrainingCertificates(): Promise<InternalTrainingCertificate[]>;
+  getInternalTrainingCertificatesByNurse(nurseId: string): Promise<InternalTrainingCertificate[]>;
+  getInternalTrainingCertificate(id: string): Promise<InternalTrainingCertificate | undefined>;
+  upsertInternalTrainingCertificate(data: InsertInternalTrainingCertificate): Promise<InternalTrainingCertificate>;
+  deleteInternalTrainingCertificate(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -840,6 +848,55 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSupervision(id: string): Promise<void> {
     await db.delete(nurseSupervisions).where(eq(nurseSupervisions.id, id));
+  }
+
+  // ─── Internal Training certificates ───────────────────────────────
+  async getAllInternalTrainingCertificates(): Promise<InternalTrainingCertificate[]> {
+    return db.select().from(internalTrainingCertificates);
+  }
+
+  async getInternalTrainingCertificatesByNurse(nurseId: string): Promise<InternalTrainingCertificate[]> {
+    return db
+      .select()
+      .from(internalTrainingCertificates)
+      .where(eq(internalTrainingCertificates.nurseId, nurseId));
+  }
+
+  async getInternalTrainingCertificate(id: string): Promise<InternalTrainingCertificate | undefined> {
+    const [row] = await db
+      .select()
+      .from(internalTrainingCertificates)
+      .where(eq(internalTrainingCertificates.id, id))
+      .limit(1);
+    return row;
+  }
+
+  // Re-upload replaces the existing cert for a (nurse, trainingKey) pair.
+  async upsertInternalTrainingCertificate(
+    data: InsertInternalTrainingCertificate,
+  ): Promise<InternalTrainingCertificate> {
+    const [row] = await db
+      .insert(internalTrainingCertificates)
+      .values({ ...data, uploadedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [internalTrainingCertificates.nurseId, internalTrainingCertificates.trainingKey],
+        set: {
+          fileName: data.fileName,
+          originalFileName: data.originalFileName ?? null,
+          filePath: data.filePath,
+          mimeType: data.mimeType ?? null,
+          fileSize: data.fileSize ?? null,
+          completedDate: data.completedDate ?? null,
+          uploadedAt: new Date(),
+          uploadedBy: data.uploadedBy,
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteInternalTrainingCertificate(id: string): Promise<void> {
+    await db.delete(internalTrainingCertificates).where(eq(internalTrainingCertificates.id, id));
   }
 
   // ==================== HEALTHIER BUSINESS GROUP (HBC) ====================

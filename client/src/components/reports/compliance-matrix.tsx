@@ -25,6 +25,13 @@ export interface MatrixCell {
   status: CellStatus;
   label: string;
   date?: string | null;
+  /**
+   * Optional direct link for this cell. When set, the cell becomes a plain
+   * download/open link (opens in a new tab) instead of deep-linking into the
+   * candidate-detail page. Used by the Internal Training matrix so a green
+   * cell downloads the uploaded certificate.
+   */
+  href?: string | null;
 }
 
 export interface MatrixCandidate {
@@ -549,17 +556,33 @@ export function ComplianceMatrix({
                             >
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Link
-                                    href={candidateLink(c.id, col.key)}
-                                    className={cn(
-                                      "block rounded px-1.5 py-1 border text-[10px] font-medium leading-tight transition-colors cursor-pointer truncate",
-                                      STATUS_CLASSES[cell.status],
-                                    )}
-                                    data-testid={`cell-${c.id}-${col.key}`}
-                                  >
-                                    <span className={cn("inline-block h-1.5 w-1.5 rounded-full mr-1", STATUS_DOT[cell.status])} />
-                                    {cell.label}
-                                  </Link>
+                                  {cell.href ? (
+                                    <a
+                                      href={cell.href}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={cn(
+                                        "block rounded px-1.5 py-1 border text-[10px] font-medium leading-tight transition-colors cursor-pointer truncate",
+                                        STATUS_CLASSES[cell.status],
+                                      )}
+                                      data-testid={`cell-${c.id}-${col.key}`}
+                                    >
+                                      <span className={cn("inline-block h-1.5 w-1.5 rounded-full mr-1", STATUS_DOT[cell.status])} />
+                                      {cell.label}
+                                    </a>
+                                  ) : (
+                                    <Link
+                                      href={candidateLink(c.id, col.key)}
+                                      className={cn(
+                                        "block rounded px-1.5 py-1 border text-[10px] font-medium leading-tight transition-colors cursor-pointer truncate",
+                                        STATUS_CLASSES[cell.status],
+                                      )}
+                                      data-testid={`cell-${c.id}-${col.key}`}
+                                    >
+                                      <span className={cn("inline-block h-1.5 w-1.5 rounded-full mr-1", STATUS_DOT[cell.status])} />
+                                      {cell.label}
+                                    </Link>
+                                  )}
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="text-xs">
                                   <div className="font-semibold">{col.label}</div>
@@ -569,7 +592,9 @@ export function ComplianceMatrix({
                                       Date: {new Date(cell.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                                     </div>
                                   )}
-                                  <div className="text-muted-foreground mt-1">Click to open candidate</div>
+                                  <div className="text-muted-foreground mt-1">
+                                    {cell.href ? "Click to download certificate" : "Click to open candidate"}
+                                  </div>
                                 </TooltipContent>
                               </Tooltip>
                             </td>
