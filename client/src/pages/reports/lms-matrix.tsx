@@ -122,8 +122,23 @@ export default function LmsMatrixPage() {
           No courses yet. <Link href="/arcade/admin/courses" className="text-primary underline">Create one</Link>.
         </CardContent></Card>
       ) : visibleNurses.length === 0 ? (
-        <Card><CardContent className="p-10 text-center text-muted-foreground text-sm">
-          No assignments yet. Assign a course from the <Link href="/arcade/admin/courses" className="text-primary underline">course builder</Link>.
+        <Card><CardContent className="p-6 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            {data.courses.length === 1 ? "This course hasn't" : "These courses haven't"} been assigned to anyone yet. Assign from the{" "}
+            <Link href="/arcade/admin/courses" className="text-primary underline">course builder</Link> to start tracking completion here.
+          </p>
+          <div className="grid gap-2">
+            {data.courses.map((c) => (
+              <Link key={c.id} href="/arcade/admin/courses">
+                <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors cursor-pointer" data-testid={`unassigned-course-${c.id}`}>
+                  <GraduationCap className="h-4 w-4 text-primary shrink-0" />
+                  <span className="flex-1 font-medium truncate">{c.title}</span>
+                  <Badge variant="outline" className="text-[9px]">{c.sourceType}</Badge>
+                  {!c.isActive && <Badge variant="outline" className="text-[9px]">Inactive</Badge>}
+                </div>
+              </Link>
+            ))}
+          </div>
         </CardContent></Card>
       ) : (
         <Card><CardContent className="p-0 overflow-x-auto">
