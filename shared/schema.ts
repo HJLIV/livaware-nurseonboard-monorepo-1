@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms"]);
 export const supervisionTypeEnum = pgEnum("supervision_type", ["supervision", "appraisal", "reflection", "other"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
@@ -1023,6 +1023,161 @@ export const insertNurseSupervisionSchema = createInsertSchema(nurseSupervisions
 });
 export type NurseSupervision = typeof nurseSupervisions.$inferSelect;
 export type InsertNurseSupervision = z.infer<typeof insertNurseSupervisionSchema>;
+
+// ==================== HEALTHIER BUSINESS GROUP (HBC) TRAINING SYNC ====================
+// Integration with the Healthier Business Group compliance/training portal
+// (https://dev.hbcompliance.co.uk). HB hosts the mandatory CSTF training
+// courses. We authenticate with the V2 bearer-token flow (client_id + api_key
+// -> POST /auth/token) and read/write candidate + training data via HB's
+// documented endpoints. Credentials + host live in env (HBC_*). All three
+// tables below are admin-only mirrors of HB-side state; the nurse portal never
+// reads them.
+
+// Catalogue of training courses HB provides to our client account
+// (GET /training-list). course_id is HB's stable identifier for the course.
+export const hbcCourses = pgTable("hbc_courses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: text("course_id").notNull().unique(),
+  testId: text("test_id"),
+  courseName: text("course_name").notNull(),
+  notes: text("notes"),
+  groupTitle: text("group_title"),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+}, (table) => [
+  index("hbc_courses_course_id_idx").on(table.courseId),
+]);
+export const insertHbcCourseSchema = createInsertSchema(hbcCourses).omit({ id: true, syncedAt: true });
+export type HbcCourse = typeof hbcCourses.$inferSelect;
+export type InsertHbcCourse = z.infer<typeof insertHbcCourseSchema>;
+
+// Maps one of our nurses to their HB candidate record (candidate_ref UUID +
+// numeric candidate_id). One row per nurse — this is the join key for every
+// per-candidate HB call.
+export const hbcCandidateLinks = pgTable("hbc_candidate_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id).unique(),
+  candidateRef: text("candidate_ref").notNull(),
+  candidateId: text("candidate_id"),
+  candidateStatus: text("candidate_status"),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("hbc_candidate_links_nurse_id_idx").on(table.nurseId),
+  index("hbc_candidate_links_candidate_ref_idx").on(table.candidateRef),
+]);
+export const insertHbcCandidateLinkSchema = createInsertSchema(hbcCandidateLinks).omit({ id: true, createdAt: true });
+export type HbcCandidateLink = typeof hbcCandidateLinks.$inferSelect;
+export type InsertHbcCandidateLink = z.infer<typeof insertHbcCandidateLinkSchema>;
+
+// Per-nurse per-course training results pulled from HB
+// (GET /training-results/{candidate_ref}). Dates are HB strings in GMT.
+export const hbcTrainingResults = pgTable("hbc_training_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  courseId: text("course_id").notNull(),
+  courseName: text("course_name").notNull(),
+  dateAssigned: text("date_assigned"),
+  dateCompleted: text("date_completed"),
+  renewalDate: text("renewal_date"),
+  courseStatus: text("course_status"),
+  grade: text("grade"),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+}, (table) => [
+  index("hbc_training_results_nurse_id_idx").on(table.nurseId),
+  uniqueIndex("hbc_training_results_nurse_course_uq").on(table.nurseId, table.courseId),
+]);
+export const insertHbcTrainingResultSchema = createInsertSchema(hbcTrainingResults).omit({ id: true, syncedAt: true });
+export type HbcTrainingResult = typeof hbcTrainingResults.$inferSelect;
+export type InsertHbcTrainingResult = z.infer<typeof insertHbcTrainingResultSchema>;
+
+// ==================== TRAINING COURSES (LMS) ====================
+// A unified course builder inside Skills Arcade. A course is either authored
+// in-app ("internal" — its own lessons + optional quiz) or a thin wrapper that
+// links an existing training item so it can be assigned + chased alongside the
+// rest ("hbc" -> an hbcCourses.courseId, "arcade" -> an arcadeModules.id,
+// "mandatory" -> a MANDATORY_TRAINING_MODULES name). Completion for linked
+// courses is derived from the source system; internal courses are completed by
+// the nurse in the portal (read lessons + pass the optional quiz). Completing a
+// course with certificateEnabled auto-issues a downloadable PDF certificate.
+export const lmsCourseSourceEnum = pgEnum("lms_course_source", ["internal", "hbc", "arcade", "mandatory"]);
+export const lmsAssignmentStatusEnum = pgEnum("lms_assignment_status", ["assigned", "in_progress", "completed"]);
+
+export const lmsCourses = pgTable("lms_courses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description").default(""),
+  sourceType: lmsCourseSourceEnum("source_type").notNull().default("internal"),
+  // For non-internal courses, the identifier of the linked source item:
+  // hbc -> hbcCourses.courseId, arcade -> arcadeModules.id, mandatory -> module name.
+  sourceRef: text("source_ref"),
+  category: text("category"),
+  // Pass mark (%) for the optional internal quiz. Null = no quiz required.
+  passThreshold: integer("pass_threshold"),
+  certificateEnabled: boolean("certificate_enabled").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertLmsCourseSchema = createInsertSchema(lmsCourses).omit({ id: true, createdAt: true, updatedAt: true });
+export type LmsCourse = typeof lmsCourses.$inferSelect;
+export type InsertLmsCourse = z.infer<typeof insertLmsCourseSchema>;
+
+// Ordered lesson/material pages for an internal course (rich text content).
+export const lmsLessons = pgTable("lms_lessons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: varchar("course_id").notNull().references(() => lmsCourses.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  orderIndex: integer("order_index").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("lms_lessons_course_id_idx").on(table.courseId),
+]);
+export const insertLmsLessonSchema = createInsertSchema(lmsLessons).omit({ id: true, createdAt: true });
+export type LmsLesson = typeof lmsLessons.$inferSelect;
+export type InsertLmsLesson = z.infer<typeof insertLmsLessonSchema>;
+
+// Optional multiple-choice quiz questions for an internal course.
+export const lmsQuizQuestions = pgTable("lms_quiz_questions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: varchar("course_id").notNull().references(() => lmsCourses.id, { onDelete: "cascade" }),
+  prompt: text("prompt").notNull(),
+  options: jsonb("options").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  correctIndex: integer("correct_index").notNull().default(0),
+  orderIndex: integer("order_index").notNull().default(0),
+}, (table) => [
+  index("lms_quiz_questions_course_id_idx").on(table.courseId),
+]);
+export const insertLmsQuizQuestionSchema = createInsertSchema(lmsQuizQuestions).omit({ id: true });
+export type LmsQuizQuestion = typeof lmsQuizQuestions.$inferSelect;
+export type InsertLmsQuizQuestion = z.infer<typeof insertLmsQuizQuestionSchema>;
+
+// One row per (course, nurse). Tracks the assignment, the nurse's progress
+// through internal lessons/quiz, completion, and the issued certificate.
+export const lmsCourseAssignments = pgTable("lms_course_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  courseId: varchar("course_id").notNull().references(() => lmsCourses.id, { onDelete: "cascade" }),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  dueDate: text("due_date"),
+  status: lmsAssignmentStatusEnum("status").notNull().default("assigned"),
+  completedLessonIds: jsonb("completed_lesson_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  quizScore: integer("quiz_score"),
+  certificateDocumentId: varchar("certificate_document_id"),
+  assignedBy: text("assigned_by"),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  lastChasedAt: timestamp("last_chased_at"),
+}, (table) => [
+  index("lms_course_assignments_nurse_id_idx").on(table.nurseId),
+  index("lms_course_assignments_course_id_idx").on(table.courseId),
+  uniqueIndex("lms_course_assignments_course_nurse_uq").on(table.courseId, table.nurseId),
+]);
+export const insertLmsCourseAssignmentSchema = createInsertSchema(lmsCourseAssignments).omit({ id: true, assignedAt: true });
+export type LmsCourseAssignment = typeof lmsCourseAssignments.$inferSelect;
+export type InsertLmsCourseAssignment = z.infer<typeof insertLmsCourseAssignmentSchema>;
 
 // ==================== STAGE DISPLAY NAMES ====================
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {

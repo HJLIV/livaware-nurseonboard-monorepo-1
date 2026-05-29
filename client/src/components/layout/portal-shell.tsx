@@ -988,9 +988,14 @@ export function buildPortalGroups({
           {
             key: "training:livaware_modules",
             label: "Livaware training modules",
-            status: "coming_soon" as PortalItemStatus,
-            disabled: true,
-            hint: trainingHint || "Coming soon",
+            status: trainingLocked
+              ? ("locked" as PortalItemStatus)
+              : ("in_progress" as PortalItemStatus),
+            disabled: trainingLocked,
+            hint: trainingLocked ? trainingHint : "Assigned training courses & certificates",
+            onClick: trainingLocked
+              ? undefined
+              : () => { window.location.href = `/portal/courses`; },
           },
           {
             key: "training:arcade",

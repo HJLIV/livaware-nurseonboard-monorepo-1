@@ -1411,6 +1411,167 @@ function LaunchAnnouncementCard({ outlookConfigured }: { outlookConfigured: bool
   );
 }
 
+interface HbcStatusResponse {
+  configured: boolean;
+  courseCount: number;
+  linkedCandidateCount: number;
+  lastCatalogSync: string | null;
+}
+
+interface HbcCourseRow {
+  id: string;
+  courseId: string;
+  courseName: string;
+  groupTitle: string | null;
+  notes: string | null;
+  syncedAt: string;
+}
+
+function HbcTrainingSyncCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading: statusLoading } = useQuery({
+    queryKey: ["/api/admin/hbc/status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/hbc/status");
+      return (await res.json()) as HbcStatusResponse;
+    },
+  });
+
+  const { data: courses } = useQuery({
+    queryKey: ["/api/admin/hbc/courses"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/hbc/courses");
+      return (await res.json()) as HbcCourseRow[];
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/hbc/test-connection");
+      return await res.json();
+    },
+    onSuccess: () => toast({ title: "Connection OK", description: "Successfully authenticated with Healthier Business Group." }),
+    onError: (err: any) =>
+      toast({ title: "Connection failed", description: err?.message || "Could not reach HBC.", variant: "destructive" }),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/hbc/courses/sync");
+      return (await res.json()) as { count: number };
+    },
+    onSuccess: (data) => {
+      toast({ title: "Catalogue synced", description: `${data.count} course(s) pulled from HBC.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/hbc/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/hbc/courses"] });
+    },
+    onError: (err: any) =>
+      toast({ title: "Sync failed", description: err?.message || "Could not sync the catalogue.", variant: "destructive" }),
+  });
+
+  const configured = status?.configured ?? false;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Healthier Business Group (HBC) training sync
+            </CardTitle>
+            <CardDescription>
+              Sync mandatory training courses and per-nurse completion records with the Healthier Business Group
+              compliance portal.
+            </CardDescription>
+          </div>
+          <Badge variant={configured ? "default" : "secondary"}>
+            {statusLoading ? "Checking…" : configured ? "Connected" : "Not configured"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!configured && (
+          <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+            <div className="text-amber-200/90">
+              <p className="font-medium text-amber-200">Credentials not set.</p>
+              <p className="mt-1">
+                Set <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10">HBC_CLIENT_ID</code>,
+                <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10">HBC_API_KEY</code> and
+                <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10">HBC_API_BASE_URL</code>
+                (optionally <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10">HBC_API_VERSION</code>) to enable syncing.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <div className="text-2xl font-serif font-light">{status?.courseCount ?? 0}</div>
+            <div className="text-xs text-muted-foreground">Courses cached</div>
+          </div>
+          <div>
+            <div className="text-2xl font-serif font-light">{status?.linkedCandidateCount ?? 0}</div>
+            <div className="text-xs text-muted-foreground">Linked nurses</div>
+          </div>
+          <div>
+            <div className="text-sm">{status?.lastCatalogSync ? formatDateTime(status.lastCatalogSync) : "—"}</div>
+            <div className="text-xs text-muted-foreground">Last catalogue sync</div>
+          </div>
+        </div>
+
+        <SuperAdminGate>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!configured || testMutation.isPending}
+              onClick={() => testMutation.mutate()}
+            >
+              {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+              Test connection
+            </Button>
+            <Button
+              size="sm"
+              disabled={!configured || syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+            >
+              {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+              Sync course catalogue
+            </Button>
+          </div>
+        </SuperAdminGate>
+
+        {courses && courses.length > 0 && (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Course</TableHead>
+                  <TableHead>Group</TableHead>
+                  <TableHead>HB course ID</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {courses.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-medium">{c.courseName}</TableCell>
+                    <TableCell className="text-muted-foreground">{c.groupTitle || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground font-mono text-xs">{c.courseId}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1515,6 +1676,8 @@ export default function AdminSettingsPage() {
       <SuperAdminViewOnlyBanner />
 
       <AllEmailTemplatesCard />
+
+      <HbcTrainingSyncCard />
 
       <PlatformAnnouncementCard outlookConfigured={outlookConfigured} />
 

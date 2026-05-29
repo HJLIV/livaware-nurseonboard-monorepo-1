@@ -145,6 +145,12 @@ const sections: NavSectionDef[] = [
         icon: BarChart3,
         adminOnly: true,
       },
+      {
+        label: "Training courses",
+        href: "/reports/lms",
+        icon: GraduationCap,
+        adminOnly: true,
+      },
     ],
   },
   {
@@ -164,6 +170,12 @@ const sections: NavSectionDef[] = [
         label: "Skills Arcade modules",
         href: "/arcade/admin/modules",
         icon: Shield,
+        adminOnly: true,
+      },
+      {
+        label: "Course builder",
+        href: "/arcade/admin/courses",
+        icon: GraduationCap,
         adminOnly: true,
       },
       {

@@ -434,6 +434,26 @@ Livaware Onboarding Team`;
       subjectOverride: `Skills Arcade — ${subjectModules} assigned to you`,
     });
   }
+
+  export async function sendLmsCourseReminderEmail(opts: {
+    recipientEmail: string;
+    recipientName: string;
+    courseNames: string[];
+    portalUrl: string;
+    expiryFormatted: string;
+  }) {
+    await sendViaTemplate({
+      key: "lms_course_reminder",
+      tokens: {
+        NAME: opts.recipientName,
+        COUNT: String(opts.courseNames.length),
+        COURSES_LIST: opts.courseNames.join("\n"),
+        PORTAL_URL: opts.portalUrl,
+        EXPIRY: opts.expiryFormatted,
+      },
+      to: { email: opts.recipientEmail, name: opts.recipientName },
+    });
+  }
   
 
 // ─────────────────────────────────────────────────────────────────────────

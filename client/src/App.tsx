@@ -50,6 +50,7 @@ const ArcadeAdminModules = lazy(() => import("@/pages/arcade/admin-modules"));
 const ArcadeAdminOverview = lazy(() => import("@/pages/arcade/admin-overview"));
 const ArcadeAdminReports = lazy(() => import("@/pages/arcade/admin-reports"));
 const ArcadeAdminUsers = lazy(() => import("@/pages/arcade/admin-users"));
+const ArcadeAdminCourses = lazy(() => import("@/pages/arcade/admin-courses"));
 const DocumentsPage = lazy(() => import("@/pages/documents"));
 const DocumentsReviewPage = lazy(() => import("@/pages/documents-review"));
 
@@ -82,6 +83,8 @@ const PortalAvailabilityPage = lazy(() => import("@/pages/portal/availability"))
 const AvailabilityMatrixPage = lazy(() => import("@/pages/reports/availability"));
 const PortalInvoicesPage = lazy(() => import("@/pages/portal/invoices"));
 const InvoicesReportPage = lazy(() => import("@/pages/reports/invoices"));
+const PortalCoursesPage = lazy(() => import("@/pages/portal/courses"));
+const LmsMatrixPage = lazy(() => import("@/pages/reports/lms-matrix"));
 
 function LoadingSpinner() {
   return (
@@ -205,6 +208,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
         <Route path="/portal/invoices" component={() => <PortalInvoicesPage />} />
+        <Route path="/portal/courses" component={() => <PortalCoursesPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
         <Route path="/portal/section/:section" component={() => <PortalSectionPage />} />
         {import.meta.env.DEV && (
@@ -252,6 +256,7 @@ function AuthenticatedRouter() {
               <Route path="/arcade/admin/modules">{() => <AppLayout><ArcadeAdminModules /></AppLayout>}</Route>
               <Route path="/arcade/admin/reports">{() => <AppLayout><ArcadeAdminReports /></AppLayout>}</Route>
               <Route path="/arcade/admin/users">{() => <AppLayout><ArcadeAdminUsers /></AppLayout>}</Route>
+              <Route path="/arcade/admin/courses">{() => <AppLayout><AdminRoute component={ArcadeAdminCourses} /></AppLayout>}</Route>
 
               {/* Documents */}
               {/* The /review path must be registered BEFORE /documents so wouter
@@ -268,6 +273,7 @@ function AuthenticatedRouter() {
               <Route path="/reports/sop-comprehension">{() => <AppLayout><AdminRoute component={SopComprehensionMatrixPage} /></AppLayout>}</Route>
               <Route path="/reports/availability">{() => <AdminRoute component={AvailabilityMatrixPage} />}</Route>
               <Route path="/reports/invoices">{() => <AdminRoute component={InvoicesReportPage} />}</Route>
+              <Route path="/reports/lms">{() => <AppLayout><AdminRoute component={LmsMatrixPage} /></AppLayout>}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
