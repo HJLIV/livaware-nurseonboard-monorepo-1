@@ -51,8 +51,11 @@ interface ServiceAgreementContract {
 }
 interface ServiceAgreementState {
   signed: boolean;
+  everSigned?: boolean;
+  needsResign?: boolean;
   status: string;
   version: number | null;
+  currentVersion?: number;
   signerName: string | null;
   signedAt: string | null;
   pdfDocumentId: string | null;
@@ -239,9 +242,21 @@ export default function PortalServiceAgreementPage() {
             >
               <Lock className="h-3.5 w-3.5 mr-1" />
               {complianceApproved
-                ? "Not yet signed"
+                ? data?.state.needsResign
+                  ? "Re-signature required"
+                  : "Not yet signed"
                 : "Available once your compliance is approved"}
             </Badge>
+          </div>
+        )}
+        {!signed && data?.state.needsResign && (
+          <div
+            className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            data-testid="banner-agreement-resign"
+          >
+            The Service Agreement has been updated since you last signed it
+            {data.state.version ? ` (you signed version ${data.state.version})` : ""}. Please read
+            the latest version in full and sign again to keep your record up to date.
           </div>
         )}
       </div>

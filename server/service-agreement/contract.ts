@@ -20,59 +20,230 @@ export const SERVICE_AGREEMENT_CONFIG_KEY = "service_agreement_config";
 // Token substituted into clause 12.1 at render time.
 const RECOVERY_FEE_TOKEN = "{{RECOVERY_FEE}}";
 
+// The full, editable Service Agreement. The hardcoded constants further down
+// this file are the DEFAULT (seed) values — once a super-admin saves an edit,
+// the stored config in appSettings becomes the single source of truth and the
+// constants are only used as fallbacks for any field that is missing/invalid.
 export interface ServiceAgreementConfig {
+  // Auto-managed version. ANY content change (preamble/clauses/executionNote/
+  // recoveryFee/countersignatory/title) bumps this so previously-signed nurses
+  // are forced to re-sign.
+  version: number;
+  title: string;
+  preamble: string[];
+  clauses: ServiceAgreementClause[];
+  executionNote: string;
   // Fixed-sum Recovery Fee inserted into clause 12.1 (rendered as "£<value>").
   recoveryFee: string;
   // Livaware's countersignatory printed in the execution block / PDF.
   countersignatoryName: string;
   countersignatoryPosition: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
 }
 
-export const DEFAULT_SERVICE_AGREEMENT_CONFIG: ServiceAgreementConfig = {
-  recoveryFee: "5,000",
-  countersignatoryName: "Livaware Ltd",
-  countersignatoryPosition: "Director",
-};
+// The subset of config fields that make up the legally-binding content. A
+// change to ANY of these bumps the version and forces a re-sign.
+export type ServiceAgreementContent = Pick<
+  ServiceAgreementConfig,
+  | "title"
+  | "preamble"
+  | "clauses"
+  | "executionNote"
+  | "recoveryFee"
+  | "countersignatoryName"
+  | "countersignatoryPosition"
+>;
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+function isClauseArray(v: unknown): v is ServiceAgreementClause[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (c) =>
+        c &&
+        typeof c === "object" &&
+        typeof (c as any).number === "string" &&
+        typeof (c as any).title === "string" &&
+        Array.isArray((c as any).items) &&
+        (c as any).items.every(
+          (it: any) => it && typeof it.n === "string" && typeof it.text === "string",
+        ),
+    )
+  );
+}
+
+// Coerce arbitrary input into the canonical clause shape with a stable key
+// order, so content signatures are deterministic.
+function normalizeClauses(clauses: ServiceAgreementClause[]): ServiceAgreementClause[] {
+  return clauses.map((c) => ({
+    number: String(c.number),
+    title: String(c.title),
+    items: c.items.map((it) => ({ n: String(it.n), text: String(it.text) })),
+  }));
+}
+
+// Deterministic signature of the legally-binding content (excludes version /
+// updatedAt / updatedBy). Used to decide whether a save is a real amendment.
+function contentSignature(c: ServiceAgreementContent): string {
+  return JSON.stringify({
+    title: c.title,
+    preamble: c.preamble,
+    clauses: normalizeClauses(c.clauses),
+    executionNote: c.executionNote,
+    recoveryFee: c.recoveryFee,
+    countersignatoryName: c.countersignatoryName,
+    countersignatoryPosition: c.countersignatoryPosition,
+  });
+}
+
+export function getDefaultServiceAgreementConfig(): ServiceAgreementConfig {
+  return {
+    version: SERVICE_AGREEMENT_VERSION,
+    title: SERVICE_AGREEMENT_TITLE,
+    preamble: [...SERVICE_AGREEMENT_PREAMBLE],
+    clauses: normalizeClauses(SERVICE_AGREEMENT_CLAUSES),
+    executionNote: SERVICE_AGREEMENT_EXECUTION_NOTE,
+    recoveryFee: "5,000",
+    countersignatoryName: "Livaware Ltd",
+    countersignatoryPosition: "Director",
+    updatedAt: null,
+    updatedBy: null,
+  };
+}
 
 export async function getServiceAgreementConfig(): Promise<ServiceAgreementConfig> {
+  const def = getDefaultServiceAgreementConfig();
   const stored = await storage.getAppSetting<Partial<ServiceAgreementConfig>>(
     SERVICE_AGREEMENT_CONFIG_KEY,
   );
+  if (!stored) return def;
+  const str = (v: unknown, fallback: string) =>
+    typeof v === "string" && v.trim() ? v : fallback;
   return {
-    recoveryFee:
-      typeof stored?.recoveryFee === "string" && stored.recoveryFee.trim()
-        ? stored.recoveryFee
-        : DEFAULT_SERVICE_AGREEMENT_CONFIG.recoveryFee,
-    countersignatoryName:
-      typeof stored?.countersignatoryName === "string" && stored.countersignatoryName.trim()
-        ? stored.countersignatoryName
-        : DEFAULT_SERVICE_AGREEMENT_CONFIG.countersignatoryName,
-    countersignatoryPosition:
-      typeof stored?.countersignatoryPosition === "string" && stored.countersignatoryPosition.trim()
-        ? stored.countersignatoryPosition
-        : DEFAULT_SERVICE_AGREEMENT_CONFIG.countersignatoryPosition,
+    version:
+      typeof stored.version === "number" && Number.isFinite(stored.version) && stored.version >= 1
+        ? Math.floor(stored.version)
+        : def.version,
+    title: str(stored.title, def.title),
+    preamble: isStringArray(stored.preamble) ? stored.preamble : def.preamble,
+    clauses: isClauseArray(stored.clauses) ? normalizeClauses(stored.clauses) : def.clauses,
+    executionNote: str(stored.executionNote, def.executionNote),
+    recoveryFee: str(stored.recoveryFee, def.recoveryFee),
+    countersignatoryName: str(stored.countersignatoryName, def.countersignatoryName),
+    countersignatoryPosition: str(stored.countersignatoryPosition, def.countersignatoryPosition),
+    updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : null,
+    updatedBy: typeof stored.updatedBy === "string" ? stored.updatedBy : null,
   };
 }
 
+export async function getCurrentServiceAgreementVersion(): Promise<number> {
+  return (await getServiceAgreementConfig()).version;
+}
+
+export interface SaveServiceAgreementResult {
+  config: ServiceAgreementConfig;
+  versionBumped: boolean;
+  previousVersion: number;
+}
+
+// Validate + coerce an incoming admin edit into a content patch. Returns the
+// sanitized patch plus any validation errors (empty array = valid).
+export function sanitizeServiceAgreementContentPatch(raw: unknown): {
+  patch: Partial<ServiceAgreementContent>;
+  errors: { field: string; message: string }[];
+} {
+  const body = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const patch: Partial<ServiceAgreementContent> = {};
+  const errors: { field: string; message: string }[] = [];
+
+  if (body.title !== undefined) {
+    if (typeof body.title === "string" && body.title.trim()) patch.title = body.title.trim();
+    else errors.push({ field: "title", message: "Title is required." });
+  }
+  if (body.preamble !== undefined) {
+    if (isStringArray(body.preamble))
+      patch.preamble = body.preamble.map((p) => p).filter((p) => p.trim().length > 0);
+    else errors.push({ field: "preamble", message: "Preamble must be a list of paragraphs." });
+  }
+  if (body.clauses !== undefined) {
+    if (isClauseArray(body.clauses)) {
+      const clauses = normalizeClauses(body.clauses)
+        .map((c) => ({
+          ...c,
+          items: c.items.filter((it) => it.n.trim().length > 0 || it.text.trim().length > 0),
+        }))
+        .filter((c) => c.title.trim().length > 0 || c.items.length > 0);
+      if (clauses.length === 0)
+        errors.push({ field: "clauses", message: "At least one clause is required." });
+      else patch.clauses = clauses;
+    } else {
+      errors.push({ field: "clauses", message: "Clauses are malformed." });
+    }
+  }
+  if (body.executionNote !== undefined) {
+    if (typeof body.executionNote === "string") patch.executionNote = body.executionNote.trim();
+    else errors.push({ field: "executionNote", message: "Execution note must be text." });
+  }
+  if (body.recoveryFee !== undefined) {
+    if (typeof body.recoveryFee === "string" && body.recoveryFee.trim())
+      patch.recoveryFee = body.recoveryFee.trim();
+    else errors.push({ field: "recoveryFee", message: "Recovery Fee is required." });
+  }
+  if (body.countersignatoryName !== undefined) {
+    if (typeof body.countersignatoryName === "string" && body.countersignatoryName.trim())
+      patch.countersignatoryName = body.countersignatoryName.trim();
+    else errors.push({ field: "countersignatoryName", message: "Countersignatory name is required." });
+  }
+  if (body.countersignatoryPosition !== undefined) {
+    if (typeof body.countersignatoryPosition === "string" && body.countersignatoryPosition.trim())
+      patch.countersignatoryPosition = body.countersignatoryPosition.trim();
+    else
+      errors.push({
+        field: "countersignatoryPosition",
+        message: "Countersignatory position is required.",
+      });
+  }
+  return { patch, errors };
+}
+
 export async function saveServiceAgreementConfig(
-  patch: Partial<ServiceAgreementConfig>,
+  patch: Partial<ServiceAgreementContent>,
   updatedBy: string,
-): Promise<ServiceAgreementConfig> {
+): Promise<SaveServiceAgreementResult> {
   const current = await getServiceAgreementConfig();
+  const nextContent: ServiceAgreementContent = {
+    title: patch.title ?? current.title,
+    preamble: patch.preamble ?? current.preamble,
+    clauses: patch.clauses ?? current.clauses,
+    executionNote: patch.executionNote ?? current.executionNote,
+    recoveryFee: patch.recoveryFee ?? current.recoveryFee,
+    countersignatoryName: patch.countersignatoryName ?? current.countersignatoryName,
+    countersignatoryPosition: patch.countersignatoryPosition ?? current.countersignatoryPosition,
+  };
+  const versionBumped =
+    contentSignature(nextContent) !==
+    contentSignature({
+      title: current.title,
+      preamble: current.preamble,
+      clauses: current.clauses,
+      executionNote: current.executionNote,
+      recoveryFee: current.recoveryFee,
+      countersignatoryName: current.countersignatoryName,
+      countersignatoryPosition: current.countersignatoryPosition,
+    });
   const next: ServiceAgreementConfig = {
-    recoveryFee:
-      typeof patch.recoveryFee === "string" ? patch.recoveryFee.trim() : current.recoveryFee,
-    countersignatoryName:
-      typeof patch.countersignatoryName === "string"
-        ? patch.countersignatoryName.trim()
-        : current.countersignatoryName,
-    countersignatoryPosition:
-      typeof patch.countersignatoryPosition === "string"
-        ? patch.countersignatoryPosition.trim()
-        : current.countersignatoryPosition,
+    ...nextContent,
+    clauses: normalizeClauses(nextContent.clauses),
+    version: versionBumped ? current.version + 1 : current.version,
+    updatedAt: new Date().toISOString(),
+    updatedBy,
   };
   await storage.setAppSetting(SERVICE_AGREEMENT_CONFIG_KEY, next, updatedBy);
-  return next;
+  return { config: next, versionBumped, previousVersion: current.version };
 }
 
 // ─── Identity fields the nurse completes in the signature block ──────────
@@ -264,10 +435,11 @@ export const SERVICE_AGREEMENT_EXECUTION_NOTE =
   "Each party confirms they have read, understood, and agree to be bound by this Agreement.";
 
 // Resolve clause text with the configurable Recovery Fee substituted in.
+// Reads from the (editable) config clauses, not the seed constants.
 export function renderClauses(
   config: ServiceAgreementConfig,
 ): ServiceAgreementClause[] {
-  return SERVICE_AGREEMENT_CLAUSES.map((clause) => ({
+  return config.clauses.map((clause) => ({
     ...clause,
     items: clause.items.map((item) => ({
       ...item,
@@ -281,11 +453,11 @@ export async function buildServiceAgreementContract() {
   const config = await getServiceAgreementConfig();
   return {
     key: SERVICE_AGREEMENT_KEY,
-    version: SERVICE_AGREEMENT_VERSION,
-    title: SERVICE_AGREEMENT_TITLE,
-    preamble: SERVICE_AGREEMENT_PREAMBLE,
+    version: config.version,
+    title: config.title,
+    preamble: config.preamble,
     clauses: renderClauses(config),
-    executionNote: SERVICE_AGREEMENT_EXECUTION_NOTE,
+    executionNote: config.executionNote,
     fields: SERVICE_AGREEMENT_FIELDS,
     countersignatory: {
       name: config.countersignatoryName,
@@ -293,3 +465,8 @@ export async function buildServiceAgreementContract() {
     },
   };
 }
+
+// Read-only snapshot of the seed defaults, kept for existing imports. Defined
+// after the seed constants above so it is initialized without a TDZ error.
+export const DEFAULT_SERVICE_AGREEMENT_CONFIG: ServiceAgreementConfig =
+  getDefaultServiceAgreementConfig();

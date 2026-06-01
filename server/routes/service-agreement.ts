@@ -29,18 +29,20 @@ import { storage } from "../storage";
 import {
   createDraft,
   getLatest,
+  getLatestSubmitted,
   markSubmitted,
   updateDraft,
   attachPdfDocument,
 } from "../declarations/storage";
 import {
   SERVICE_AGREEMENT_KEY,
-  SERVICE_AGREEMENT_VERSION,
   SERVICE_AGREEMENT_TITLE,
   SERVICE_AGREEMENT_FIELDS,
   buildServiceAgreementContract,
   getServiceAgreementConfig,
+  getCurrentServiceAgreementVersion,
   saveServiceAgreementConfig,
+  sanitizeServiceAgreementContentPatch,
   DEFAULT_SERVICE_AGREEMENT_CONFIG,
 } from "../service-agreement/contract";
 import { generateServiceAgreementPDF } from "../service-agreement/pdf";
@@ -83,15 +85,32 @@ function validateForSignature(answers: Record<string, string>) {
 
 function summarizeAgreement(
   latest: Awaited<ReturnType<typeof getLatest>> | undefined,
+  latestSubmitted: Awaited<ReturnType<typeof getLatestSubmitted>> | undefined,
+  currentVersion: number,
 ) {
-  const signed = !!latest && latest.status === "submitted";
+  // Signed-state is derived from the most recent SUBMITTED row, never from the
+  // latest row outright — after an amendment the nurse may have started a fresh
+  // draft at the new version, which would otherwise mask that they previously
+  // signed an older version (and still need to re-sign).
+  const everSigned = !!latestSubmitted;
+  // "signed" means signed the CURRENT version. If the contract has since been
+  // amended (version bumped) the nurse must re-sign, so this flips back to
+  // false and the portal/sidebar treat the item as actionable again.
+  const signed = everSigned && latestSubmitted!.version === currentVersion;
+  const needsResign = everSigned && !signed;
   return {
     signed,
+    everSigned,
+    needsResign,
+    // Surface the live draft/submitted status of whatever the nurse is working
+    // on now, but report the *signed* version (and signer details) so the admin
+    // panel/portal can say "you signed version N, current is M".
     status: latest?.status ?? "not_started",
-    version: latest?.version ?? null,
-    signerName: latest?.signatureName ?? null,
-    signedAt: latest?.submittedAt?.toISOString() ?? null,
-    pdfDocumentId: latest?.pdfDocumentId ?? null,
+    version: everSigned ? latestSubmitted!.version : latest?.version ?? null,
+    currentVersion,
+    signerName: latestSubmitted?.signatureName ?? null,
+    signedAt: latestSubmitted?.submittedAt?.toISOString() ?? null,
+    pdfDocumentId: latestSubmitted?.pdfDocumentId ?? null,
   };
 }
 
@@ -146,8 +165,12 @@ async function storeServiceAgreementPdf(
 }
 
 export async function buildServiceAgreementState(nurseId: string) {
-  const latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
-  return summarizeAgreement(latest);
+  const [latest, latestSubmitted, currentVersion] = await Promise.all([
+    getLatest(nurseId, SERVICE_AGREEMENT_KEY),
+    getLatestSubmitted(nurseId, SERVICE_AGREEMENT_KEY),
+    getCurrentServiceAgreementVersion(),
+  ]);
+  return summarizeAgreement(latest, latestSubmitted, currentVersion);
 }
 
 // The Service Agreement lives inside the Compliance group and only becomes
@@ -179,10 +202,13 @@ export function registerServiceAgreementRoutes(app: Express) {
       try {
         const nurseId = (req as any).nurseId as string;
         const contract = await buildServiceAgreementContract();
-        const latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
+        const [latest, latestSubmitted] = await Promise.all([
+          getLatest(nurseId, SERVICE_AGREEMENT_KEY),
+          getLatestSubmitted(nurseId, SERVICE_AGREEMENT_KEY),
+        ]);
         res.json({
           contract,
-          state: summarizeAgreement(latest),
+          state: summarizeAgreement(latest, latestSubmitted, contract.version),
           latest: latest
             ? {
                 id: latest.id,
@@ -217,19 +243,28 @@ export function registerServiceAgreementRoutes(app: Express) {
             ? (req.body as any).signatureName
             : undefined;
 
+        const currentVersion = await getCurrentServiceAgreementVersion();
         let latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
-        if (latest && latest.status === "submitted") {
+        // Already signed the CURRENT version → nothing left to draft.
+        if (latest && latest.status === "submitted" && latest.version === currentVersion) {
           return res.status(409).json({
             message: "The Service Agreement has already been signed.",
           });
         }
-        if (!latest) {
-          latest = await createDraft(nurseId, SERVICE_AGREEMENT_KEY, SERVICE_AGREEMENT_VERSION, answers);
-        } else {
+        if (latest && latest.status !== "submitted" && latest.version === currentVersion) {
+          // Editing an in-progress draft at the current version.
           latest = (await updateDraft(latest.id, {
             answers,
             ...(signatureName !== undefined ? { signatureName } : {}),
           })) ?? latest;
+        } else {
+          // No draft yet, or only an older (signed/draft) version exists — i.e.
+          // the contract was amended and the nurse must re-sign: start a fresh
+          // draft at the current version.
+          latest = await createDraft(nurseId, SERVICE_AGREEMENT_KEY, currentVersion, answers);
+          if (signatureName !== undefined) {
+            latest = (await updateDraft(latest.id, { signatureName })) ?? latest;
+          }
         }
         res.json({ ok: true, latest });
       } catch (err: any) {
@@ -263,12 +298,16 @@ export function registerServiceAgreementRoutes(app: Express) {
           return res.status(400).json({ message: "Please complete the required fields.", errors });
         }
 
+        const currentVersion = await getCurrentServiceAgreementVersion();
         let latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
-        if (latest && latest.status === "submitted") {
+        if (latest && latest.status === "submitted" && latest.version === currentVersion) {
           return res.status(409).json({ message: "The Service Agreement has already been signed." });
         }
-        if (!latest) {
-          latest = await createDraft(nurseId, SERVICE_AGREEMENT_KEY, SERVICE_AGREEMENT_VERSION, answers);
+        // Need a draft at the CURRENT version to sign. Create one when none
+        // exists, or when only an older (signed/draft) version is present
+        // (contract amended → re-sign).
+        if (!latest || latest.version !== currentVersion) {
+          latest = await createDraft(nurseId, SERVICE_AGREEMENT_KEY, currentVersion, answers);
         }
 
         const [nurse] = await db.select().from(nurses).where(eq(nurses.id, nurseId));
@@ -332,8 +371,14 @@ export function registerServiceAgreementRoutes(app: Express) {
               "Your agreement was signed but we couldn't store the PDF. Please contact support.",
           });
         }
+        // After a successful sign the latest row IS the just-submitted row at
+        // the current version, so it doubles as the latest-submitted row.
         const finalRow = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
-        res.json({ ok: true, state: summarizeAgreement(finalRow), pdfDocumentId: documentId });
+        res.json({
+          ok: true,
+          state: summarizeAgreement(finalRow, finalRow, currentVersion),
+          pdfDocumentId: documentId,
+        });
       } catch (err: any) {
         console.error("[service-agreement] sign failed:", err);
         res.status(500).json({ message: err?.message || "Failed to sign the Service Agreement" });
@@ -348,18 +393,22 @@ export function registerServiceAgreementRoutes(app: Express) {
     async (req, res) => {
       try {
         const nurseId = String(req.params.id);
-        const latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
-        if (latest && latest.status === "submitted") {
+        const [latest, latestSubmitted, currentVersion] = await Promise.all([
+          getLatest(nurseId, SERVICE_AGREEMENT_KEY),
+          getLatestSubmitted(nurseId, SERVICE_AGREEMENT_KEY),
+          getCurrentServiceAgreementVersion(),
+        ]);
+        if (latestSubmitted) {
           await logAction(nurseId, "service_agreement", "agreement_viewed", agentFor(req), {
-            version: latest.version,
+            version: latestSubmitted.version,
           });
         }
         res.json({
-          state: summarizeAgreement(latest),
+          state: summarizeAgreement(latest, latestSubmitted, currentVersion),
           fields: SERVICE_AGREEMENT_FIELDS,
-          answers: latest?.answers ?? {},
-          ipAddress: latest?.ipAddress ?? null,
-          userAgent: latest?.userAgent ?? null,
+          answers: (latestSubmitted ?? latest)?.answers ?? {},
+          ipAddress: (latestSubmitted ?? latest)?.ipAddress ?? null,
+          userAgent: (latestSubmitted ?? latest)?.userAgent ?? null,
         });
       } catch (err: any) {
         console.error("[service-agreement] admin fetch failed:", err);
@@ -387,21 +436,32 @@ export function registerServiceAgreementRoutes(app: Express) {
     requireSuperAdmin,
     async (req, res) => {
       try {
-        const body = req.body || {};
-        const config = await saveServiceAgreementConfig(
-          {
-            recoveryFee: body.recoveryFee,
-            countersignatoryName: body.countersignatoryName,
-            countersignatoryPosition: body.countersignatoryPosition,
-          },
+        const { patch, errors } = sanitizeServiceAgreementContentPatch(req.body || {});
+        if (errors.length > 0) {
+          return res
+            .status(400)
+            .json({ message: "Please correct the contract before saving.", errors });
+        }
+        const { config, versionBumped, previousVersion } = await saveServiceAgreementConfig(
+          patch,
           agentFor(req),
         );
-        await logAction(null, "service_agreement", "config_updated", agentFor(req), {
-          recoveryFee: config.recoveryFee,
-          countersignatoryName: config.countersignatoryName,
-          countersignatoryPosition: config.countersignatoryPosition,
-        });
-        res.json({ ok: true, config });
+        // A real content change bumps the version (forcing every signed nurse to
+        // re-sign) and is recorded as a distinct, auditable amendment.
+        await logAction(
+          null,
+          "service_agreement",
+          versionBumped ? "agreement_amended" : "config_updated",
+          agentFor(req),
+          versionBumped
+            ? { previousVersion, version: config.version }
+            : {
+                recoveryFee: config.recoveryFee,
+                countersignatoryName: config.countersignatoryName,
+                countersignatoryPosition: config.countersignatoryPosition,
+              },
+        );
+        res.json({ ok: true, config, versionBumped, previousVersion });
       } catch (err: any) {
         console.error("[service-agreement] save config failed:", err);
         res.status(500).json({ message: err?.message || "Failed to save settings" });

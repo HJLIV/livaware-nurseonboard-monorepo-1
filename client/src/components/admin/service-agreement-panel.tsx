@@ -11,8 +11,11 @@ import { CheckCircle2, FileSignature, AlertCircle, Download } from "lucide-react
 
 interface AgreementState {
   signed: boolean;
+  everSigned?: boolean;
+  needsResign?: boolean;
   status: "not_started" | "draft" | "submitted" | "reopened" | string;
   version: number | null;
+  currentVersion?: number;
   signerName: string | null;
   signedAt: string | null;
   pdfDocumentId: string | null;
@@ -31,11 +34,18 @@ interface AgreementPayload {
   userAgent: string | null;
 }
 
-function StatusPill({ signed }: { signed: boolean }) {
+function StatusPill({ signed, needsResign }: { signed: boolean; needsResign?: boolean }) {
   if (signed) {
     return (
       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
         <CheckCircle2 className="h-3 w-3 mr-1" /> Signed
+      </Badge>
+    );
+  }
+  if (needsResign) {
+    return (
+      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+        <AlertCircle className="h-3 w-3 mr-1" /> Re-sign required
       </Badge>
     );
   }
@@ -79,14 +89,30 @@ export function ServiceAgreementPanel({ candidateId }: { candidateId: string }) 
                 Service Agreement (Registered Nurse)
               </h3>
               {state?.version != null && (
-                <p className="text-xs text-muted-foreground">Version {state.version}</p>
+                <p className="text-xs text-muted-foreground">
+                  Signed version {state.version}
+                  {state?.currentVersion != null && state.currentVersion !== state.version
+                    ? ` · current version ${state.currentVersion}`
+                    : ""}
+                </p>
+              )}
+              {state?.version == null && state?.currentVersion != null && (
+                <p className="text-xs text-muted-foreground">Current version {state.currentVersion}</p>
               )}
             </div>
           </div>
-          <StatusPill signed={signed} />
+          <StatusPill signed={signed} needsResign={state?.needsResign} />
         </div>
 
-        {!signed && (
+        {!signed && state?.needsResign && (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            The contract was amended since this nurse signed (they signed version {state.version},
+            current is version {state.currentVersion}). They must re-sign before their Service
+            Agreement shows as complete, and portal actions are blocked again until they do.
+          </p>
+        )}
+
+        {!signed && !state?.needsResign && (
           <p className="text-sm text-muted-foreground">
             This nurse has not yet signed the Service Agreement. Portal actions remain blocked until
             it is signed.

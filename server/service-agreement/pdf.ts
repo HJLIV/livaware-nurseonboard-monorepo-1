@@ -5,9 +5,6 @@
 import PDFDocument from "pdfkit";
 import type { NurseDeclaration, Nurse } from "@shared/schema";
 import {
-  SERVICE_AGREEMENT_TITLE,
-  SERVICE_AGREEMENT_PREAMBLE,
-  SERVICE_AGREEMENT_EXECUTION_NOTE,
   SERVICE_AGREEMENT_FIELDS,
   renderClauses,
   type ServiceAgreementConfig,
@@ -39,7 +36,7 @@ export async function generateServiceAgreementPDF(
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
       bufferPages: true,
       info: {
-        Title: `${SERVICE_AGREEMENT_TITLE} — ${nurse.fullName}`,
+        Title: `${config.title} — ${nurse.fullName}`,
         Author: "Livaware Ltd – NurseOnboard",
         Subject: "Signed Service Agreement (Registered Nurse)",
       },
@@ -61,7 +58,7 @@ export async function generateServiceAgreementPDF(
     }
 
     // Header
-    doc.fillColor(NAVY).fontSize(20).font("Helvetica-Bold").text(SERVICE_AGREEMENT_TITLE, leftMargin, doc.y);
+    doc.fillColor(NAVY).fontSize(20).font("Helvetica-Bold").text(config.title, leftMargin, doc.y);
     doc.moveTo(leftMargin, doc.y + 4).lineTo(leftMargin + pageWidth, doc.y + 4)
       .strokeColor(GOLD).lineWidth(2).stroke();
     doc.moveDown(1);
@@ -75,7 +72,7 @@ export async function generateServiceAgreementPDF(
     doc.moveDown(0.6);
 
     // Preamble
-    for (const para of SERVICE_AGREEMENT_PREAMBLE) {
+    for (const para of config.preamble) {
       doc.fillColor(DARK_GREY).fontSize(9.5).font("Helvetica")
         .text(para, { width: pageWidth, align: "left" });
       doc.moveDown(0.35);
@@ -107,7 +104,7 @@ export async function generateServiceAgreementPDF(
     doc.fillColor(NAVY).fontSize(12).font("Helvetica-Bold").text("Signatures", leftMargin, doc.y);
     doc.moveDown(0.2);
     doc.fillColor(DARK_GREY).fontSize(9.5).font("Helvetica")
-      .text(SERVICE_AGREEMENT_EXECUTION_NOTE, { width: pageWidth });
+      .text(config.executionNote, { width: pageWidth });
     doc.moveDown(0.6);
 
     // Livaware
@@ -138,7 +135,7 @@ export async function generateServiceAgreementPDF(
       const footerY = doc.page.height - doc.page.margins.bottom + 10;
       doc.fillColor(MED_GREY).fontSize(8).font("Helvetica")
         .text(
-          `Livaware NurseOnboard · ${SERVICE_AGREEMENT_TITLE} · Page ${i + 1} of ${range.count}`,
+          `Livaware NurseOnboard · ${config.title} · Page ${i + 1} of ${range.count}`,
           leftMargin, footerY, { width: pageWidth, align: "center" },
         );
     }

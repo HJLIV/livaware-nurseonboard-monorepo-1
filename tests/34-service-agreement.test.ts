@@ -143,4 +143,119 @@ describe("Task 170 — Service Agreement (Compliance-gated)", () => {
     // Unresolved token falls through to validatePortalToken → 404.
     expect([401, 404, 410]).toContain(res.status);
   });
+
+  describe("amend + re-sign flow", () => {
+    let sa: supertest.Agent;
+
+    beforeAll(async () => {
+      sa = supertest.agent(app);
+      await sa.post("/api/auth/login").send({ username: "superadmin", password: "superpass" });
+    });
+
+    it("blocks editing the contract for a non-super-admin (admin → 403)", async () => {
+      const res = await agent
+        .put(`/api/admin/settings/service-agreement`)
+        .send({ recoveryFee: "£6,000" });
+      expect(res.status).toBe(403);
+    });
+
+    it("amending the contract bumps the version and forces a previously-signed nurse to re-sign", async () => {
+      const nurse = await createTestNurse(agent, {}, { signServiceAgreement: false });
+      const link = await createPortalLink(agent, nurse.id);
+      await approveCompliance(agent, nurse.id);
+
+      // Nurse signs the current version.
+      const sign = await supertest(app)
+        .post(`/api/portal/${link.token}/service-agreement/sign`)
+        .send({ signatureName: nurse.fullName, answers: VALID_ANSWERS });
+      expect(sign.status).toBe(200);
+      expect(sign.body.state.signed).toBe(true);
+      const signedVersion = sign.body.state.version as number;
+
+      // Super-admin amends the contract content → version bumps.
+      const amend = await sa
+        .put(`/api/admin/settings/service-agreement`)
+        .send({ recoveryFee: `£${Date.now()}` });
+      expect(amend.status).toBe(200);
+      expect(amend.body.versionBumped).toBe(true);
+      expect(amend.body.config.version).toBeGreaterThan(signedVersion);
+
+      // Admin view now flags the nurse as needing to re-sign.
+      const adminView = await agent.get(`/api/nurses/${nurse.id}/service-agreement`);
+      expect(adminView.status).toBe(200);
+      expect(adminView.body.state.signed).toBe(false);
+      expect(adminView.body.state.everSigned).toBe(true);
+      expect(adminView.body.state.needsResign).toBe(true);
+      expect(adminView.body.state.version).toBe(signedVersion);
+      expect(adminView.body.state.currentVersion).toBe(amend.body.config.version);
+
+      // Portal view exposes the re-sign state too.
+      const portalView = await supertest(app).get(`/api/portal/${link.token}/service-agreement`);
+      expect(portalView.body.state.signed).toBe(false);
+      expect(portalView.body.state.needsResign).toBe(true);
+
+      // The nurse can re-sign at the new version (no 409), and is signed again.
+      const resign = await supertest(app)
+        .post(`/api/portal/${link.token}/service-agreement/sign`)
+        .send({ signatureName: nurse.fullName, answers: VALID_ANSWERS });
+      expect(resign.status).toBe(200);
+      expect(resign.body.state.signed).toBe(true);
+      expect(resign.body.state.needsResign).toBe(false);
+      expect(resign.body.state.version).toBe(amend.body.config.version);
+
+      // An amendment writes the distinct `agreement_amended` audit action.
+      const audits = await sa.get(`/api/audit-logs`);
+      const actions = (audits.body || []).map((a: any) => a.action);
+      expect(actions).toContain("agreement_amended");
+    });
+
+    it("keeps needsResign true after the nurse starts a fresh draft at the new version", async () => {
+      const nurse = await createTestNurse(agent, {}, { signServiceAgreement: false });
+      const link = await createPortalLink(agent, nurse.id);
+      await approveCompliance(agent, nurse.id);
+
+      // Sign current version.
+      const sign = await supertest(app)
+        .post(`/api/portal/${link.token}/service-agreement/sign`)
+        .send({ signatureName: nurse.fullName, answers: VALID_ANSWERS });
+      expect(sign.status).toBe(200);
+      const signedVersion = sign.body.state.version as number;
+
+      // Amend → version bumps.
+      const amend = await sa
+        .put(`/api/admin/settings/service-agreement`)
+        .send({ recoveryFee: `£${Date.now()}-x` });
+      expect(amend.body.versionBumped).toBe(true);
+
+      // Nurse opens a fresh draft at the new version (does NOT submit).
+      const draft = await supertest(app)
+        .put(`/api/portal/${link.token}/service-agreement/draft`)
+        .send({ answers: VALID_ANSWERS });
+      expect(draft.status).toBe(200);
+
+      // The new draft must NOT mask that they still owe a re-sign.
+      const adminView = await agent.get(`/api/nurses/${nurse.id}/service-agreement`);
+      expect(adminView.body.state.signed).toBe(false);
+      expect(adminView.body.state.everSigned).toBe(true);
+      expect(adminView.body.state.needsResign).toBe(true);
+      expect(adminView.body.state.version).toBe(signedVersion);
+      expect(adminView.body.state.currentVersion).toBe(amend.body.config.version);
+    });
+
+    it("a config save with no content change does not bump the version", async () => {
+      const before = await agent.get(`/api/admin/settings/service-agreement`);
+      const current = before.body.config ?? before.body;
+      const version = current.version as number;
+
+      const res = await sa.put(`/api/admin/settings/service-agreement`).send({
+        title: current.title,
+        recoveryFee: current.recoveryFee,
+        countersignatoryName: current.countersignatoryName,
+        countersignatoryPosition: current.countersignatoryPosition,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.versionBumped).toBe(false);
+      expect(res.body.config.version).toBe(version);
+    });
+  });
 });

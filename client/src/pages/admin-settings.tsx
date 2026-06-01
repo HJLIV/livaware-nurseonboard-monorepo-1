@@ -29,9 +29,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity, FileSignature } from "lucide-react";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity, FileSignature, Plus, Trash2, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 import { useAuth } from "@/lib/auth";
@@ -716,11 +717,32 @@ function PreboardIntegrityCard() {
   );
 }
 
+interface ServiceAgreementClauseItem {
+  n: string;
+  text: string;
+}
+interface ServiceAgreementClause {
+  number: string;
+  title: string;
+  items: ServiceAgreementClauseItem[];
+}
 interface ServiceAgreementConfig {
+  version: number;
+  title: string;
+  preamble: string[];
+  clauses: ServiceAgreementClause[];
+  executionNote: string;
   recoveryFee: string;
   countersignatoryName: string;
   countersignatoryPosition: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
 }
+
+// Paragraphs <-> a single editable textarea (blank line between paragraphs).
+const preambleToText = (p: string[]) => (p ?? []).join("\n\n");
+const textToPreamble = (t: string) =>
+  t.split(/\n\s*\n/).map((s) => s.trim()).filter((s) => s.length > 0);
 
 function ServiceAgreementConfigCard() {
   const { toast } = useToast();
@@ -732,29 +754,70 @@ function ServiceAgreementConfigCard() {
     queryKey: ["/api/admin/settings/service-agreement"],
   });
 
+  const [title, setTitle] = useState("");
+  const [preambleText, setPreambleText] = useState("");
+  const [clauses, setClauses] = useState<ServiceAgreementClause[]>([]);
+  const [executionNote, setExecutionNote] = useState("");
   const [recoveryFee, setRecoveryFee] = useState("");
   const [countersignatoryName, setCountersignatoryName] = useState("");
   const [countersignatoryPosition, setCountersignatoryPosition] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const hydrate = (c: ServiceAgreementConfig) => {
+    setTitle(c.title ?? "");
+    setPreambleText(preambleToText(c.preamble ?? []));
+    setClauses(JSON.parse(JSON.stringify(c.clauses ?? [])));
+    setExecutionNote(c.executionNote ?? "");
+    setRecoveryFee(c.recoveryFee ?? "");
+    setCountersignatoryName(c.countersignatoryName ?? "");
+    setCountersignatoryPosition(c.countersignatoryPosition ?? "");
+  };
 
   useEffect(() => {
-    if (data?.config) {
-      setRecoveryFee(data.config.recoveryFee ?? "");
-      setCountersignatoryName(data.config.countersignatoryName ?? "");
-      setCountersignatoryPosition(data.config.countersignatoryPosition ?? "");
-    }
+    if (data?.config) hydrate(data.config);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.config]);
 
+  const buildPayload = () => ({
+    title: title.trim(),
+    preamble: textToPreamble(preambleText),
+    clauses: clauses.map((c) => ({
+      number: c.number.trim(),
+      title: c.title.trim(),
+      items: c.items
+        .map((it) => ({ n: it.n.trim(), text: it.text.trim() }))
+        .filter((it) => it.n.length > 0 || it.text.length > 0),
+    })),
+    executionNote: executionNote.trim(),
+    recoveryFee: recoveryFee.trim(),
+    countersignatoryName: countersignatoryName.trim(),
+    countersignatoryPosition: countersignatoryPosition.trim(),
+  });
+
   const saveMutation = useMutation({
-    mutationFn: async (patch: Partial<ServiceAgreementConfig>) => {
-      const res = await apiRequest("PUT", "/api/admin/settings/service-agreement", patch);
-      return (await res.json()) as { ok: boolean; config: ServiceAgreementConfig };
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/admin/settings/service-agreement", buildPayload());
+      return (await res.json()) as {
+        ok: boolean;
+        config: ServiceAgreementConfig;
+        versionBumped: boolean;
+        previousVersion: number;
+      };
     },
     onSuccess: (resp) => {
       queryClient.setQueryData(["/api/admin/settings/service-agreement"], {
         config: resp.config,
         defaults: data?.defaults,
       });
-      toast({ title: "Service Agreement settings saved" });
+      setConfirmOpen(false);
+      toast({
+        title: resp.versionBumped
+          ? `Contract amended — now version ${resp.config.version}`
+          : "Service Agreement saved (no content change)",
+        description: resp.versionBumped
+          ? "Every nurse who signed an earlier version must now re-sign."
+          : undefined,
+      });
     },
     onError: (err: any) => {
       toast({
@@ -765,60 +828,263 @@ function ServiceAgreementConfigCard() {
     },
   });
 
-  const dirty =
-    !!data?.config &&
-    (recoveryFee !== (data.config.recoveryFee ?? "") ||
-      countersignatoryName !== (data.config.countersignatoryName ?? "") ||
-      countersignatoryPosition !== (data.config.countersignatoryPosition ?? ""));
+  const dirty = useMemo(() => {
+    if (!data?.config) return false;
+    return JSON.stringify(buildPayload()) !==
+      JSON.stringify({
+        title: data.config.title,
+        preamble: data.config.preamble,
+        clauses: data.config.clauses,
+        executionNote: data.config.executionNote,
+        recoveryFee: data.config.recoveryFee,
+        countersignatoryName: data.config.countersignatoryName,
+        countersignatoryPosition: data.config.countersignatoryPosition,
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.config, title, preambleText, clauses, executionNote, recoveryFee, countersignatoryName, countersignatoryPosition]);
+
   const valid =
+    title.trim().length > 0 &&
+    textToPreamble(preambleText).length > 0 &&
     recoveryFee.trim().length > 0 &&
     countersignatoryName.trim().length > 0 &&
-    countersignatoryPosition.trim().length > 0;
+    countersignatoryPosition.trim().length > 0 &&
+    buildPayload().clauses.length > 0 &&
+    buildPayload().clauses.every((c) => c.title.length > 0 || c.items.length > 0);
+
+  // ── clause mutators ──────────────────────────────────────────────
+  const updateClause = (i: number, patch: Partial<ServiceAgreementClause>) =>
+    setClauses((prev) => prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  const updateItem = (ci: number, ii: number, patch: Partial<ServiceAgreementClauseItem>) =>
+    setClauses((prev) =>
+      prev.map((c, idx) =>
+        idx === ci
+          ? { ...c, items: c.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) }
+          : c,
+      ),
+    );
+  const addClause = () =>
+    setClauses((prev) => [
+      ...prev,
+      { number: String(prev.length + 1), title: "", items: [{ n: "", text: "" }] },
+    ]);
+  const removeClause = (i: number) =>
+    setClauses((prev) => prev.filter((_, idx) => idx !== i));
+  const moveClause = (i: number, dir: -1 | 1) =>
+    setClauses((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  const addItem = (ci: number) =>
+    setClauses((prev) =>
+      prev.map((c, idx) => (idx === ci ? { ...c, items: [...c.items, { n: "", text: "" }] } : c)),
+    );
+  const removeItem = (ci: number, ii: number) =>
+    setClauses((prev) =>
+      prev.map((c, idx) =>
+        idx === ci ? { ...c, items: c.items.filter((_, j) => j !== ii) } : c,
+      ),
+    );
+
+  const inputCls = "text-xs uppercase tracking-wide text-muted-foreground";
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-start gap-3">
           <FileSignature className="h-5 w-5 text-[#C8A96E] mt-1" />
-          <div>
-            <CardTitle>Service Agreement settings</CardTitle>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <CardTitle>Service Agreement contract</CardTitle>
+              {data?.config && (
+                <Badge variant="outline" data-testid="badge-sa-version">
+                  v{data.config.version}
+                </Badge>
+              )}
+            </div>
             <CardDescription className="mt-1">
-              Controls the Recovery Fee printed in clause 12.1 and the Livaware countersignatory shown
-              in the execution block and countersigned PDF. Applies to agreements signed from now on.
+              Edit the full Service Agreement — preamble, every clause, the Recovery Fee (printed in
+              clause 12.1 via the <code>{"{{RECOVERY_FEE}}"}</code> token) and the Livaware
+              countersignatory. <strong>Any content change bumps the version and forces every nurse
+              who signed an earlier version to re-sign.</strong>
+              {data?.config?.updatedBy && (
+                <> Last edited by {data.config.updatedBy}.</>
+              )}
             </CardDescription>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         {isLoading || !data ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         ) : (
           <>
+            <div className="space-y-2">
+              <Label htmlFor="sa-title" className={inputCls}>Contract title</Label>
+              <Input
+                id="sa-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                data-testid="input-sa-title"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sa-preamble" className={inputCls}>
+                Preamble (one paragraph per block, separated by a blank line)
+              </Label>
+              <Textarea
+                id="sa-preamble"
+                value={preambleText}
+                onChange={(e) => setPreambleText(e.target.value)}
+                rows={5}
+                data-testid="textarea-sa-preamble"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className={inputCls}>Clauses</Label>
+                <SuperAdminGate>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={addClause}
+                    data-testid="button-sa-add-clause"
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add clause
+                  </Button>
+                </SuperAdminGate>
+              </div>
+
+              {clauses.map((clause, ci) => (
+                <div
+                  key={ci}
+                  className="rounded-lg border border-border/60 p-3 space-y-3 bg-muted/20"
+                  data-testid={`clause-${ci}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="w-20 space-y-1">
+                      <Label className={inputCls}>No.</Label>
+                      <Input
+                        value={clause.number}
+                        onChange={(e) => updateClause(ci, { number: e.target.value })}
+                        data-testid={`input-clause-number-${ci}`}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <Label className={inputCls}>Clause title</Label>
+                      <Input
+                        value={clause.title}
+                        onChange={(e) => updateClause(ci, { title: e.target.value })}
+                        data-testid={`input-clause-title-${ci}`}
+                      />
+                    </div>
+                    <div className="flex items-end gap-1 pt-5">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => moveClause(ci, -1)}
+                        disabled={ci === 0}
+                        title="Move up"
+                        data-testid={`button-clause-up-${ci}`}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => moveClause(ci, 1)}
+                        disabled={ci === clauses.length - 1}
+                        title="Move down"
+                        data-testid={`button-clause-down-${ci}`}
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeClause(ci)}
+                        title="Remove clause"
+                        className="text-destructive"
+                        data-testid={`button-clause-remove-${ci}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pl-1">
+                    {clause.items.map((item, ii) => (
+                      <div key={ii} className="flex items-start gap-2">
+                        <Input
+                          value={item.n}
+                          onChange={(e) => updateItem(ci, ii, { n: e.target.value })}
+                          placeholder="12.1"
+                          className="w-20"
+                          data-testid={`input-item-n-${ci}-${ii}`}
+                        />
+                        <Textarea
+                          value={item.text}
+                          onChange={(e) => updateItem(ci, ii, { text: e.target.value })}
+                          rows={2}
+                          className="flex-1"
+                          data-testid={`textarea-item-text-${ci}-${ii}`}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeItem(ci, ii)}
+                          title="Remove item"
+                          className="text-destructive mt-1"
+                          data-testid={`button-item-remove-${ci}-${ii}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => addItem(ci)}
+                      data-testid={`button-add-item-${ci}`}
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add sub-clause
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="sa-execution-note" className={inputCls}>Execution note</Label>
+              <Textarea
+                id="sa-execution-note"
+                value={executionNote}
+                onChange={(e) => setExecutionNote(e.target.value)}
+                rows={2}
+                data-testid="textarea-sa-execution-note"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label
-                  htmlFor="sa-recovery-fee"
-                  className="text-xs uppercase tracking-wide text-muted-foreground"
-                >
-                  Recovery Fee (£)
-                </Label>
+                <Label htmlFor="sa-recovery-fee" className={inputCls}>Recovery Fee (£)</Label>
                 <Input
                   id="sa-recovery-fee"
                   value={recoveryFee}
                   onChange={(e) => setRecoveryFee(e.target.value)}
                   data-testid="input-sa-recovery-fee"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Default: {data.defaults?.recoveryFee}
-                </p>
+                <p className="text-xs text-muted-foreground">Default: {data.defaults?.recoveryFee}</p>
               </div>
               <div className="space-y-2">
-                <Label
-                  htmlFor="sa-countersignatory-name"
-                  className="text-xs uppercase tracking-wide text-muted-foreground"
-                >
+                <Label htmlFor="sa-countersignatory-name" className={inputCls}>
                   Countersignatory name
                 </Label>
                 <Input
@@ -832,10 +1098,7 @@ function ServiceAgreementConfigCard() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label
-                  htmlFor="sa-countersignatory-position"
-                  className="text-xs uppercase tracking-wide text-muted-foreground"
-                >
+                <Label htmlFor="sa-countersignatory-position" className={inputCls}>
                   Countersignatory position
                 </Label>
                 <Input
@@ -855,28 +1118,64 @@ function ServiceAgreementConfigCard() {
               <SuperAdminGate>
                 <Button
                   size="sm"
-                  disabled={!dirty || !valid || saveMutation.isPending}
-                  onClick={() =>
-                    saveMutation.mutate({
-                      recoveryFee: recoveryFee.trim(),
-                      countersignatoryName: countersignatoryName.trim(),
-                      countersignatoryPosition: countersignatoryPosition.trim(),
-                    })
-                  }
-                  data-testid="button-save-service-agreement-config"
-                  tooltip="Save the Recovery Fee and countersignatory used in future Service Agreements."
+                  variant="outline"
+                  disabled={!dirty || saveMutation.isPending}
+                  onClick={() => hydrate(data.config)}
+                  data-testid="button-sa-revert"
                 >
-                  {saveMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
-                  ) : (
-                    <><Save className="h-4 w-4 mr-2" /> Save settings</>
-                  )}
+                  Discard changes
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!dirty || !valid || saveMutation.isPending}
+                  onClick={() => setConfirmOpen(true)}
+                  data-testid="button-save-service-agreement-config"
+                  tooltip="Save the contract. Any content change forces all nurses to re-sign."
+                >
+                  <Save className="h-4 w-4 mr-2" /> Save contract
                 </Button>
               </SuperAdminGate>
             </div>
           </>
         )}
       </CardContent>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" /> Publish amended contract?
+            </DialogTitle>
+            <DialogDescription>
+              Saving any change to the contract content bumps it to{" "}
+              <strong>version {(data?.config.version ?? 0) + 1}</strong>. Every nurse who has already
+              signed an earlier version will be required to re-sign before their Service Agreement
+              shows as complete again. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={saveMutation.isPending}
+              data-testid="button-sa-cancel-publish"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              data-testid="button-sa-confirm-publish"
+            >
+              {saveMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+              ) : (
+                <>Publish &amp; require re-sign</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

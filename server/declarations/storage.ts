@@ -31,6 +31,21 @@ export async function getLatest(
   return row;
 }
 
+export async function getLatestSubmitted(
+  nurseId: string,
+  declarationKey: string,
+): Promise<NurseDeclaration | undefined> {
+  const [row] = await db.select().from(nurseDeclarations)
+    .where(and(
+      eq(nurseDeclarations.nurseId, nurseId),
+      eq(nurseDeclarations.declarationKey, declarationKey),
+      eq(nurseDeclarations.status, "submitted"),
+    ))
+    .orderBy(desc(nurseDeclarations.version))
+    .limit(1);
+  return row;
+}
+
 export async function getHistory(
   nurseId: string,
   declarationKey: string,
