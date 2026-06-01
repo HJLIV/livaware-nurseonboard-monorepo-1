@@ -1,5 +1,6 @@
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { Client } from "@microsoft/microsoft-graph-client";
+import { isEmailSendingSuppressed } from "./outlook";
 
 const TENANT_ID = process.env.AZURE_AD_TENANT_ID;
 const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID;
@@ -43,6 +44,7 @@ interface EmailAttachment {
 }
 
 export async function sendEmail(to: string, subject: string, htmlBody: string, attachments?: EmailAttachment[]) {
+  if (isEmailSendingSuppressed()) return;
   const client = await getUncachableOutlookClient();
 
   const message: Record<string, unknown> = {

@@ -3435,6 +3435,8 @@ export default function PortalPage() {
     const journey = portalHub?.journey ?? fallbackJourney;
     return buildPortalGroups({
       token,
+      serviceAgreementSigned: (portalHub as any)?.serviceAgreement?.signed,
+      selectServiceAgreement: () => navigate(`/portal/service-agreement`),
       journey,
       stepStatuses,
       gate: portalHub?.gate ?? null,

@@ -64,7 +64,11 @@ export async function loginAsTeam() {
   return agent;
 }
 
-export async function createTestNurse(agent: supertest.Agent, overrides: Record<string, unknown> = {}) {
+export async function createTestNurse(
+  agent: supertest.Agent,
+  overrides: Record<string, unknown> = {},
+  opts: { signServiceAgreement?: boolean } = {},
+) {
   const ts = Date.now();
   const rand = Math.random().toString(36).substring(2, 8);
   const data = {
@@ -81,8 +85,39 @@ export async function createTestNurse(agent: supertest.Agent, overrides: Record<
     // specifically exercise the gate locking behaviour set the mode to
     // "manual" and call relock as needed.
     try { await agent.post(`/api/nurses/${res.body.id}/onboarding-access/unlock`).send({}); } catch {}
+    // Pre-sign the Service Agreement (task 170) directly via storage. The
+    // agreement is no longer a blocking step, but several suites assert on a
+    // signed agreement; this keeps them green without driving the gated HTTP
+    // flow. Tests that exercise the agreement gate pass
+    // { signServiceAgreement: false } and sign explicitly.
+    if (opts.signServiceAgreement !== false) {
+      try { await markServiceAgreementSigned(res.body.id); } catch {}
+    }
   }
   return res.body;
+}
+
+// Directly mark a nurse's Service Agreement as signed, bypassing the portal
+// HTTP flow (and therefore the compliance-approval gate on the sign route).
+// Used by suites that just need a signed agreement on the record.
+export async function markServiceAgreementSigned(nurseId: string) {
+  const { getLatest, createDraft, markSubmitted } = await import(
+    "../server/declarations/storage"
+  );
+  const { SERVICE_AGREEMENT_KEY, SERVICE_AGREEMENT_VERSION } = await import(
+    "../server/service-agreement/contract"
+  );
+  let latest = await getLatest(nurseId, SERVICE_AGREEMENT_KEY);
+  if (latest && latest.status === "submitted") return;
+  if (!latest) {
+    latest = await createDraft(nurseId, SERVICE_AGREEMENT_KEY, SERVICE_AGREEMENT_VERSION, {});
+  }
+  await markSubmitted(latest.id, {
+    answers: { nmcPin: "TEST123", rcnMembershipNo: "RCN0", utrCompanyNumber: "0000000000" },
+    signatureName: "Test Signer",
+    ipAddress: "127.0.0.1",
+    userAgent: "vitest",
+  });
 }
 
 export async function createTestCandidate(agent: supertest.Agent, overrides: Record<string, unknown> = {}) {
@@ -98,6 +133,7 @@ export async function createTestCandidate(agent: supertest.Agent, overrides: Rec
   if (res.body.id) {
     createdCandidateIds.push(res.body.id);
     try { await agent.post(`/api/nurses/${res.body.id}/onboarding-access/unlock`).send({}); } catch {}
+    try { await markServiceAgreementSigned(res.body.id); } catch {}
   }
   return res.body;
 }

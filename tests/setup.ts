@@ -1,4 +1,4 @@
-import { beforeAll } from "vitest";
+import { afterAll, beforeAll } from "vitest";
 
 process.env.NODE_ENV = "test";
 process.env.ADMIN_USERNAME = "admin";
@@ -20,4 +20,25 @@ beforeAll(async () => {
 
   const bcryptjs = await import("bcryptjs");
   (globalThis as Record<string, unknown>).bcrypt = bcryptjs.default || bcryptjs;
+});
+
+// `setupFiles` runs in each test file's worker, so this afterAll fires once per
+// test file and tears down whatever nurses/candidates that file created. This
+// keeps test people from piling up in the dev database across runs without
+// having to add an afterAll to every individual suite. Best-effort: skips files
+// that created nothing, and never fails the run on a cleanup error.
+afterAll(async () => {
+  try {
+    const helpers = await import("./helpers");
+    if (
+      helpers.getTrackedNurseIds().length === 0 &&
+      helpers.getTrackedCandidateIds().length === 0
+    ) {
+      return;
+    }
+    const agent = await helpers.loginAsAdmin();
+    await helpers.cleanupTestData(agent);
+  } catch {
+    /* best-effort cleanup — never fail the suite on teardown */
+  }
 });

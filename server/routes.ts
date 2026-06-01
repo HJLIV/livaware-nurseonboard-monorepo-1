@@ -186,6 +186,13 @@ export async function registerRoutes(
   const { registerPortalAuthRoutes } = await import("./routes/portal-auth");
   registerPortalAuthRoutes(app);
 
+  // === SERVICE AGREEMENT (task 170) ===
+  // The Service Agreement is no longer a blocking first step. It lives inside
+  // the Compliance group and only becomes signable once an admin has approved
+  // the nurse's compliance (enforced per-route in service-agreement.ts).
+  const { registerServiceAgreementRoutes } = await import("./routes/service-agreement");
+  registerServiceAgreementRoutes(app);
+
   // === PORTAL (nurse-facing self-service) ===
   const { registerPortalRoutes } = await import("./routes/portal");
   registerPortalRoutes(app);

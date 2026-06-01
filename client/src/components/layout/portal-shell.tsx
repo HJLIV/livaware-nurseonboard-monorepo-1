@@ -657,6 +657,12 @@ interface BuildGroupsArgs {
   } | null;
   selectDeclaration?: (key: string) => void;
   gate?: PortalGateInfo | null;
+  // Service Agreement (task 170, revised) — surfaced inside the Compliance
+  // group as its final item. `undefined` means the hub hasn't reported state
+  // yet (item hidden); otherwise it shows locked until the nurse's compliance
+  // is admin-approved, then becomes signable, then completed once signed.
+  serviceAgreementSigned?: boolean;
+  selectServiceAgreement?: () => void;
 }
 
 // Additional onboarding declarations the candidate must complete alongside
@@ -691,11 +697,42 @@ export function buildPortalGroups({
   declarationsSummary,
   selectDeclaration,
   gate,
+  serviceAgreementSigned,
+  selectServiceAgreement,
 }: BuildGroupsArgs): PortalSidebarGroup[] {
   const isLocked = !!gate && gate.unlocked === false;
   const lockedHint = "Locked — finish Assessment first";
   const stageLocked = !!gate && gate.complianceApproved === false;
   const stageLockedHint = "Locked — admin must approve compliance first";
+
+  // Service Agreement (task 170, revised) — no longer a blocking first step.
+  // It is the first item of the Induction group and only becomes signable once
+  // an admin has approved the nurse's compliance. Before approval it is shown
+  // locked; after approval it is actionable; once signed it shows completed.
+  const saSigned = serviceAgreementSigned === true;
+  const saApproved = gate?.complianceApproved === true;
+  const serviceAgreementItem = {
+    key: "onboard:service-agreement",
+    label: "Service Agreement",
+    status: saSigned
+      ? ("completed" as PortalItemStatus)
+      : saApproved
+        ? ("in_progress" as PortalItemStatus)
+        : ("locked" as PortalItemStatus),
+    disabled: !saSigned && !saApproved,
+    hint: saSigned
+      ? "Signed"
+      : saApproved
+        ? "Read & sign your Service Agreement"
+        : "Available once your compliance is approved",
+    onClick:
+      saSigned || saApproved
+        ? selectServiceAgreement ??
+          (() => {
+            window.location.href = `/portal/service-agreement`;
+          })
+        : undefined,
+  };
 
   const examStatus: PortalItemStatus = gate?.prerequisites.examinationCompleted
     ? "completed"
@@ -721,7 +758,8 @@ export function buildPortalGroups({
       policiesHint = `${policiesSummary.outstanding} of ${policiesSummary.totalRequired} outstanding`;
     }
   }
-  return [
+
+  const baseGroups: PortalSidebarGroup[] = [
     {
       key: "overview",
       title: "Welcome",
@@ -896,6 +934,8 @@ export function buildPortalGroups({
       icon: <BookOpenCheck className="h-3.5 w-3.5" />,
       defaultOpen: !isLocked,
       items: [
+        // Service Agreement — first Induction item, gated on admin approval.
+        ...(serviceAgreementSigned !== undefined ? [serviceAgreementItem] : []),
         {
           key: "induction:handbook",
           label: "Staff Handbook induction",
@@ -1060,6 +1100,8 @@ export function buildPortalGroups({
         ]
       : []),
   ];
+
+  return baseGroups;
 }
 
 export function PortalShellEmptyState({

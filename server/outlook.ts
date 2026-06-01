@@ -41,6 +41,15 @@ export function isOutlookConfigured(): boolean {
   return !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET);
 }
 
+// Never hit the real Microsoft Graph send API during automated tests —
+// otherwise every created test nurse/candidate fires a live applicant
+// welcome email, and broadcast tests email every non-withdrawn nurse in the
+// dev database (hundreds of emails per run). Outbound sends are suppressed
+// under Vitest; mailbox *reads* are left untouched.
+export function isEmailSendingSuppressed(): boolean {
+  return process.env.NODE_ENV === "test" || !!process.env.VITEST;
+}
+
 function formatExpiry(d: Date): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
@@ -51,6 +60,7 @@ async function sendViaTemplate(opts: {
   to: { email: string; name: string };
   subjectOverride?: string;
 }): Promise<void> {
+  if (isEmailSendingSuppressed()) return;
   const client = await getGraphClient();
   const rendered = await renderEmail(opts.key, opts.tokens);
   await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
@@ -174,6 +184,7 @@ export async function sendOnboardingUnlockedEmail(
     fileBuffer: Buffer,
     mimeType: string,
   ) {
+    if (isEmailSendingSuppressed()) return;
     const client = await getGraphClient();
     const timestamp = new Date().toLocaleString("en-GB", {
       day: "numeric", month: "long", year: "numeric",
@@ -215,6 +226,7 @@ export async function sendOnboardingUnlockedEmail(
     pdfBuffer: Buffer;
     recipientEmail?: string;
   }): Promise<void> {
+    if (isEmailSendingSuppressed()) return;
     const client = await getGraphClient();
     const recipient = opts.recipientEmail || process.env.INVOICE_RECIPIENT_EMAIL || "invoices@livaware.co.uk";
     const tokens = {
@@ -363,6 +375,7 @@ Livaware Onboarding Team`;
     // their per-instance prose wins. Otherwise we fall through to the
     // template registry so the editable defaults are used.
     if (customBody) {
+      if (isEmailSendingSuppressed()) return;
       const client = await getGraphClient();
       const bodyText = customBody.replace(/\[FORM_URL\]/g, refereeFormUrl);
       const subject = customSubject || `Livaware Ltd — Reference Request for ${candidateName}`;

@@ -35,6 +35,7 @@ import {
 import {
   getGraphClient,
   isOutlookConfigured,
+  isEmailSendingSuppressed,
   listMailboxAttachmentsForCandidate,
   downloadMailboxAttachment,
 } from "./outlook";
@@ -296,28 +297,30 @@ export async function sendTrainingChaseEmail(opts: SendChaseOpts): Promise<SendC
   // Use createMessage → send instead of sendMail so we can capture the
   // Graph conversationId. The reply scanner uses it to restrict ingest
   // to attachments that arrived in the same Outlook thread.
-  const client = await getGraphClient();
   let conversationId: string | null = null;
-  try {
-    const draft: any = await client.api(`/users/${SENDER_EMAIL}/messages`).post({
-      subject: rendered.subject,
-      body: { contentType: "HTML", content: html },
-      toRecipients: [{ emailAddress: { address: opts.nurse.email, name: opts.nurse.fullName } }],
-    });
-    conversationId = draft?.conversationId ?? null;
-    await client.api(`/users/${SENDER_EMAIL}/messages/${draft.id}/send`).post({});
-  } catch (e: any) {
-    // Fall back to sendMail if createMessage flow fails — we lose
-    // conversationId but the chase still goes out.
-    console.warn("[sendTrainingChaseEmail] createMessage→send failed, falling back to sendMail:", e?.message || e);
-    await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
-      message: {
+  if (!isEmailSendingSuppressed()) {
+    const client = await getGraphClient();
+    try {
+      const draft: any = await client.api(`/users/${SENDER_EMAIL}/messages`).post({
         subject: rendered.subject,
         body: { contentType: "HTML", content: html },
         toRecipients: [{ emailAddress: { address: opts.nurse.email, name: opts.nurse.fullName } }],
-      },
-      saveToSentItems: true,
-    });
+      });
+      conversationId = draft?.conversationId ?? null;
+      await client.api(`/users/${SENDER_EMAIL}/messages/${draft.id}/send`).post({});
+    } catch (e: any) {
+      // Fall back to sendMail if createMessage flow fails — we lose
+      // conversationId but the chase still goes out.
+      console.warn("[sendTrainingChaseEmail] createMessage→send failed, falling back to sendMail:", e?.message || e);
+      await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+        message: {
+          subject: rendered.subject,
+          body: { contentType: "HTML", content: html },
+          toRecipients: [{ emailAddress: { address: opts.nurse.email, name: opts.nurse.fullName } }],
+        },
+        saveToSentItems: true,
+      });
+    }
   }
 
   const modulesIncluded = opts.modules.map((m) => m.moduleName);
@@ -740,6 +743,7 @@ export async function scanMailboxForChaseRepliesAll(triggeredBy: string): Promis
 }
 
 async function sendChaseScanAdminSummary(summary: BulkChaseReplyScanSummary, triggeredBy: string) {
+  if (isEmailSendingSuppressed()) return;
   const client = await getGraphClient();
   const reviewRows = summary.perNurse
     .filter((s) => s.needsReviewCount > 0)

@@ -25,7 +25,7 @@ import {
   type TrainingNotification,
 } from "@shared/schema";
 import { storage } from "./storage";
-import { isOutlookConfigured, getGraphClient } from "./outlook";
+import { isOutlookConfigured, getGraphClient, isEmailSendingSuppressed } from "./outlook";
 import {
   computeOutstandingTrainingForNurse,
   sendTrainingChaseEmail,
@@ -405,6 +405,7 @@ function escapeHtml(text: string): string {
 }
 
 async function sendWeeklyChaseAdminSummary(r: WeeklyChaseResult): Promise<void> {
+  if (isEmailSendingSuppressed()) return;
   const client = await getGraphClient();
   const failedRows = r.results
     .filter((x) => !x.ok)

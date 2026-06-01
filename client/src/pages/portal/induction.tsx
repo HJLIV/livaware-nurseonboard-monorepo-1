@@ -392,6 +392,8 @@ export default function PortalInductionPage() {
       selectCvUpload: () => navigate(`/portal/page?step=profile`),
       selectDeclaration: (k) => navigate(`/portal/declaration/${k}`),
       gate: portal.gate ?? null,
+      serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
+      selectServiceAgreement: () => navigate(`/portal/service-agreement`),
     });
   }, [portal, token, stepStatuses, navigate, policies, inductionSummary, sopComprehension]);
 

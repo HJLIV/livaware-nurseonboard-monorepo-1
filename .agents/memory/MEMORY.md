@@ -1,1 +1,2 @@
 - [LMS nurse-preview answer keys](lms-preview-answer-keys.md) — admin "preview as nurse" for quizzes must use a sanitized endpoint; raw admin course detail leaks correctIndex.
+- [Test-mode email suppression](test-email-suppression.md) — sends gate on `isEmailSendingSuppressed()` in tests; announcements deliberately excluded (it stubs Graph via vi.mock); setup.ts auto-cleans test people per file.

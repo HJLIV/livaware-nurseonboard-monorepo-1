@@ -125,6 +125,7 @@ export async function validatePortalToken(req: Request, res: Response, next: Nex
   return res.status(404).json({ message: "Invalid or expired portal link" });
 }
 
+
 // Build the agentName used by portal-side audit writes. Embeds the
 // nurse's real name when known so /audit shows "Jane Doe" instead of
 // the generic "nurse_portal" label. Read-side enrichment in

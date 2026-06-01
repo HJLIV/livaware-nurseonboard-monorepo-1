@@ -31,7 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity } from "lucide-react";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity, FileSignature } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 import { useAuth } from "@/lib/auth";
@@ -705,6 +705,171 @@ function PreboardIntegrityCard() {
                     <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
                   ) : (
                     <><Save className="h-4 w-4 mr-2" /> Save threshold</>
+                  )}
+                </Button>
+              </SuperAdminGate>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface ServiceAgreementConfig {
+  recoveryFee: string;
+  countersignatoryName: string;
+  countersignatoryPosition: string;
+}
+
+function ServiceAgreementConfigCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<{
+    config: ServiceAgreementConfig;
+    defaults: ServiceAgreementConfig;
+  }>({
+    queryKey: ["/api/admin/settings/service-agreement"],
+  });
+
+  const [recoveryFee, setRecoveryFee] = useState("");
+  const [countersignatoryName, setCountersignatoryName] = useState("");
+  const [countersignatoryPosition, setCountersignatoryPosition] = useState("");
+
+  useEffect(() => {
+    if (data?.config) {
+      setRecoveryFee(data.config.recoveryFee ?? "");
+      setCountersignatoryName(data.config.countersignatoryName ?? "");
+      setCountersignatoryPosition(data.config.countersignatoryPosition ?? "");
+    }
+  }, [data?.config]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (patch: Partial<ServiceAgreementConfig>) => {
+      const res = await apiRequest("PUT", "/api/admin/settings/service-agreement", patch);
+      return (await res.json()) as { ok: boolean; config: ServiceAgreementConfig };
+    },
+    onSuccess: (resp) => {
+      queryClient.setQueryData(["/api/admin/settings/service-agreement"], {
+        config: resp.config,
+        defaults: data?.defaults,
+      });
+      toast({ title: "Service Agreement settings saved" });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Save failed",
+        description: err?.message || "Unknown error",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const dirty =
+    !!data?.config &&
+    (recoveryFee !== (data.config.recoveryFee ?? "") ||
+      countersignatoryName !== (data.config.countersignatoryName ?? "") ||
+      countersignatoryPosition !== (data.config.countersignatoryPosition ?? ""));
+  const valid =
+    recoveryFee.trim().length > 0 &&
+    countersignatoryName.trim().length > 0 &&
+    countersignatoryPosition.trim().length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start gap-3">
+          <FileSignature className="h-5 w-5 text-[#C8A96E] mt-1" />
+          <div>
+            <CardTitle>Service Agreement settings</CardTitle>
+            <CardDescription className="mt-1">
+              Controls the Recovery Fee printed in clause 12.1 and the Livaware countersignatory shown
+              in the execution block and countersigned PDF. Applies to agreements signed from now on.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !data ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="sa-recovery-fee"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
+                >
+                  Recovery Fee (£)
+                </Label>
+                <Input
+                  id="sa-recovery-fee"
+                  value={recoveryFee}
+                  onChange={(e) => setRecoveryFee(e.target.value)}
+                  data-testid="input-sa-recovery-fee"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default: {data.defaults?.recoveryFee}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="sa-countersignatory-name"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
+                >
+                  Countersignatory name
+                </Label>
+                <Input
+                  id="sa-countersignatory-name"
+                  value={countersignatoryName}
+                  onChange={(e) => setCountersignatoryName(e.target.value)}
+                  data-testid="input-sa-countersignatory-name"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default: {data.defaults?.countersignatoryName}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="sa-countersignatory-position"
+                  className="text-xs uppercase tracking-wide text-muted-foreground"
+                >
+                  Countersignatory position
+                </Label>
+                <Input
+                  id="sa-countersignatory-position"
+                  value={countersignatoryPosition}
+                  onChange={(e) => setCountersignatoryPosition(e.target.value)}
+                  data-testid="input-sa-countersignatory-position"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default: {data.defaults?.countersignatoryPosition}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              {dirty && <p className="text-xs text-amber-400">Unsaved changes</p>}
+              <SuperAdminGate>
+                <Button
+                  size="sm"
+                  disabled={!dirty || !valid || saveMutation.isPending}
+                  onClick={() =>
+                    saveMutation.mutate({
+                      recoveryFee: recoveryFee.trim(),
+                      countersignatoryName: countersignatoryName.trim(),
+                      countersignatoryPosition: countersignatoryPosition.trim(),
+                    })
+                  }
+                  data-testid="button-save-service-agreement-config"
+                  tooltip="Save the Recovery Fee and countersignatory used in future Service Agreements."
+                >
+                  {saveMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><Save className="h-4 w-4 mr-2" /> Save settings</>
                   )}
                 </Button>
               </SuperAdminGate>
@@ -2032,6 +2197,8 @@ export default function AdminSettingsPage() {
       </Card>
 
       <PreboardIntegrityCard />
+
+      <ServiceAgreementConfigCard />
 
       <RunDetailDialog runId={openRunId} onClose={() => setOpenRunId(null)} />
 

@@ -264,6 +264,8 @@ export default function PortalAvailabilityPage() {
     if (!portal) return [];
     return buildPortalGroups({
       token: "me",
+      serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
+      selectServiceAgreement: () => navigate(`/portal/service-agreement`),
       journey: portal.journey,
       stepStatuses: {},
       gate: portal.gate ?? null,

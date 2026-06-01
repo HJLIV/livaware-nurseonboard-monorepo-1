@@ -408,6 +408,8 @@ export default function PortalInvoicesPage() {
     const isCompleted = portal.nurse.currentStage === "completed";
     return buildPortalGroups({
       token: "me",
+      serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
+      selectServiceAgreement: () => navigate(`/portal/service-agreement`),
       journey: portal.journey,
       stepStatuses: {},
       gate: portal.gate ?? null,

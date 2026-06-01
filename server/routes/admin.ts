@@ -782,6 +782,12 @@ export function registerNurseRoutes(app: Express) {
       const { getInductionGateState } = await import("../services/induction-gate");
       const inductionGate = await getInductionGateState(nurse.id);
 
+      // Service Agreement gate (task 170) — the first, blocking portal step.
+      // Surfaced so the sidebar can show it first + lock everything else
+      // until the agreement is signed.
+      const { buildServiceAgreementState } = await import("./service-agreement");
+      const serviceAgreement = await buildServiceAgreementState(nurse.id);
+
       res.json({
         nurse: {
           id: nurse.id,
@@ -792,6 +798,7 @@ export function registerNurseRoutes(app: Express) {
         journey,
         gate,
         induction: inductionGate,
+        serviceAgreement,
         token: "me",
         firstVisit: isFirstVisit,
         sessionIssued: !!bootstrappedSessionId,

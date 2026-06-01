@@ -648,6 +648,8 @@ export default function PortalHub() {
     if (!portal || !token) return [];
     return buildPortalGroups({
       token,
+      serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
+      selectServiceAgreement: () => navigate(`/portal/service-agreement`),
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
