@@ -269,8 +269,10 @@ export default function PortalAvailabilityPage() {
       journey: portal.journey,
       stepStatuses: {},
       gate: portal.gate ?? null,
-      availabilityEnabled: portal.nurse.currentStage === "completed",
-      invoicesEnabled: portal.nurse.currentStage === "completed",
+      availabilityEnabled:
+        portal.nurse.currentStage === "completed" || portal.gate?.graceAccess === true,
+      invoicesEnabled:
+        portal.nurse.currentStage === "completed" || portal.gate?.graceAccess === true,
       selectInvoices: () => navigate(`/portal/invoices`),
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (k) => navigate(`/portal/page?step=${k}`),

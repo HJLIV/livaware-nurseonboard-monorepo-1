@@ -132,6 +132,15 @@ async function applyCell(
 async function ensureCompletedNurse(nurseId: string): Promise<{ ok: boolean; nurse?: any; status?: number; message?: string }> {
   const nurse = await storage.getCandidate(nurseId);
   if (!nurse) return { ok: false, status: 404, message: "Nurse not found" };
+  // Availability is open to fully-onboarded (completed) nurses, or to any
+  // nurse an admin has granted early "grace" access.
+  if (nurse.currentStage !== "completed" && nurse.graceAccessEnabled !== true) {
+    return {
+      ok: false,
+      status: 403,
+      message: "Availability is available once you've reached the Nurse stage.",
+    };
+  }
   return { ok: true, nurse };
 }
 

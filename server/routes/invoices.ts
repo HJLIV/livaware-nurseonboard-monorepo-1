@@ -54,7 +54,7 @@ async function requireCompletedStageRead(req: Request, res: Response, next: Next
     const nurseId = (req as Request & { nurseId?: string }).nurseId;
     if (!nurseId) return res.status(401).json({ message: "Not authenticated" });
     const nurse = await storage.getCandidate(nurseId);
-    if (!nurse || nurse.currentStage !== "completed") {
+    if (!nurse || (nurse.currentStage !== "completed" && nurse.graceAccessEnabled !== true)) {
       return res.status(404).json({ message: "Not found" });
     }
     next();
@@ -70,7 +70,7 @@ async function requireCompletedStageWrite(req: Request, res: Response, next: Nex
     if (!nurseId) return res.status(401).json({ message: "Not authenticated" });
     const nurse = await storage.getCandidate(nurseId);
     if (!nurse) return res.status(404).json({ message: "Not found" });
-    if (nurse.currentStage !== "completed") {
+    if (nurse.currentStage !== "completed" && nurse.graceAccessEnabled !== true) {
       return res.status(403).json({
         error: "stage_locked",
         message: "Invoices are available once you've reached the Nurse stage.",

@@ -48,6 +48,7 @@ interface PortalData {
     unlocked: boolean;
     mode: "auto" | "manual";
     complianceApproved?: boolean;
+    graceAccess?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
     lockedReason?: string | null;
   };
@@ -653,9 +654,11 @@ export default function PortalHub() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
-      availabilityEnabled: portal.nurse.currentStage === "completed",
+      availabilityEnabled:
+        portal.nurse.currentStage === "completed" || portal.gate?.graceAccess === true,
       selectAvailability: () => navigate(`/portal/availability`),
-      invoicesEnabled: portal.nurse.currentStage === "completed",
+      invoicesEnabled:
+        portal.nurse.currentStage === "completed" || portal.gate?.graceAccess === true,
       selectInvoices: () => navigate(`/portal/invoices`),
       // Cookie-based navigation — no token in the URL.
       selectOverview: () => navigate(`/portal`),

@@ -30,6 +30,7 @@ interface PortalData {
     mode: "auto" | "manual";
     stageCompleted?: boolean;
     complianceApproved?: boolean;
+    graceAccess?: boolean;
     prerequisites: { examinationCompleted: boolean; competencyDeclared: boolean; cvReviewed: boolean };
     lockedReason?: string | null;
   };
@@ -148,8 +149,10 @@ export default function PortalSectionPage() {
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,
-      availabilityEnabled: isCompletedStage,
+      availabilityEnabled: isCompletedStage || portal.gate?.graceAccess === true,
       selectAvailability: () => navigate(`/portal/availability`),
+      invoicesEnabled: isCompletedStage || portal.gate?.graceAccess === true,
+      selectInvoices: () => navigate(`/portal/invoices`),
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (stepKey) => navigate(`/portal/page?step=${stepKey}`),
       selectCompetency: () => navigate(`/portal/page?step=competency`),

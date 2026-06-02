@@ -405,7 +405,8 @@ export default function PortalInvoicesPage() {
   // nurse is at the completed stage.
   const groups = useMemo<PortalSidebarGroup[]>(() => {
     if (!portal) return [];
-    const isCompleted = portal.nurse.currentStage === "completed";
+    const isCompleted =
+      portal.nurse.currentStage === "completed" || portal.gate?.graceAccess === true;
     return buildPortalGroups({
       token: "me",
       serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,

@@ -626,6 +626,7 @@ export interface PortalGateInfo {
   mode: "auto" | "manual";
   stageCompleted?: boolean;
   complianceApproved?: boolean;
+  graceAccess?: boolean;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -1004,14 +1005,20 @@ export function buildPortalGroups({
         // assessment, behind compliance approval, and (per pre-existing
         // behaviour) behind the induction handbook being unlocked.
         const handbookLocked = !!inductionSummary && !inductionSummary.unlocked;
-        const trainingLocked = isLocked || stageLocked || handbookLocked;
+        // Grace early-access opens Training before compliance approval +
+        // induction completion — but the Assessment gate still applies.
+        const graceOpen = gate?.graceAccess === true;
+        const trainingLocked =
+          isLocked || (!graceOpen && (stageLocked || handbookLocked));
         const trainingHint = isLocked
           ? lockedHint
-          : stageLocked
-            ? stageLockedHint
-            : handbookLocked
-              ? `Locked — finish all ${inductionSummary!.total} induction items first`
-              : undefined;
+          : graceOpen
+            ? undefined
+            : stageLocked
+              ? stageLockedHint
+              : handbookLocked
+                ? `Locked — finish all ${inductionSummary!.total} induction items first`
+                : undefined;
         return [
           {
             key: "training:training_docs",

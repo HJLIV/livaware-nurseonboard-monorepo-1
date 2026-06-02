@@ -86,6 +86,16 @@ export const nurses = pgTable("nurses", {
   // re-locks them.
   complianceApprovedAt: timestamp("compliance_approved_at"),
   complianceApprovedBy: text("compliance_approved_by"),
+  // ─── Grace early-access (per-nurse override) ──────────────────────
+  // Admin "grace" switch that opens the Training section (Mandatory
+  // Training, Internal Training, Clinical Skills Arcade), Invoicing and
+  // Availability for this nurse BEFORE the normal gates (compliance
+  // approval + induction completion + the final "completed" stage) are
+  // satisfied. Used to let trusted nurses get a head start. Does NOT
+  // bypass the Assessment gate (assessment must still be complete).
+  graceAccessEnabled: boolean("grace_access_enabled").default(false).notNull(),
+  graceAccessUpdatedAt: timestamp("grace_access_updated_at"),
+  graceAccessUpdatedBy: text("grace_access_updated_by"),
   // ─── Uniform sizing (task 153) ───────────────────────────────────
   // Captured once on the nurse profile so the office doesn't have to
   // keep re-asking. Top / trouser are free text (e.g. "M 40-42" or

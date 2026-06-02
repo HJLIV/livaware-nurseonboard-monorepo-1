@@ -26,6 +26,9 @@ interface GateState {
   complianceApproved: boolean;
   complianceApprovedAt: string | null;
   complianceApprovedBy: string | null;
+  graceAccess?: boolean;
+  graceAccessUpdatedAt?: string | null;
+  graceAccessUpdatedBy?: string | null;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -102,6 +105,20 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
     onSuccess: () => {
       invalidate();
       toast({ title: "Compliance approval revoked" });
+    },
+  });
+
+  const setGraceAccess = useMutation({
+    mutationFn: async (enabled: boolean) =>
+      apiRequest("PUT", `/api/nurses/${candidateId}/grace-access`, { enabled }),
+    onSuccess: (_d, enabled) => {
+      invalidate();
+      toast({
+        title: enabled ? "Early access granted" : "Early access removed",
+        description: enabled
+          ? "Training, Invoicing and Availability are open for this nurse."
+          : "Training, Invoicing and Availability now follow the normal gates again.",
+      });
     },
   });
 
@@ -216,6 +233,40 @@ export function OnboardingAccessPanel({ candidateId }: { candidateId: string }) 
             {state.complianceApproved && state.complianceApprovedAt && (
               <> Approved {new Date(state.complianceApprovedAt).toLocaleString()}
                 {state.complianceApprovedBy ? ` by ${state.complianceApprovedBy}` : ""}.</>
+            )}
+          </p>
+        </div>
+        <div className="rounded-md border border-card-border/60 bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm">
+              {state.graceAccess ? (
+                <LockOpen className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <Lock className="h-4 w-4 text-muted-foreground/60" />
+              )}
+              <span className="font-medium">Early access (grace)</span>
+              <Badge
+                variant={state.graceAccess ? "default" : "outline"}
+                data-testid="badge-grace-access-status"
+              >
+                {state.graceAccess ? "On" : "Off"}
+              </Badge>
+            </div>
+            <Switch
+              data-testid="switch-grace-access"
+              checked={state.graceAccess === true}
+              onCheckedChange={(v) => setGraceAccess.mutate(v)}
+              disabled={setGraceAccess.isPending}
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Opens the whole Training section (Mandatory Training, Internal
+            Training, Clinical Skills Arcade), Invoicing and Availability for
+            this nurse before compliance approval, induction completion and the
+            Nurse stage are reached. The Assessment gate still applies.
+            {state.graceAccess && state.graceAccessUpdatedAt && (
+              <> Enabled {new Date(state.graceAccessUpdatedAt).toLocaleString()}
+                {state.graceAccessUpdatedBy ? ` by ${state.graceAccessUpdatedBy}` : ""}.</>
             )}
           </p>
         </div>

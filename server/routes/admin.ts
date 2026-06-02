@@ -1013,6 +1013,37 @@ export function registerNurseRoutes(app: Express) {
     res.json(state);
   });
 
+  // ─── Grace early-access toggle ──────────────────────────────────────
+  // Opens the Training section (Mandatory Training, Internal Training,
+  // Clinical Skills Arcade), Invoicing and Availability for this nurse
+  // before the normal compliance-approval / induction / completed-stage
+  // gates are satisfied. Per-nurse override.
+  app.put("/api/nurses/:id/grace-access", requireAdmin, async (req, res) => {
+    const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
+    if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+    const enabled = req.body?.enabled === true;
+    if (nurse.graceAccessEnabled === enabled) {
+      const state = await getGateState(req.params.id);
+      return res.json(state);
+    }
+    const now = new Date();
+    await db.update(nurses).set({
+      graceAccessEnabled: enabled,
+      graceAccessUpdatedAt: now,
+      graceAccessUpdatedBy: agentFor(req),
+      updatedAt: now,
+    }).where(eq(nurses.id, req.params.id));
+    await logAction(
+      nurse.id,
+      "admin",
+      enabled ? "grace_access_granted" : "grace_access_revoked",
+      agentFor(req),
+      {},
+    );
+    const state = await getGateState(req.params.id);
+    res.json(state);
+  });
+
   app.post("/api/nurses/:id/cv-review", requireAdmin, async (req, res) => {
     const [nurse] = await db.select().from(nurses).where(eq(nurses.id, req.params.id));
     if (!nurse) return res.status(404).json({ message: "Nurse not found" });

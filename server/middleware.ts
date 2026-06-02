@@ -5,7 +5,7 @@ import crypto from "crypto";
 import fs from "fs";
 import rateLimit from "express-rate-limit";
 import { db } from "./db";
-import { portalLinks } from "@shared/schema";
+import { portalLinks, nurses } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 
 export const uploadsDir = path.join(process.cwd(), "uploads");
@@ -255,6 +255,13 @@ export async function requireInductionAcknowledged(req: Request, res: Response, 
       // No nurse context (e.g. arcade trainer/admin). Don't gate.
       return next();
     }
+    // Grace early-access override: an admin can open the Skills Arcade
+    // (and the rest of Training) for a nurse before induction is done.
+    const [graceNurse] = await db
+      .select({ graceAccessEnabled: nurses.graceAccessEnabled })
+      .from(nurses)
+      .where(eq(nurses.id, nurseId));
+    if (graceNurse?.graceAccessEnabled === true) return next();
     const { getInductionGateState } = await import("./services/induction-gate");
     const state = await getInductionGateState(nurseId);
     if (!state.unlocked) {

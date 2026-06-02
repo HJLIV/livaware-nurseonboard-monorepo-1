@@ -25,6 +25,13 @@ export interface GateState {
   complianceApproved: boolean;
   complianceApprovedAt: Date | null;
   complianceApprovedBy: string | null;
+  // True when an admin has flipped the per-nurse "grace" override on.
+  // Opens the Training section, Invoicing and Availability early,
+  // bypassing the compliance-approval / induction / completed-stage
+  // gates (but NOT the Assessment gate).
+  graceAccess: boolean;
+  graceAccessUpdatedAt: Date | null;
+  graceAccessUpdatedBy: string | null;
   prerequisites: {
     examinationCompleted: boolean;
     competencyDeclared: boolean;
@@ -65,6 +72,9 @@ export function gateStateFromNurse(nurse: Nurse, prerequisites: GateState["prere
     complianceApproved: !!nurse.complianceApprovedAt,
     complianceApprovedAt: nurse.complianceApprovedAt ?? null,
     complianceApprovedBy: nurse.complianceApprovedBy ?? null,
+    graceAccess: nurse.graceAccessEnabled === true,
+    graceAccessUpdatedAt: nurse.graceAccessUpdatedAt ?? null,
+    graceAccessUpdatedBy: nurse.graceAccessUpdatedBy ?? null,
     prerequisites,
   };
 }
