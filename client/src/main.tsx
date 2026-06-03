@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { PostHogProvider } from "posthog-js/react";
+import { PostHogProvider } from "@posthog/react";
 import App from "./App";
 import "./index.css";
 

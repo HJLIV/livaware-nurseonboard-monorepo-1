@@ -61,6 +61,7 @@ Sidebar groups (admin) live in `client/src/components/layout/sidebar-nav.tsx`. P
 - `OPENAI_API_KEY` (or `AI_INTEGRATIONS_OPENAI_API_KEY`), `ANTHROPIC_API_KEY`
 - `REPORT_EMAIL` (preboard reports), `INVOICE_RECIPIENT_EMAIL` (default `invoices@livaware.co.uk`)
 - `PLATFORM_VIDEO_URL` (optional — explainer video URL embedded in the launch announcement; block hidden when unset), `PORTAL_PUBLIC_URL` (optional, defaults to `https://onboard.livaware.co.uk`)
+- `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`, `NEXT_PUBLIC_POSTHOG_HOST` (optional — PostHog analytics + session recording; public publishable token. `VITE_*`/`POSTHOG_*` names also accepted. Server injects them into the SPA shell as `window.__POSTHOG__` via `injectPosthogConfig` in `server/posthog-config.ts`; client inits via `PostHogProvider` (`@posthog/react`) in `client/src/main.tsx`. Feature is a no-op when the token is unset.)
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `TEAM_USERNAME`, `TEAM_PASSWORD`
 - `HBC_CLIENT_ID`, `HBC_API_KEY`, `HBC_API_BASE_URL`, `HBC_API_VERSION` (optional, defaults `1.0`) — Healthier Business Group training-sync integration; all unset = feature shows "not configured"
 
