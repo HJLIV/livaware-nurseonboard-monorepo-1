@@ -305,6 +305,32 @@ export default function AdminModules() {
     },
   });
 
+  const [showEnrolAll, setShowEnrolAll] = useState(false);
+  const enrolAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/enrol-all", {});
+      return res.json() as Promise<{
+        ok: boolean;
+        nursesProcessed: number;
+        enrolmentsCreated: number;
+        skippedNurseIds: string[];
+      }>;
+    },
+    onSuccess: (data) => {
+      const skipped = data.skippedNurseIds?.length ?? 0;
+      toast({
+        title: "Enrolment complete",
+        description: `${data.enrolmentsCreated} new ${data.enrolmentsCreated === 1 ? "enrolment" : "enrolments"} created across ${data.nursesProcessed} ${data.nursesProcessed === 1 ? "nurse" : "nurses"}.${skipped > 0 ? ` ${skipped} could not be set up.` : ""}`,
+      });
+      setShowEnrolAll(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/modules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/assignable-nurses"] });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Enrolment failed", description: e.message, variant: "destructive" });
+    },
+  });
+
   const assignMutation = useMutation({
     mutationFn: async ({ moduleId, nurseIds }: { moduleId: string; nurseIds: string[] }) => {
       const res = await apiRequest("POST", "/api/admin/assign", { moduleId, nurseIds });
@@ -378,9 +404,19 @@ export default function AdminModules() {
           <p className="text-sm text-muted-foreground mt-1">Manage clinical competency modules and scenarios</p>
         </div>
         <SuperAdminGate>
-          <Button onClick={() => setShowImport(true)} data-testid="button-import-json" tooltip="Import a scenario JSON file to create or update modules.">
-            <Upload className="w-4 h-4 mr-1" /> Import JSON
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setShowEnrolAll(true)}
+              data-testid="button-enrol-all"
+              tooltip="Enrol every nurse into every current module they aren't already in. Safe to run repeatedly."
+            >
+              <Users className="w-4 h-4 mr-1" /> Enrol All Nurses
+            </Button>
+            <Button onClick={() => setShowImport(true)} data-testid="button-import-json" tooltip="Import a scenario JSON file to create or update modules.">
+              <Upload className="w-4 h-4 mr-1" /> Import JSON
+            </Button>
+          </div>
         </SuperAdminGate>
       </div>
 
@@ -468,6 +504,30 @@ export default function AdminModules() {
           );
         })}
       </div>
+
+      <Dialog open={showEnrolAll} onOpenChange={setShowEnrolAll}>
+        <DialogContent className="max-w-md" aria-describedby="enrol-all-desc">
+          <DialogHeader>
+            <DialogTitle>Enrol all nurses in all modules</DialogTitle>
+            <p id="enrol-all-desc" className="text-sm text-muted-foreground">
+              This sets up every nurse in the Skills Arcade and enrols them into every current module they aren't already in (status "not started"). Nurses are <strong>not</strong> emailed. It's safe to run repeatedly — existing enrolments are never duplicated.
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEnrolAll(false)}>Cancel</Button>
+            <SuperAdminGate>
+              <Button
+                onClick={() => enrolAllMutation.mutate()}
+                disabled={enrolAllMutation.isPending}
+                data-testid="button-confirm-enrol-all"
+              >
+                {enrolAllMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                Enrol all nurses
+              </Button>
+            </SuperAdminGate>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showImport} onOpenChange={setShowImport}>
         <DialogContent className="max-w-lg">

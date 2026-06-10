@@ -55,6 +55,25 @@ describe("Skills Arcade Admin & Trainer Routes", () => {
     expect(res.body.ok).toBe(true);
   });
 
+  // T98b
+  it("T98b: POST /api/admin/enrol-all — backfills all nurses and is idempotent", async () => {
+    const agent = supertest.agent(app);
+    await agent.post("/api/auth/login").send({ username: "superadmin", password: "superpass" });
+
+    const first = await agent.post("/api/admin/enrol-all").send({});
+    expect(first.status).toBe(200);
+    expect(first.body.ok).toBe(true);
+    expect(typeof first.body.nursesProcessed).toBe("number");
+    expect(typeof first.body.enrolmentsCreated).toBe("number");
+    // Backfill defaults to NOT emailing nurses.
+    expect(first.body.emailsSent).toBe(0);
+
+    // Running again must not create duplicate enrolments.
+    const second = await agent.post("/api/admin/enrol-all").send({});
+    expect(second.status).toBe(200);
+    expect(second.body.enrolmentsCreated).toBe(0);
+  });
+
   // T99
   it("T99: GET /api/trainer/remediation-queue — lists nurses needing remediation", async () => {
     const agent = supertest.agent(app);

@@ -836,12 +836,52 @@ export async function registerRoutes(
     { message: "userIds or nurseIds is required" },
   );
 
+  // Create "not started" assignments for every current module the arcade
+  // user isn't already assigned, reusing the same latest-module-version
+  // resolution + skip-if-exists logic as the manual /api/admin/assign route.
+  // Idempotent: safe to call repeatedly — never duplicates existing
+  // assignments. Returns the count + names of the newly-created enrolments.
+  async function enrolUserInAllModules(
+    userId: string,
+    assignedByArcadeUserId: string | null,
+  ): Promise<{ created: number; moduleNames: string[] }> {
+    const allModules = await storage.getAllModules();
+    const existing = await storage.getAssignmentsByUser(userId);
+    const existingModuleIds = new Set(existing.map((a) => a.moduleId));
+
+    let created = 0;
+    const moduleNames: string[] = [];
+    for (const mod of allModules) {
+      if (existingModuleIds.has(mod.id)) continue;
+      const mv = await storage.getLatestModuleVersion(mod.id);
+      if (!mv) continue; // module has no published version yet — skip
+      await storage.createAssignment({
+        userId,
+        moduleVersionId: mv.id,
+        moduleId: mod.id,
+        status: "not_started",
+        assignedBy: assignedByArcadeUserId,
+      });
+      created += 1;
+      moduleNames.push(mod.name);
+    }
+    return { created, moduleNames };
+  }
+
   // Bridge a platform nurse into the arcade users table on demand. Returns
   // the existing arcade user if one is already linked (by nurseId or email),
   // otherwise creates a fresh nurse-role arcade user with a random password
   // (no invite email is sent — the admin can use the existing
   // /api/admin/invite-nurse endpoint when they want to email credentials).
-  async function ensureArcadeUserForNurse(nurseId: string): Promise<User | null> {
+  // When a new arcade account is created, the nurse is immediately
+  // auto-enrolled in every current module (best-effort — a hiccup here
+  // never fails account creation). Pass { autoEnrol: false } when the
+  // caller takes responsibility for enrolment + counting itself (e.g. the
+  // backfill endpoint).
+  async function ensureArcadeUserForNurse(
+    nurseId: string,
+    options?: { autoEnrol?: boolean },
+  ): Promise<User | null> {
     const existingByNurse = await storage.getUserByNurseId(nurseId);
     if (existingByNurse) return existingByNurse;
 
@@ -856,7 +896,7 @@ export async function registerRoutes(
     const tempPassword = Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    return storage.createUser({
+    const created = await storage.createUser({
       username: email,
       password: hashedPassword,
       name: nurse.fullName,
@@ -865,6 +905,31 @@ export async function registerRoutes(
       active: true,
       nurseId: nurse.id,
     } as any);
+
+    if (options?.autoEnrol !== false) {
+      try {
+        const { created: enrolled, moduleNames } = await enrolUserInAllModules(created.id, null);
+        if (enrolled > 0) {
+          await platformStorage.createAuditLog({
+            nurseId,
+            module: "skills_arcade",
+            action: "assign_module",
+            agentName: "system",
+            detail: {
+              auto: true,
+              reason: "arcade_account_created",
+              arcadeUserId: created.id,
+              moduleNames,
+              newlyAssignedCount: enrolled,
+            },
+          });
+        }
+      } catch (e: any) {
+        console.warn("[arcade-auto-enrol] failed for nurse", nurseId, e?.message || e);
+      }
+    }
+
+    return created;
   }
 
   app.post("/api/admin/assign", requireArcadeSuperAdmin, async (req, res) => {
@@ -1009,6 +1074,128 @@ export async function registerRoutes(
       res.json({
         ok: true,
         assignedCount,
+        skippedNurseIds,
+        emailsSent: emailResults.filter((r) => r.emailSent).length,
+        emailFailures: emailResults.filter((r) => !r.emailSent),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Enrol every assignable platform nurse into every current module they
+  // aren't already assigned. Idempotent — safe to click repeatedly (never
+  // duplicates existing assignments). Defaults to NOT emailing nurses
+  // (mirrors the bulk-assign notify flag); pass { notify: true } to opt in.
+  app.post("/api/admin/enrol-all", requireArcadeSuperAdmin, async (req, res) => {
+    try {
+      const notify = req.body?.notify === true; // default: do not email
+      const adminUser = (req as any).user as User | undefined;
+
+      // assignments.assignedBy FKs to arcade_users.id, but the acting admin
+      // is a platform-session user that may not exist in arcade_users.
+      const sessionUserId = req.session.userId;
+      let assignedByArcadeUserId: string | null = null;
+      if (sessionUserId) {
+        const arcadeActor = await storage.getUser(sessionUserId);
+        if (arcadeActor) assignedByArcadeUserId = arcadeActor.id;
+      }
+
+      const nurses = await platformStorage.getCandidates();
+      let nursesProcessed = 0;
+      let enrolmentsCreated = 0;
+      const skippedNurseIds: string[] = [];
+      // arcadeUserId → { nurseId, names } for newly-created enrolments.
+      const newModuleNamesByUser = new Map<string, { nurseId: string; names: string[] }>();
+
+      for (const nurse of nurses) {
+        // autoEnrol:false — the backfill owns enrolment + counting + audit
+        // uniformly for both brand-new and existing arcade users.
+        const arcadeUser = await ensureArcadeUserForNurse(nurse.id, { autoEnrol: false });
+        if (!arcadeUser) {
+          skippedNurseIds.push(nurse.id);
+          continue;
+        }
+        nursesProcessed += 1;
+        const { created, moduleNames } = await enrolUserInAllModules(arcadeUser.id, assignedByArcadeUserId);
+        enrolmentsCreated += created;
+        if (created > 0) {
+          newModuleNamesByUser.set(arcadeUser.id, { nurseId: nurse.id, names: moduleNames });
+          await platformStorage.createAuditLog({
+            nurseId: nurse.id,
+            module: "skills_arcade",
+            action: "assign_module",
+            agentName: adminUser?.name ?? "super_admin",
+            detail: {
+              auto: true,
+              reason: "enrol_all_backfill",
+              arcadeUserId: arcadeUser.id,
+              moduleNames,
+              newlyAssignedCount: created,
+            },
+          });
+        }
+      }
+
+      // Optionally email each nurse a single notification listing the
+      // modules they were just enrolled in. Best-effort: failures are
+      // logged but never break the backfill.
+      const emailResults: Array<{ nurseId: string; emailSent: boolean; error?: string }> = [];
+      if (notify && newModuleNamesByUser.size > 0) {
+        const { isOutlookConfigured, sendArcadeAssignmentEmail } = await import("../outlook");
+        if (isOutlookConfigured()) {
+          const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+          const host = (req.headers["host"] as string) || "localhost:5000";
+          const portalBaseUrl = `${protocol}://${host}`;
+          for (const [, { nurseId, names }] of newModuleNamesByUser) {
+            try {
+              const nurse = await platformStorage.getCandidate(nurseId);
+              if (!nurse?.email) {
+                emailResults.push({ nurseId, emailSent: false, error: "No email on file" });
+                continue;
+              }
+              const minted = await mintChasePortalLinkForNurse({
+                nurseId,
+                sentBy: adminUser?.name ?? "admin",
+                portalBaseUrl,
+              });
+              await sendArcadeAssignmentEmail({
+                recipientEmail: nurse.email,
+                recipientName: nurse.fullName,
+                moduleNames: names,
+                assignedBy: adminUser?.name ?? "Livaware admin",
+                portalUrl: minted.portalUrl,
+                expiryFormatted: minted.expiresAt.toLocaleDateString("en-GB", {
+                  day: "numeric", month: "long", year: "numeric",
+                }),
+              });
+              emailResults.push({ nurseId, emailSent: true });
+            } catch (e: any) {
+              console.warn("[arcade-enrol-all] email send failed:", e?.message || e);
+              emailResults.push({ nurseId, emailSent: false, error: e?.message ?? "send failed" });
+            }
+          }
+        }
+      }
+
+      await platformStorage.createAuditLog({
+        module: "skills_arcade",
+        action: "assign_module",
+        agentName: adminUser?.name ?? "super_admin",
+        detail: {
+          auto: true,
+          reason: "enrol_all_backfill_run",
+          nursesProcessed,
+          enrolmentsCreated,
+          skippedNurseIds,
+          emailsSent: emailResults.filter((r) => r.emailSent).length,
+        },
+      });
+
+      res.json({
+        ok: true,
+        nursesProcessed,
+        enrolmentsCreated,
         skippedNurseIds,
         emailsSent: emailResults.filter((r) => r.emailSent).length,
         emailFailures: emailResults.filter((r) => !r.emailSent),
