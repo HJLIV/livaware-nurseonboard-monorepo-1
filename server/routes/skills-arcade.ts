@@ -888,9 +888,21 @@ export async function registerRoutes(
     const nurse = await platformStorage.getCandidate(nurseId);
     if (!nurse) return null;
 
+    // No email on file → cannot mint an arcade login (username/email are both
+    // NOT NULL on arcade_users). Skip rather than throw so a single bad record
+    // can never abort a bulk backfill.
+    if (!nurse.email) return null;
+
     const email = nurse.email.toLowerCase();
     const existingByEmail = await storage.getUserByEmail(email);
     if (existingByEmail) return existingByEmail;
+
+    // Defend against the arcade_users.username UNIQUE constraint: another nurse
+    // sharing this email (duplicate-email data) may already own the username
+    // even when the email lookup missed it. Reuse that account instead of
+    // hitting a duplicate-key violation.
+    const existingByUsername = await storage.getUserByUsername(email);
+    if (existingByUsername) return existingByUsername;
 
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
     const tempPassword = Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
@@ -1109,31 +1121,43 @@ export async function registerRoutes(
       const newModuleNamesByUser = new Map<string, { nurseId: string; names: string[] }>();
 
       for (const nurse of nurses) {
-        // autoEnrol:false — the backfill owns enrolment + counting + audit
-        // uniformly for both brand-new and existing arcade users.
-        const arcadeUser = await ensureArcadeUserForNurse(nurse.id, { autoEnrol: false });
-        if (!arcadeUser) {
+        // Per-nurse isolation: a single bad record (e.g. a duplicate-email
+        // username clash or a transient DB error) must never abort the whole
+        // backfill. On failure we log, record the skip, and carry on.
+        try {
+          // autoEnrol:false — the backfill owns enrolment + counting + audit
+          // uniformly for both brand-new and existing arcade users.
+          const arcadeUser = await ensureArcadeUserForNurse(nurse.id, { autoEnrol: false });
+          if (!arcadeUser) {
+            skippedNurseIds.push(nurse.id);
+            continue;
+          }
+          nursesProcessed += 1;
+          const { created, moduleNames } = await enrolUserInAllModules(arcadeUser.id, assignedByArcadeUserId);
+          enrolmentsCreated += created;
+          if (created > 0) {
+            newModuleNamesByUser.set(arcadeUser.id, { nurseId: nurse.id, names: moduleNames });
+            await platformStorage.createAuditLog({
+              nurseId: nurse.id,
+              module: "skills_arcade",
+              action: "assign_module",
+              agentName: adminUser?.name ?? "super_admin",
+              detail: {
+                auto: true,
+                reason: "enrol_all_backfill",
+                arcadeUserId: arcadeUser.id,
+                moduleNames,
+                newlyAssignedCount: created,
+              },
+            });
+          }
+        } catch (nurseErr: any) {
+          console.error(
+            "[arcade-enrol-all] skipping nurse",
+            nurse.id,
+            nurseErr?.message || nurseErr,
+          );
           skippedNurseIds.push(nurse.id);
-          continue;
-        }
-        nursesProcessed += 1;
-        const { created, moduleNames } = await enrolUserInAllModules(arcadeUser.id, assignedByArcadeUserId);
-        enrolmentsCreated += created;
-        if (created > 0) {
-          newModuleNamesByUser.set(arcadeUser.id, { nurseId: nurse.id, names: moduleNames });
-          await platformStorage.createAuditLog({
-            nurseId: nurse.id,
-            module: "skills_arcade",
-            action: "assign_module",
-            agentName: adminUser?.name ?? "super_admin",
-            detail: {
-              auto: true,
-              reason: "enrol_all_backfill",
-              arcadeUserId: arcadeUser.id,
-              moduleNames,
-              newlyAssignedCount: created,
-            },
-          });
         }
       }
 
@@ -1201,6 +1225,7 @@ export async function registerRoutes(
         emailFailures: emailResults.filter((r) => !r.emailSent),
       });
     } catch (e: any) {
+      console.error("[arcade-enrol-all] backfill failed:", e?.message || e);
       res.status(500).json({ message: e.message });
     }
   });

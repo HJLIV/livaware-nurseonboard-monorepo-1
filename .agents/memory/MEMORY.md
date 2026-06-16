@@ -1,2 +1,2 @@
-- [LMS nurse-preview answer keys](lms-preview-answer-keys.md) — admin "preview as nurse" for quizzes must use a sanitized endpoint; raw admin course detail leaks correctIndex.
-- [Test-mode email suppression](test-email-suppression.md) — sends gate on `isEmailSendingSuppressed()` in tests; announcements deliberately excluded (it stubs Graph via vi.mock); setup.ts auto-cleans test people per file.
+- [Arcade bulk backfill resilience](arcade-enrol-all.md) — bulk enrol/backfill loops must isolate per-nurse failures + log; dedupe arcade users by username (not just email) to dodge UNIQUE clashes from duplicate nurse emails.
+- [Hidden 500s in request logger](request-logger-blindspot.md) — server/index.ts request logger prints [ok] for any non-array object response, so error JSON bodies never surface in logs; add explicit console.error in route catches.

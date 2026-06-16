@@ -65,6 +65,9 @@ describe("Skills Arcade Admin & Trainer Routes", () => {
     expect(first.body.ok).toBe(true);
     expect(typeof first.body.nursesProcessed).toBe("number");
     expect(typeof first.body.enrolmentsCreated).toBe("number");
+    // Partial-success contract: per-nurse failures are isolated and surfaced
+    // via skippedNurseIds rather than 500-ing the whole backfill.
+    expect(Array.isArray(first.body.skippedNurseIds)).toBe(true);
     // Backfill defaults to NOT emailing nurses.
     expect(first.body.emailsSent).toBe(0);
 
