@@ -1459,6 +1459,113 @@ register({
     ].join("\n"),
 });
 
+// ─── 15. Roster shift change ─────────────────────────────────────────
+register({
+  key: "roster_shift_change",
+  label: "Roster — shift added / cancelled",
+  description:
+    "Sent to a nurse when an admin allocates them to a shift or removes them from one. The shift details box is auto-filled from the roster.",
+  category: "nurse",
+  envelope: {
+    headerTitle: "NurseOnboard",
+    headerSubtitle: "Livaware Ltd — Rota Update",
+    footerText: STD_FOOTER,
+    footerSecondLine: AUTOMATED_LINE,
+  },
+  tokens: [
+    { name: "{{NAME}}", description: "Full name" },
+    { name: "{{FIRST_NAME}}", description: "First name" },
+    { name: "{{ADDED}}", description: "Non-empty when the shift was added (use in {{#ADDED}}…{{/ADDED}} blocks)" },
+    { name: "{{REMOVED}}", description: "Non-empty when the shift was cancelled (use in {{#REMOVED}}…{{/REMOVED}} blocks)" },
+    { name: "{{DATE}}", description: "Shift date (e.g. Monday 3 August 2026)" },
+    { name: "{{SLOT_LABEL}}", description: "Shift label (e.g. Day, Night)" },
+    { name: "{{TIME_RANGE}}", description: "Shift times (e.g. 08:00 – 20:00)" },
+    { name: "{{PATIENT_FIRST_NAME}}", description: "Patient first name only" },
+    { name: "{{PORTAL_URL}}", description: "Portal link (My Shifts)" },
+  ],
+  defaultSubject:
+    "Rota update — {{#ADDED}}new shift on {{DATE}}{{/ADDED}}{{#REMOVED}}shift on {{DATE}} cancelled{{/REMOVED}}",
+  fields: [
+    { name: "greeting", label: "Greeting", kind: "text", default: "Dear {{FIRST_NAME}}," },
+    {
+      name: "introAdded",
+      label: "Opening paragraph (shift added)",
+      kind: "textarea",
+      rows: 3,
+      default:
+        "You have been allocated a new shift. Please review the details below and check your My Shifts page for your full, up-to-date rota.",
+    },
+    {
+      name: "introRemoved",
+      label: "Opening paragraph (shift cancelled)",
+      kind: "textarea",
+      rows: 3,
+      default:
+        "One of your rostered shifts has been cancelled and no longer appears on your rota. Please review the details below — you do not need to attend this shift.",
+    },
+    { name: "boxTitle", label: "Shift details box title", kind: "text", default: "Shift details" },
+    { name: "ctaLabel", label: "Button text", kind: "text", default: "View My Shifts" },
+    {
+      name: "note",
+      label: "Closing note",
+      kind: "textarea",
+      rows: 2,
+      default:
+        "Your My Shifts page always shows the latest version of your rota. If anything looks wrong, or you can no longer make a shift, please contact the office as soon as possible.",
+    },
+    {
+      name: "signoff",
+      label: "Sign-off",
+      kind: "textarea",
+      rows: 2,
+      default: "Kind regards,\nLivaware Rostering Team",
+    },
+  ],
+  renderBody: (v, t) => {
+    const url = t.PORTAL_URL || "#";
+    const intro = t.ADDED ? v.introAdded : v.introRemoved;
+    const detailRow = (label: string, value: string) =>
+      value
+        ? `<tr><td style="font-size:12px; color:#8A8A94; padding:3px 16px 3px 0; text-transform:uppercase; letter-spacing:0.1em; white-space:nowrap;">${escapeHtml(label)}</td><td style="font-size:14px; color:#F0ECE4; padding:3px 0;">${escapeHtml(value)}</td></tr>`
+        : "";
+    const details = `
+      <table style="border-collapse:collapse;">
+        ${detailRow("Date", t.DATE || "")}
+        ${detailRow("Shift", t.SLOT_LABEL || "")}
+        ${detailRow("Times", t.TIME_RANGE || "")}
+        ${detailRow("Patient", t.PATIENT_FIRST_NAME || "")}
+      </table>
+    `;
+    return `
+      <p style="font-size:16px; color:#F0ECE4; margin-bottom:8px;">${escapeHtml(applyTokens(v.greeting, t))}</p>
+      ${paragraphs(applyTokens(intro, t))}
+      ${calloutBox(applyTokens(v.boxTitle, t), details, { gold: !!t.ADDED })}
+      ${ctaButton(applyTokens(v.ctaLabel, t), url)}
+      ${fallbackLinkLine(url)}
+      ${smallNote(applyTokens(v.note, t))}
+      <p style="font-size:14px; color:#E0DCD4; margin-top:24px; white-space:pre-line;">${escapeHtml(applyTokens(v.signoff, t))}</p>
+    `;
+  },
+  renderText: (v, t) =>
+    [
+      applyTokens(v.greeting, t),
+      "",
+      applyTokens(t.ADDED ? v.introAdded : v.introRemoved, t),
+      "",
+      applyTokens(v.boxTitle, t).toUpperCase(),
+      ` Date: ${t.DATE || ""}`,
+      ` Shift: ${t.SLOT_LABEL || ""}`,
+      ` Times: ${t.TIME_RANGE || ""}`,
+      ...(t.PATIENT_FIRST_NAME ? [` Patient: ${t.PATIENT_FIRST_NAME}`] : []),
+      "",
+      `${applyTokens(v.ctaLabel, t)}: ${t.PORTAL_URL || ""}`,
+      "",
+      applyTokens(v.note, t),
+      "",
+      applyTokens(v.signoff, t),
+    ].join("\n"),
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────

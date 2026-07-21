@@ -1,5 +1,6 @@
 import type { Express, Request } from "express";
-import { and, eq, gte, lte, inArray } from "drizzle-orm";
+import crypto from "crypto";
+import { and, eq, gte, gt, lte, inArray, isNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
@@ -11,6 +12,7 @@ import {
   nmcVerifications,
   dbsVerifications,
   competencyDeclarations,
+  portalLinks,
   type RosterPatient,
   type RosterAllocation,
   type RosterSlot,
@@ -19,6 +21,7 @@ import {
 import { storage } from "../storage";
 import { validatePortalToken, requireAdmin, portalAgent } from "../middleware";
 import { cancelAllocationBooking } from "../semble/service";
+import { sendRosterShiftChangeEmail, isEmailSendingSuppressed, isOutlookConfigured } from "../outlook";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -115,6 +118,116 @@ function agentForReq(req: Request): string {
   const u = s?.username || s?.email;
   if (!u) return "system";
   return s?.role ? `${u} (${s.role})` : u;
+}
+
+// ─── Shift-change email notification ──────────────────────────────────────
+
+function formatDateLong(dateIso: string): string {
+  return new Date(`${dateIso}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function patientFirstName(name: string): string {
+  return (name || "").trim().split(/\s+/)[0] || "";
+}
+
+function portalBaseUrlFromReq(req: Request): string {
+  const protocol = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = (req.headers["host"] as string) || "localhost:5000";
+  return `${protocol}://${host}`;
+}
+
+// Freshest non-expired, non-claimed portal token for the nurse; mints a
+// 30-day hub token when none exists (same policy as portal-auth).
+async function resolvePortalPath(nurseId: string): Promise<string> {
+  const now = new Date();
+  const [fresh] = await db
+    .select()
+    .from(portalLinks)
+    .where(and(eq(portalLinks.nurseId, nurseId), gt(portalLinks.expiresAt, now), isNull(portalLinks.claimedAt)))
+    .orderBy(desc(portalLinks.createdAt))
+    .limit(1);
+  if (fresh) return `/portal/${fresh.token}`;
+  const token = crypto.randomBytes(24).toString("base64url");
+  await db.insert(portalLinks).values({
+    nurseId,
+    token,
+    module: "hub",
+    expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+    createdBy: "roster_notification",
+  });
+  return `/portal/${token}`;
+}
+
+// Fire-and-forget email to the nurse when a shift is added to / removed from
+// their rota. Never blocks or fails the roster write; outcome is audited.
+function notifyShiftChange(opts: {
+  req: Request;
+  change: "added" | "removed";
+  nurseId: string;
+  patient: { id: string; name: string };
+  date: string;
+  slotKey: string;
+  slotLabel: string;
+  startTime: string;
+  endTime: string;
+}): void {
+  if (isEmailSendingSuppressed() || !isOutlookConfigured()) return;
+  const baseUrl = portalBaseUrlFromReq(opts.req);
+  const agent = agentForReq(opts.req);
+  void (async () => {
+    try {
+      const nurse = await storage.getCandidate(opts.nurseId);
+      if (!nurse?.email) return;
+      const portalUrl = `${baseUrl}${await resolvePortalPath(opts.nurseId)}`;
+      await sendRosterShiftChangeEmail({
+        recipientEmail: nurse.email,
+        recipientName: nurse.fullName,
+        change: opts.change,
+        dateFormatted: formatDateLong(opts.date),
+        slotLabel: opts.slotLabel,
+        timeRange: `${opts.startTime} – ${opts.endTime}`,
+        patientFirstName: patientFirstName(opts.patient.name),
+        portalUrl,
+      });
+      await storage.createAuditLog({
+        nurseId: opts.nurseId,
+        module: "rostering",
+        action: "shift_change_email_sent",
+        agentName: agent,
+        detail: {
+          change: opts.change,
+          patientId: opts.patient.id,
+          date: opts.date,
+          slotKey: opts.slotKey,
+          slotLabel: opts.slotLabel,
+          recipientEmail: nurse.email,
+        },
+      });
+    } catch (err: any) {
+      console.error(`[rostering] shift-change email (${opts.change}) failed for nurse ${opts.nurseId}:`, err?.message || err);
+      await storage
+        .createAuditLog({
+          nurseId: opts.nurseId,
+          module: "rostering",
+          action: "shift_change_email_failed",
+          agentName: agent,
+          detail: {
+            change: opts.change,
+            patientId: opts.patient.id,
+            date: opts.date,
+            slotKey: opts.slotKey,
+            error: String(err?.message || err),
+          },
+        })
+        .catch(() => {});
+    }
+  })();
 }
 
 function parseRange(req: Request, defaultDays = 13): { fromIso: string; toIso: string } | null {
@@ -554,6 +667,35 @@ export function registerRosteringRoutes(app: Express) {
     if (cellChanged && existing?.sembleBookingId) {
       void cancelAllocationBooking(existing, agent);
     }
+    // Notify affected nurses (fire-and-forget, never blocks the write):
+    // a brand-new cell or a changed cell notifies the (new) nurse; a
+    // replacement additionally tells the displaced nurse their shift is gone.
+    if (!existing || cellChanged) {
+      if (existing && existing.nurseId !== nurseId) {
+        notifyShiftChange({
+          req,
+          change: "removed",
+          nurseId: existing.nurseId,
+          patient: { id: patient.id, name: patient.name },
+          date: existing.date,
+          slotKey: existing.slotKey,
+          slotLabel: existing.slotLabel,
+          startTime: existing.startTime,
+          endTime: existing.endTime,
+        });
+      }
+      notifyShiftChange({
+        req,
+        change: "added",
+        nurseId,
+        patient: { id: patient.id, name: patient.name },
+        date,
+        slotKey,
+        slotLabel: slot.label,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      });
+    }
     res.status(existing ? 200 : 201).json({ allocation: row, conflicts, overridden: conflicts.length > 0 });
   });
 
@@ -569,6 +711,19 @@ export function registerRosteringRoutes(app: Express) {
     });
     // Fire-and-forget Semble booking cancellation (no-op if none attached).
     void cancelAllocationBooking(row, agentForReq(req));
+    // Tell the nurse their shift was cancelled (fire-and-forget).
+    const [patient] = await db.select().from(rosterPatients).where(eq(rosterPatients.id, row.patientId));
+    notifyShiftChange({
+      req,
+      change: "removed",
+      nurseId: row.nurseId,
+      patient: { id: row.patientId, name: patient?.name || "" },
+      date: row.date,
+      slotKey: row.slotKey,
+      slotLabel: row.slotLabel,
+      startTime: row.startTime,
+      endTime: row.endTime,
+    });
     res.json({ deleted: true });
   });
 

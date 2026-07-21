@@ -73,6 +73,33 @@ async function sendViaTemplate(opts: {
   });
 }
 
+export async function sendRosterShiftChangeEmail(opts: {
+  recipientEmail: string;
+  recipientName: string;
+  change: "added" | "removed";
+  dateFormatted: string;
+  slotLabel: string;
+  timeRange: string;
+  patientFirstName: string;
+  portalUrl: string;
+}) {
+  await sendViaTemplate({
+    key: "roster_shift_change",
+    tokens: {
+      NAME: opts.recipientName,
+      FIRST_NAME: (opts.recipientName || "").trim().split(/\s+/)[0] || "there",
+      ADDED: opts.change === "added" ? "1" : "",
+      REMOVED: opts.change === "removed" ? "1" : "",
+      DATE: opts.dateFormatted,
+      SLOT_LABEL: opts.slotLabel,
+      TIME_RANGE: opts.timeRange,
+      PATIENT_FIRST_NAME: opts.patientFirstName,
+      PORTAL_URL: opts.portalUrl,
+    },
+    to: { email: opts.recipientEmail, name: opts.recipientName },
+  });
+}
+
 export async function sendPortalInviteEmail(
   recipientEmail: string,
   recipientName: string,
