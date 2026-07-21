@@ -154,6 +154,14 @@ const sections: NavSectionDef[] = [
     ],
   },
   {
+    key: "rostering",
+    title: "Rostering",
+    items: [
+      { label: "Patients", href: "/rostering/patients", icon: Users, adminOnly: true },
+      { label: "Patient Rota", href: "/rostering/rota", icon: CalendarDays, adminOnly: true },
+    ],
+  },
+  {
     key: "governance",
     title: "Governance & system",
     items: [

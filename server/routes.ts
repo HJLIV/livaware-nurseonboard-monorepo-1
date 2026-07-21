@@ -248,5 +248,13 @@ export async function registerRoutes(
   const { registerInternalTrainingRoutes } = await import("./routes/internal-training");
   registerInternalTrainingRoutes(app);
 
+  // === ROSTERING (task 176) — patients, rosters, allocations, my-shifts ===
+  const { registerRosteringRoutes } = await import("./routes/rostering");
+  registerRosteringRoutes(app);
+
+  // === SEMBLE (practice management) — patient link + booking push ===
+  const { registerSembleRoutes } = await import("./routes/semble");
+  registerSembleRoutes(app);
+
   return httpServer;
 }

@@ -7,6 +7,7 @@ import {
   buildPortalGroups,
   type PortalSidebarGroup,
 } from "@/components/layout/portal-shell";
+import { RosterTabs } from "@/components/portal/roster-tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -305,6 +306,8 @@ export default function PortalAvailabilityPage() {
             Set Day and Night availability for each shift. Click a cell to apply your current paint, or right-click for the full status menu. You can edit the current month and the next 6 months.
           </p>
         </div>
+
+        <RosterTabs active="availability" />
 
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 flex gap-3 text-sm">

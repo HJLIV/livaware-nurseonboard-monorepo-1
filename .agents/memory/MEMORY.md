@@ -1,2 +1,4 @@
 - [Arcade bulk backfill resilience](arcade-enrol-all.md) — bulk enrol/backfill loops must isolate per-nurse failures + log; dedupe arcade users by username (not just email) to dodge UNIQUE clashes from duplicate nurse emails.
+- [Pre-existing failing tests](preexisting-test-failures.md) — 9 Vitest files fail on a clean run from stale expectations; compare against this baseline before blaming new work.
 - [Hidden 500s in request logger](request-logger-blindspot.md) — server/index.ts request logger prints [ok] for any non-array object response, so error JSON bodies never surface in logs; add explicit console.error in route catches.
+- [Running the test suite](test-suite-execution.md) — detached `npm test` dies; run vitest in ~5-file chunks sequentially; strip live third-party tokens in setup.ts; snapshot/restore appSettings rows tests write.

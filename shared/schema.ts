@@ -13,7 +13,7 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms", "internal_training", "service_agreement"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms", "internal_training", "service_agreement", "rostering", "semble"]);
 export const supervisionTypeEnum = pgEnum("supervision_type", ["supervision", "appraisal", "reflection", "other"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
@@ -96,6 +96,13 @@ export const nurses = pgTable("nurses", {
   graceAccessEnabled: boolean("grace_access_enabled").default(false).notNull(),
   graceAccessUpdatedAt: timestamp("grace_access_updated_at"),
   graceAccessUpdatedBy: text("grace_access_updated_by"),
+  // ─── Semble user link ─────────────────────────────────────────────
+  // Maps this nurse to their own Semble user account so pushed roster
+  // bookings are created under the actual nurse in the Semble diary
+  // (falling back to the default clinician when unlinked). Name is a
+  // display-only snapshot from the time of linking.
+  sembleUserId: text("semble_user_id"),
+  sembleUserName: text("semble_user_name"),
   // ─── Uniform sizing (task 153) ───────────────────────────────────
   // Captured once on the nurse profile so the office doesn't have to
   // keep re-asking. Top / trouser are free text (e.g. "M 40-42" or
@@ -1034,6 +1041,12 @@ export const insertNurseSupervisionSchema = createInsertSchema(nurseSupervisions
 export type NurseSupervision = typeof nurseSupervisions.$inferSelect;
 export type InsertNurseSupervision = z.infer<typeof insertNurseSupervisionSchema>;
 
+// ── Semble push feature flag ────────────────────────────────────────────────
+// Temporarily disables the "Push to Semble" flow (button greyed out in the UI,
+// push endpoint returns 503 semble_push_disabled) while rostering is bedded in.
+// Flip to true to re-enable — no other changes needed.
+export const SEMBLE_PUSH_ENABLED = false;
+
 // ==================== INTERNAL TRAINING CERTIFICATES ====================
 // Roster-wide internal-training completion tracking. Nurses upload one
 // certificate per fixed training type (sourced from external platforms);
@@ -1810,6 +1823,121 @@ export const emailTemplates = pgTable("email_templates", {
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ updatedAt: true });
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+
+// ==================== ROSTERING (task 176) ====================
+// Replaces the Excel care-rota workbook. Patients (clients) carry a care
+// pattern plus a per-patient slot configuration (times editable per patient):
+//   - timed_visits: up to 3 visits/day (e.g. 2h each)
+//   - twenty_four_hour: Day (08:00–20:00) + Night (20:00–08:00) coverage
+// Slots are derived on the fly from the patient's config + engagement window;
+// allocations pin a nurse to (patient, date, slotKey) and snapshot the slot
+// times so crossover (double-booking) detection stays stable even if the
+// patient's config is later edited.
+
+export const carePatternEnum = pgEnum("care_pattern", ["timed_visits", "twenty_four_hour"]);
+
+export const rosterPatients = pgTable("roster_patients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  carePattern: carePatternEnum("care_pattern").notNull(),
+  // ISO dates (YYYY-MM-DD). Stored as text like nurse_availability so
+  // calendar-day comparisons are timezone-safe.
+  engagementStart: text("engagement_start"),
+  engagementEnd: text("engagement_end"),
+  notes: text("notes"),
+  active: boolean("active").default(true).notNull(),
+  // Array of { key, label, startTime, endTime } (HH:MM). Validated by
+  // rosterSlotConfigSchema; max 3 for timed_visits, exactly 2 for 24h.
+  slots: jsonb("slots").notNull(),
+  // Optional link to the patient record in Semble (practice management).
+  // When set, roster allocations for this patient are pushed to Semble as
+  // bookings. dob/email/phone are convenience copies captured at link time.
+  sembleId: text("semble_id"),
+  dob: text("dob"),
+  email: text("email"),
+  phone: text("phone"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("roster_patients_active_idx").on(table.active),
+  uniqueIndex("roster_patients_semble_id_unique").on(table.sembleId),
+]);
+
+export const rosterAllocations = pgTable("roster_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  patientId: varchar("patient_id").notNull().references(() => rosterPatients.id, { onDelete: "cascade" }),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD
+  slotKey: text("slot_key").notNull(),
+  // Snapshot of the slot at assignment time (label + HH:MM window).
+  slotLabel: text("slot_label").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  assignedBy: text("assigned_by"),
+  // Semble booking sync state (best-effort, fire-and-forget). When the
+  // patient is linked to Semble and booking defaults are configured, the
+  // allocation is pushed as a Semble booking; the resulting booking id is
+  // stored here so unassignment can cancel it. Errors are recorded for
+  // admin visibility but never block the local allocation.
+  sembleBookingId: text("semble_booking_id"),
+  sembleBookingError: text("semble_booking_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("roster_allocations_patient_date_slot_unique").on(table.patientId, table.date, table.slotKey),
+  index("roster_allocations_nurse_id_idx").on(table.nurseId),
+  index("roster_allocations_date_idx").on(table.date),
+  index("roster_allocations_patient_id_idx").on(table.patientId),
+]);
+
+export type RosterPatient = typeof rosterPatients.$inferSelect;
+export type RosterAllocation = typeof rosterAllocations.$inferSelect;
+export type CarePattern = "timed_visits" | "twenty_four_hour";
+
+export const rosterSlotSchema = z.object({
+  key: z.string().min(1).max(40),
+  label: z.string().min(1).max(80),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+});
+export type RosterSlot = z.infer<typeof rosterSlotSchema>;
+
+export const rosterPatientUpsertSchema = z.object({
+  name: z.string().min(1).max(160),
+  carePattern: z.enum(["timed_visits", "twenty_four_hour"]),
+  engagementStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  engagementEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+  active: z.boolean().optional(),
+  slots: z.array(rosterSlotSchema).min(1).max(3),
+  // Optional Semble linkage (set when the patient is picked from a Semble
+  // search; cleared by sending null).
+  sembleId: z.string().min(1).max(120).nullable().optional(),
+  dob: z.string().max(40).nullable().optional(),
+  email: z.string().max(160).nullable().optional(),
+  phone: z.string().max(60).nullable().optional(),
+}).superRefine((val, ctx) => {
+  const keys = new Set(val.slots.map((s) => s.key));
+  if (keys.size !== val.slots.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "slot keys must be unique" });
+  }
+  if (val.carePattern === "twenty_four_hour" && val.slots.length !== 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "24-hour coverage needs exactly 2 slots (Day + Night)" });
+  }
+  if (val.engagementStart && val.engagementEnd && val.engagementEnd < val.engagementStart) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "engagementEnd must be on/after engagementStart" });
+  }
+});
+export type RosterPatientUpsert = z.infer<typeof rosterPatientUpsertSchema>;
+
+export const DEFAULT_24H_SLOTS: RosterSlot[] = [
+  { key: "day", label: "Day shift", startTime: "08:00", endTime: "20:00" },
+  { key: "night", label: "Night shift", startTime: "20:00", endTime: "08:00" },
+];
+export const DEFAULT_TIMED_VISIT_SLOTS: RosterSlot[] = [
+  { key: "visit1", label: "Visit 1", startTime: "08:00", endTime: "10:00" },
+  { key: "visit2", label: "Visit 2", startTime: "18:00", endTime: "20:00" },
+];
 
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;

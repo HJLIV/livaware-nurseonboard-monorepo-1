@@ -32,7 +32,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity, FileSignature, Plus, Trash2, ArrowUp, ArrowDown, AlertTriangle } from "lucide-react";
+import { Loader2, Mail, Inbox, AlertCircle, PlayCircle, Save, Send, History, Activity, FileSignature, Plus, Trash2, ArrowUp, ArrowDown, AlertTriangle, Link2, UserCheck, Wand2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { SuperAdminViewOnlyBanner, SuperAdminGate } from "@/components/super-admin-only";
 import { useAuth } from "@/lib/auth";
@@ -2036,6 +2036,398 @@ function HbcTrainingSyncCard() {
   );
 }
 
+// ─── Semble practice-management sync ────────────────────────────────────────
+
+interface SembleSettings {
+  locationId: string | null;
+  locationName: string | null;
+  bookingTypeId: string | null;
+  bookingTypeName: string | null;
+  doctorId: string | null;
+  doctorName: string | null;
+  timezone: string | null;
+}
+
+interface SembleStatusResponse {
+  configured: boolean;
+  settings: SembleSettings;
+  settingsComplete: boolean;
+  linkedPatientCount: number;
+  linkedNurseCount: number;
+}
+
+interface SembleUserRow {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+}
+
+interface NurseLinkRow {
+  id: string;
+  fullName: string;
+  email: string | null;
+  sembleUserId: string | null;
+}
+
+interface SembleOption {
+  id: string;
+  name: string;
+}
+
+interface SembleBookingOptions {
+  locations: SembleOption[];
+  bookingTypes: (SembleOption & { duration: number | null })[];
+  doctors: SembleOption[];
+  timezone: string | null;
+}
+
+function SembleSyncCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<SembleSettings | null>(null);
+
+  const { data: status, isLoading: statusLoading } = useQuery({
+    queryKey: ["/api/admin/semble/status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/semble/status");
+      return (await res.json()) as SembleStatusResponse;
+    },
+  });
+
+  useEffect(() => {
+    if (status?.settings) setDraft({ ...status.settings });
+  }, [status?.settings]);
+
+  const configured = status?.configured ?? false;
+
+  const { data: options, error: optionsError } = useQuery({
+    queryKey: ["/api/admin/semble/booking-options"],
+    enabled: configured,
+    retry: false,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/semble/booking-options");
+      return (await res.json()) as SembleBookingOptions;
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/semble/test-connection");
+      return (await res.json()) as { ok: boolean; practice: { name: string | null } };
+    },
+    onSuccess: (data) =>
+      toast({ title: "Connection OK", description: `Authenticated with Semble${data.practice?.name ? ` — ${data.practice.name}` : ""}.` }),
+    onError: (err: any) =>
+      toast({ title: "Connection failed", description: err?.message || "Could not reach Semble.", variant: "destructive" }),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/admin/semble/settings", draft);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Semble defaults saved", description: "New roster allocations for linked patients will be pushed as bookings." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/semble/status"] });
+    },
+    onError: (err: any) =>
+      toast({ title: "Save failed", description: err?.message || "Could not save Semble settings.", variant: "destructive" }),
+  });
+
+  // ── Nurse ↔ Semble account matching ──────────────────────────────────────
+  const { data: sembleUsersData } = useQuery({
+    queryKey: ["/api/admin/semble/users"],
+    enabled: configured,
+    retry: false,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/semble/users");
+      return (await res.json()) as { users: SembleUserRow[] };
+    },
+  });
+
+  const { data: nurseList } = useQuery({
+    queryKey: ["/api/nurses"],
+    enabled: configured,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/nurses");
+      return (await res.json()) as NurseLinkRow[];
+    },
+  });
+
+  const invalidateLinks = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/nurses"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/semble/status"] });
+  };
+
+  const linkMutation = useMutation({
+    mutationFn: async (input: { nurseId: string; sembleUserId: string | null; sembleUserName: string | null }) => {
+      const res = await apiRequest("PUT", `/api/admin/semble/nurse-link/${input.nurseId}`, {
+        sembleUserId: input.sembleUserId,
+        sembleUserName: input.sembleUserName,
+      });
+      return await res.json();
+    },
+    onSuccess: (_d, input) => {
+      invalidateLinks();
+      toast({ title: input.sembleUserId ? "Nurse linked to Semble account" : "Nurse unlinked" });
+    },
+    onError: (err: any) =>
+      toast({ title: "Link failed", description: err?.message || "Could not update the link.", variant: "destructive" }),
+  });
+
+  const autoMatchMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/semble/auto-match-nurses");
+      return (await res.json()) as { matched: { nurseName: string }[]; alreadyLinked: number };
+    },
+    onSuccess: (r) => {
+      invalidateLinks();
+      toast({
+        title: r.matched.length ? `${r.matched.length} nurse${r.matched.length === 1 ? "" : "s"} matched` : "No new matches",
+        description: r.matched.length
+          ? r.matched.map((m) => m.nurseName).join(", ")
+          : "Every matchable nurse is already linked, or no Semble user shares their name/email.",
+      });
+    },
+    onError: (err: any) =>
+      toast({ title: "Auto-match failed", description: err?.message || "Could not reach Semble.", variant: "destructive" }),
+  });
+
+  const sembleUsers = sembleUsersData?.users ?? [];
+  const sortedNurses = [...(nurseList ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const nurseBySembleUser = new Map<string, NurseLinkRow>();
+  for (const n of nurseList ?? []) {
+    if (n.sembleUserId && !nurseBySembleUser.has(n.sembleUserId)) nurseBySembleUser.set(n.sembleUserId, n);
+  }
+
+  const pickOption = (
+    list: SembleOption[] | undefined,
+    id: string,
+  ): SembleOption | undefined => list?.find((o) => o.id === id);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(status?.settings ?? null);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5" />
+              Semble practice-management sync
+            </CardTitle>
+            <CardDescription>
+              Link roster patients to Semble and push nurse allocations into the Semble diary as bookings.
+              Unassigning a shift cancels the matching booking.
+            </CardDescription>
+          </div>
+          <Badge variant={configured ? "default" : "secondary"}>
+            {statusLoading ? "Checking…" : configured ? "Connected" : "Not configured"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!configured && (
+          <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+            <div className="text-amber-200/90">
+              <p className="font-medium text-amber-200">API token not set.</p>
+              <p className="mt-1">
+                Set <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10">SEMBLE_API_TOKEN</code>
+                (generated in Semble under Settings → Integrations → API) to enable patient search and booking sync.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <div className="text-2xl font-serif font-light">{status?.linkedPatientCount ?? 0}</div>
+            <div className="text-xs text-muted-foreground">Linked patients</div>
+          </div>
+          <div>
+            <div className="text-2xl font-serif font-light">{status?.linkedNurseCount ?? 0}</div>
+            <div className="text-xs text-muted-foreground">Linked nurses</div>
+          </div>
+          <div>
+            <div className="text-sm mt-1">{status?.settingsComplete ? "Ready" : "Incomplete"}</div>
+            <div className="text-xs text-muted-foreground">Booking defaults</div>
+          </div>
+          <div>
+            <div className="text-sm mt-1">{status?.settings?.timezone || "Europe/London"}</div>
+            <div className="text-xs text-muted-foreground">Booking timezone</div>
+          </div>
+        </div>
+
+        {configured && !!optionsError && (
+          <p className="text-xs text-destructive">
+            Could not load booking options from Semble: {(optionsError as any)?.message || "unknown error"}
+          </p>
+        )}
+
+        {configured && draft && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>Location</Label>
+              <Select
+                value={draft.locationId ?? ""}
+                onValueChange={(v) => {
+                  const o = pickOption(options?.locations, v);
+                  setDraft({ ...draft, locationId: v, locationName: o?.name ?? null, timezone: options?.timezone ?? draft.timezone });
+                }}
+              >
+                <SelectTrigger data-testid="select-semble-location">
+                  <SelectValue placeholder={draft.locationName || "Choose…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(options?.locations ?? []).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Booking type</Label>
+              <Select
+                value={draft.bookingTypeId ?? ""}
+                onValueChange={(v) => {
+                  const o = pickOption(options?.bookingTypes, v);
+                  setDraft({ ...draft, bookingTypeId: v, bookingTypeName: o?.name ?? null });
+                }}
+              >
+                <SelectTrigger data-testid="select-semble-booking-type">
+                  <SelectValue placeholder={draft.bookingTypeName || "Choose…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(options?.bookingTypes ?? []).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Clinician (bookings owner)</Label>
+              <Select
+                value={draft.doctorId ?? ""}
+                onValueChange={(v) => {
+                  const o = pickOption(options?.doctors, v);
+                  setDraft({ ...draft, doctorId: v, doctorName: o?.name ?? null });
+                }}
+              >
+                <SelectTrigger data-testid="select-semble-doctor">
+                  <SelectValue placeholder={draft.doctorName || "Choose…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(options?.doctors ?? []).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {configured && (
+          <p className="text-xs text-muted-foreground">
+            Bookings are created under each nurse's own Semble account when matched below — otherwise
+            under the default clinician chosen above, with the nurse named in the booking comments.
+          </p>
+        )}
+
+        {configured && sembleUsers.length > 0 && (
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <UserCheck className="h-4 w-4" />
+                  Nurse account matching
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Match each Semble user to their nurse profile here so pushed bookings appear in
+                  that nurse's own Semble diary. Auto-match pairs them by email or full name.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={autoMatchMutation.isPending}
+                onClick={() => autoMatchMutation.mutate()}
+                data-testid="button-semble-auto-match"
+              >
+                {autoMatchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                Auto-match
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              {sembleUsers.map((u) => {
+                const linkedNurse = nurseBySembleUser.get(u.id);
+                return (
+                  <div key={u.id} className="flex items-center gap-3 text-sm" data-testid={`row-semble-user-${u.id}`}>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium">{u.fullName || u.id}</span>
+                      {u.email && <span className="text-xs text-muted-foreground ml-2 truncate">{u.email}</span>}
+                    </div>
+                    <Select
+                      value={linkedNurse?.id ?? "none"}
+                      disabled={linkMutation.isPending}
+                      onValueChange={(v) => {
+                        if (v === (linkedNurse?.id ?? "none")) return;
+                        if (v === "none") {
+                          if (linkedNurse) {
+                            linkMutation.mutate({ nurseId: linkedNurse.id, sembleUserId: null, sembleUserName: null });
+                          }
+                        } else {
+                          linkMutation.mutate({ nurseId: v, sembleUserId: u.id, sembleUserName: u.fullName });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-56 h-8 text-xs" data-testid={`select-semble-user-nurse-${u.id}`}>
+                        <SelectValue placeholder="Not matched" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground">Not matched</span>
+                        </SelectItem>
+                        {sortedNurses.map((n) => (
+                          <SelectItem key={n.id} value={n.id}>{n.fullName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <SuperAdminGate>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!configured || testMutation.isPending}
+              onClick={() => testMutation.mutate()}
+              data-testid="button-semble-test"
+            >
+              {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+              Test connection
+            </Button>
+            <Button
+              size="sm"
+              disabled={!configured || !dirty || saveMutation.isPending}
+              onClick={() => saveMutation.mutate()}
+              data-testid="button-semble-save"
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save booking defaults
+            </Button>
+          </div>
+        </SuperAdminGate>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2142,6 +2534,8 @@ export default function AdminSettingsPage() {
       <AllEmailTemplatesCard />
 
       <HbcTrainingSyncCard />
+
+      <SembleSyncCard />
 
       <PlatformAnnouncementCard outlookConfigured={outlookConfigured} />
 

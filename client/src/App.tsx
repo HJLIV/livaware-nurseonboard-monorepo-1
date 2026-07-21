@@ -86,6 +86,12 @@ const InvoicesReportPage = lazy(() => import("@/pages/reports/invoices"));
 const InternalTrainingMatrixPage = lazy(() => import("@/pages/reports/internal-training-matrix"));
 const PortalInternalTrainingPage = lazy(() => import("@/pages/portal/internal-training"));
 
+// Rostering (task 176)
+const RosteringPatientsPage = lazy(() => import("@/pages/rostering/patients"));
+const PatientRosterPage = lazy(() => import("@/pages/rostering/patient-roster"));
+const RotaPage = lazy(() => import("@/pages/rostering/rota"));
+const PortalMyShiftsPage = lazy(() => import("@/pages/portal/my-shifts"));
+
 function LoadingSpinner() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -210,6 +216,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
         <Route path="/portal/invoices" component={() => <PortalInvoicesPage />} />
         <Route path="/portal/internal-training" component={() => <PortalInternalTrainingPage />} />
+        <Route path="/portal/my-shifts" component={() => <PortalMyShiftsPage />} />
         <Route path="/portal/declaration/:key" component={() => <PortalDeclarationPage />} />
         <Route path="/portal/section/:section" component={() => <PortalSectionPage />} />
         {import.meta.env.DEV && (
@@ -275,6 +282,11 @@ function AuthenticatedRouter() {
               <Route path="/reports/availability">{() => <AdminRoute component={AvailabilityMatrixPage} />}</Route>
               <Route path="/reports/invoices">{() => <AdminRoute component={InvoicesReportPage} />}</Route>
               <Route path="/reports/internal-training">{() => <AppLayout><AdminRoute component={InternalTrainingMatrixPage} /></AppLayout>}</Route>
+
+              {/* Rostering (task 176, admin only) */}
+              <Route path="/rostering/patients/:id">{() => <AppLayout><AdminRoute component={PatientRosterPage} /></AppLayout>}</Route>
+              <Route path="/rostering/patients">{() => <AppLayout><AdminRoute component={RosteringPatientsPage} /></AppLayout>}</Route>
+              <Route path="/rostering/rota">{() => <AppLayout><AdminRoute component={RotaPage} /></AppLayout>}</Route>
 
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>

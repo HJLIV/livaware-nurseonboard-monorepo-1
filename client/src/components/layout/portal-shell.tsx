@@ -1080,6 +1080,13 @@ export function buildPortalGroups({
                   : () => { window.location.href = `/portal/availability`; },
                 disabled: !selectAvailability,
               },
+              {
+                key: "rostering:my-shifts",
+                label: "My Shifts",
+                status: "in_progress" as PortalItemStatus,
+                hint: "Your allocated days & hours",
+                onClick: () => { window.location.href = `/portal/my-shifts`; },
+              },
             ],
           },
         ]

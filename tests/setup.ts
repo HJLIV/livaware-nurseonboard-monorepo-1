@@ -9,6 +9,12 @@ process.env.SUPER_ADMIN_USERNAME = "superadmin";
 process.env.SUPER_ADMIN_PASSWORD = "superpass";
 process.env.SESSION_SECRET = "test-secret-key-for-vitest";
 
+// Never let the test suite touch the live Semble practice-management API:
+// the dev environment may carry a real SEMBLE_API_TOKEN, but every Semble
+// test asserts the "not configured" degradation paths (503s, inert hooks).
+delete process.env.SEMBLE_API_TOKEN;
+delete process.env.SEMBLE_API_URL;
+
 beforeAll(async () => {
   const dbUrl = process.env.DATABASE_URL || "";
   if (dbUrl.includes("production") || dbUrl.includes("prod")) {
