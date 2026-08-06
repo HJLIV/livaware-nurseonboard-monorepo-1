@@ -77,6 +77,7 @@ const PortalMockupPage = lazy(() => import("@/pages/portal/mockup"));
 
 // Super admin
 const SuperAdminActivityPage = lazy(() => import("@/pages/super-admin/activity"));
+const SuperAdminMassEmailPage = lazy(() => import("@/pages/super-admin/mass-email"));
 
 // Availability (task 124)
 const PortalAvailabilityPage = lazy(() => import("@/pages/portal/availability"));
@@ -294,6 +295,7 @@ function AuthenticatedRouter() {
 
               {/* Super Admin */}
               <Route path="/super-admin/activity">{() => <SuperAdminRoute component={SuperAdminActivityPage} />}</Route>
+              <Route path="/super-admin/mass-email">{() => <SuperAdminRoute component={SuperAdminMassEmailPage} />}</Route>
 
               {/* Audit */}
               <Route path="/audit" component={AuditPage} />

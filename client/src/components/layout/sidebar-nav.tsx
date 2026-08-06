@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   Activity,
+  Megaphone,
   CalendarDays,
   Inbox,
 } from "lucide-react";
@@ -169,6 +170,12 @@ const sections: NavSectionDef[] = [
         label: "Activity dashboard",
         href: "/super-admin/activity",
         icon: Activity,
+        superAdminOnly: true,
+      },
+      {
+        label: "Mass email",
+        href: "/super-admin/mass-email",
+        icon: Megaphone,
         superAdminOnly: true,
       },
       { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },

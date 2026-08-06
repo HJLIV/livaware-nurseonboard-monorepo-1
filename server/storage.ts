@@ -34,6 +34,9 @@ import {
   hbcCourses, type HbcCourse, type InsertHbcCourse,
   hbcCandidateLinks, type HbcCandidateLink, type InsertHbcCandidateLink,
   hbcTrainingResults, type HbcTrainingResult, type InsertHbcTrainingResult,
+  massEmails, massEmailRecipients,
+  type MassEmail, type InsertMassEmail,
+  type MassEmailRecipient, type InsertMassEmailRecipient,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -149,6 +152,14 @@ export interface IStorage {
   hasProcessedChaseAttachment(nurseId: string, messageId: string, attachmentId: string): Promise<boolean>;
   recordProcessedChaseAttachment(data: InsertProcessedChaseAttachment): Promise<ProcessedChaseAttachment>;
   getProcessedChaseAttachmentsForNurse(nurseId: string): Promise<ProcessedChaseAttachment[]>;
+
+  // Super-admin mass email broadcasts (task 186)
+  createMassEmail(data: InsertMassEmail): Promise<MassEmail>;
+  updateMassEmail(id: string, data: Partial<InsertMassEmail>): Promise<MassEmail | undefined>;
+  createMassEmailRecipient(data: InsertMassEmailRecipient): Promise<MassEmailRecipient>;
+  listMassEmails(limit?: number): Promise<MassEmail[]>;
+  getMassEmail(id: string): Promise<MassEmail | undefined>;
+  getMassEmailRecipients(massEmailId: string): Promise<MassEmailRecipient[]>;
 
   // Generic admin-tunable platform settings (key/value JSON).
   getAppSetting<T = unknown>(key: string): Promise<T | undefined>;
@@ -628,6 +639,38 @@ export class DatabaseStorage implements IStorage {
       fields[field] = { counts, percentages };
     }
     return { total, fields };
+  }
+
+  async createMassEmail(data: InsertMassEmail): Promise<MassEmail> {
+    const [result] = await db.insert(massEmails).values(data).returning();
+    return result;
+  }
+
+  async updateMassEmail(id: string, data: Partial<InsertMassEmail>): Promise<MassEmail | undefined> {
+    const [result] = await db.update(massEmails).set(data).where(eq(massEmails.id, id)).returning();
+    return result;
+  }
+
+  async createMassEmailRecipient(data: InsertMassEmailRecipient): Promise<MassEmailRecipient> {
+    const [result] = await db.insert(massEmailRecipients).values(data).returning();
+    return result;
+  }
+
+  async listMassEmails(limit = 50): Promise<MassEmail[]> {
+    return db.select().from(massEmails).orderBy(desc(massEmails.createdAt)).limit(limit);
+  }
+
+  async getMassEmail(id: string): Promise<MassEmail | undefined> {
+    const [result] = await db.select().from(massEmails).where(eq(massEmails.id, id));
+    return result;
+  }
+
+  async getMassEmailRecipients(massEmailId: string): Promise<MassEmailRecipient[]> {
+    return db
+      .select()
+      .from(massEmailRecipients)
+      .where(eq(massEmailRecipients.massEmailId, massEmailId))
+      .orderBy(massEmailRecipients.recipientName);
   }
 
   async createTrainingNotification(data: InsertTrainingNotification): Promise<TrainingNotification> {

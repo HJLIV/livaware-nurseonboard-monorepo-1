@@ -1939,6 +1939,61 @@ export const DEFAULT_TIMED_VISIT_SLOTS: RosterSlot[] = [
   { key: "visit2", label: "Visit 2", startTime: "18:00", endTime: "20:00" },
 ];
 
+// ==================== MASS EMAIL BROADCASTS (task 186) ====================
+// Super-admin compose-and-send broadcasts to selected nurses. Each send is
+// persisted with a subject/body snapshot + attachment references (files live
+// in /uploads alongside other uploads), and every recipient gets their own
+// delivery row so partial failures are visible after the run.
+
+// Display metadata only — attachment bytes are held in memory for the
+// duration of the send and are never written to the shared uploads area,
+// so they can't leak through the /api/uploads download surface.
+export type MassEmailAttachment = {
+  originalFilename: string;  // name shown to recipients
+  mimeType: string;
+  sizeBytes: number;
+};
+
+export const massEmails = pgTable("mass_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sentBy: text("sent_by").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  // Display metadata only (no stored file references — see above).
+  attachments: jsonb("attachments").$type<MassEmailAttachment[]>().default([]).notNull(),
+  recipientCount: integer("recipient_count").default(0).notNull(),
+  sentCount: integer("sent_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  // Nurses that were selected but skipped because they have no email
+  // address on file (name snapshots for the post-send summary).
+  excludedNoEmail: jsonb("excluded_no_email").$type<{ nurseId: string; fullName: string }[]>().default([]).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("mass_emails_created_at_idx").on(table.createdAt),
+]);
+
+export const massEmailRecipients = pgTable("mass_email_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  massEmailId: varchar("mass_email_id").notNull().references(() => massEmails.id),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  recipientEmail: text("recipient_email").notNull(),
+  recipientName: text("recipient_name").notNull(),
+  status: text("status").notNull(), // "sent" | "failed"
+  error: text("error"),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+}, (table) => [
+  index("mass_email_recipients_mass_email_id_idx").on(table.massEmailId),
+  index("mass_email_recipients_nurse_id_idx").on(table.nurseId),
+]);
+
+export const insertMassEmailSchema = createInsertSchema(massEmails).omit({ id: true, createdAt: true });
+export type InsertMassEmail = z.infer<typeof insertMassEmailSchema>;
+export type MassEmail = typeof massEmails.$inferSelect;
+
+export const insertMassEmailRecipientSchema = createInsertSchema(massEmailRecipients).omit({ id: true, sentAt: true });
+export type InsertMassEmailRecipient = z.infer<typeof insertMassEmailRecipientSchema>;
+export type MassEmailRecipient = typeof massEmailRecipients.$inferSelect;
+
 // Aliases for preboard-storage compatibility
 export const assessments = preboardAssessments;
 export const insertAssessmentSchema = createInsertSchema(preboardAssessments).omit({

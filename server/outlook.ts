@@ -73,6 +73,37 @@ async function sendViaTemplate(opts: {
   });
 }
 
+// ─── Super-admin mass email broadcast (task 186) ─────────────────────
+// One message per recipient; attachments are inlined as base64
+// fileAttachments. Callers handle per-recipient failure isolation.
+export async function sendMassEmailMessage(opts: {
+  recipientEmail: string;
+  recipientName: string;
+  subject: string;
+  html: string;
+  attachments: Array<{ name: string; contentType: string; contentBytes: string }>;
+}): Promise<void> {
+  if (isEmailSendingSuppressed()) return;
+  const client = await getGraphClient();
+  const message: any = {
+    subject: opts.subject,
+    body: { contentType: "HTML", content: opts.html },
+    toRecipients: [{ emailAddress: { address: opts.recipientEmail, name: opts.recipientName } }],
+  };
+  if (opts.attachments.length > 0) {
+    message.attachments = opts.attachments.map((a) => ({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: a.name,
+      contentType: a.contentType || "application/octet-stream",
+      contentBytes: a.contentBytes,
+    }));
+  }
+  await client.api(`/users/${SENDER_EMAIL}/sendMail`).post({
+    message,
+    saveToSentItems: true,
+  });
+}
+
 export async function sendRosterShiftChangeEmail(opts: {
   recipientEmail: string;
   recipientName: string;
