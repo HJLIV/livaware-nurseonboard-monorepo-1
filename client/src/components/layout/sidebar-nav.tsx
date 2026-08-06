@@ -181,6 +181,7 @@ const sections: NavSectionDef[] = [
       { label: "Documents", href: "/documents", icon: FileText, adminOnly: true },
       { label: "Audit trail", href: "/audit", icon: ScrollText, adminOnly: true },
       { label: "Policies", href: "/admin/policies", icon: FileText, adminOnly: true },
+      { label: "Reading materials", href: "/admin/reading-materials", icon: BookOpen, adminOnly: true },
       {
         label: "Skills Arcade modules",
         href: "/arcade/admin/modules",

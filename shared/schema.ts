@@ -934,6 +934,13 @@ export const policies = pgTable("policies", {
   // master-list policies, which keeps the legacy /portal/policies UI
   // unchanged.
   category: text("category"),
+  // Reading-material extras (category="reading"). Admin-chosen label
+  // (e.g. "Guidance", "Newsletter") plus the kept uploaded source file
+  // so nurses/admins can download the original document.
+  readingCategory: text("reading_category"),
+  sourceFileName: text("source_file_name"),
+  sourceFilePath: text("source_file_path"),
+  sourceMimeType: text("source_mime_type"),
   createdBy: text("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

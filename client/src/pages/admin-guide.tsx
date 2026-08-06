@@ -420,6 +420,38 @@ const SOP_SECTIONS: SOPSection[] = [
     ],
   },
   {
+    id: "reading-materials",
+    title: "Reading Materials",
+    icon: BookOpen,
+    color: "text-sky-400",
+    overview:
+      "Reading Materials lets Super Admins share documents and other reading (guidance, newsletters, updates) that nurses must read in their portal — beyond formal policies. Reading time is tracked exactly like policies, and nurses confirm each item with a read-and-understood button that's recorded on their profile.",
+    steps: [
+      {
+        action: "Open the Reading Materials page",
+        detail: "Navigate to /admin/reading-materials. Click \"New Reading Item\" (Super Admin only).",
+      },
+      {
+        action: "Add content — upload, paste, or link",
+        detail: "Upload a .pdf or .docx (max 10 MB): the file is KEPT and downloadable by nurses, and its text is extracted into the body automatically if you leave the text blank. Alternatively paste text directly, or add an external link.",
+      },
+      {
+        action: "Set the category, version, and confirmation flag",
+        detail: "Give the item an optional category label (e.g. \"Guidance\"), a version, and choose whether nurses must confirm they've read it. Optional items are read-only.",
+      },
+      {
+        action: "Check who has read it",
+        detail: "Click the people icon on any row to see per-nurse status — read or outstanding, and (for Super Admins) time spent, sessions, and skim signals. Each nurse's profile also shows their reading progress under the Policies tab.",
+      },
+    ],
+    quickLink: "/admin/reading-materials",
+    quickLinkLabel: "Go to Reading Materials",
+    tips: [
+      "Bumping the version forces every nurse to re-confirm the item.",
+      "Confirmations are written to the nurse's audit history (action \"reading_material_acknowledged\").",
+    ],
+  },
+  {
     id: "audit",
     title: "Audit Trail & Compliance",
     icon: ScrollText,

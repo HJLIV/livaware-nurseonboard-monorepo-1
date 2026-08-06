@@ -18,7 +18,7 @@ import {
   type Policy,
   type PolicyAcknowledgement,
 } from "@shared/schema";
-import { eq, and, or, desc, asc, sql, isNull, ne, inArray } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql, isNull, ne, inArray, notInArray } from "drizzle-orm";
 import {
   requireAdmin,
   requireSuperAdmin,
@@ -62,7 +62,7 @@ interface PolicyForNurse {
   category: string | null;
 }
 
-async function buildPolicyListForNurse(
+export async function buildPolicyListForNurse(
   nurseId: string,
   options: { category?: string | null } = {},
 ): Promise<{
@@ -70,11 +70,12 @@ async function buildPolicyListForNurse(
   totalRequired: number;
   outstanding: number;
 }> {
-  // When category is omitted (default) we exclude induction-tagged rows
-  // so the legacy /portal/policies surface keeps only admin-managed
-  // policies. Pass `category: "induction"` to fetch the induction set.
+  // When category is omitted (default) we exclude induction-tagged and
+  // reading-material rows so the legacy /portal/policies surface keeps
+  // only admin-managed policies. Pass `category: "induction"` /
+  // `category: "reading"` to fetch those sets.
   const categoryFilter = options.category === undefined
-    ? or(isNull(policies.category), ne(policies.category, "induction"))
+    ? or(isNull(policies.category), notInArray(policies.category, ["induction", "reading"]))
     : options.category === null
       ? isNull(policies.category)
       : eq(policies.category, options.category);
@@ -183,8 +184,8 @@ export function registerPolicyRoutes(app: Express) {
         .select()
         .from(policies)
         .where(includeInduction
-          ? sql`true`
-          : or(isNull(policies.category), ne(policies.category, "induction")))
+          ? or(isNull(policies.category), ne(policies.category, "reading"))
+          : or(isNull(policies.category), notInArray(policies.category, ["induction", "reading"])))
         .orderBy(asc(policies.sortOrder), asc(policies.title));
       res.json(rows);
     } catch (err: any) {
@@ -774,11 +775,23 @@ export function registerPolicyRoutes(app: Express) {
           openedPdf,
         });
 
-      await logAction(nurseId, "portal", "policy_acknowledged", portalAgent(req), {
-        policyId,
-        title: policy.title,
-        version: policy.version,
-      });
+      // Reading materials (task: admin-added reading items) share the
+      // acknowledge flow but get their own audit action so the nurse's
+      // activity history distinguishes them from policies.
+      if (policy.category === "reading") {
+        await logAction(nurseId, "portal", "reading_material_acknowledged", portalAgent(req), {
+          policyId,
+          title: policy.title,
+          version: policy.version,
+          readingCategory: policy.readingCategory ?? null,
+        });
+      } else {
+        await logAction(nurseId, "portal", "policy_acknowledged", portalAgent(req), {
+          policyId,
+          title: policy.title,
+          version: policy.version,
+        });
+      }
 
       // Strict admin-only telemetry: never echo read-behaviour counters
       // back on the nurse-facing response.

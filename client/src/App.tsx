@@ -68,6 +68,8 @@ const SopComprehensionMatrixPage = lazy(() => import("@/pages/reports/sop-compre
 const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
 const AdminPoliciesPage = lazy(() => import("@/pages/admin-policies"));
 const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
+
+const PortalReadingPage = lazy(() => import("@/pages/portal/reading"));
 const PortalInductionPage = lazy(() => import("@/pages/portal/induction"));
 const PortalServiceAgreementPage = lazy(() => import("@/pages/portal/service-agreement"));
 const PortalDeclarationPage = lazy(() => import("@/pages/portal/declaration"));
@@ -212,6 +214,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/page" component={() => <PortalPage />} />
         <Route path="/portal/service-agreement" component={() => <PortalServiceAgreementPage />} />
         <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
+        <Route path="/portal/reading" component={() => <PortalReadingPage />} />
         <Route path="/portal/induction" component={() => <PortalInductionPage />} />
         <Route path="/portal/sop-comprehension" component={() => <PortalSopComprehensionPage />} />
         <Route path="/portal/availability" component={() => <PortalAvailabilityPage />} />
@@ -229,6 +232,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/portal/service-agreement/:token" component={PortalServiceAgreementPage} />
         <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
+        <Route path="/portal/reading/:token" component={PortalReadingPage} />
         <Route path="/portal/induction/:token" component={PortalInductionPage} />
         <Route path="/portal/sop-comprehension/:token" component={PortalSopComprehensionPage} />
         <Route path="/portal/declaration/:token/:key" component={PortalDeclarationPage} />
@@ -292,6 +296,7 @@ function AuthenticatedRouter() {
               {/* Platform settings (admin only) */}
               <Route path="/settings">{() => <AppLayout><AdminRoute component={AdminSettingsPage} /></AppLayout>}</Route>
               <Route path="/admin/policies">{() => <AppLayout><AdminRoute component={AdminPoliciesPage} /></AppLayout>}</Route>
+              <Route path="/admin/reading-materials">{() => <AppLayout><AdminRoute component={AdminReadingMaterialsPage} /></AppLayout>}</Route>
 
               {/* Super Admin */}
               <Route path="/super-admin/activity">{() => <SuperAdminRoute component={SuperAdminActivityPage} />}</Route>
@@ -328,3 +333,5 @@ function App() {
 }
 
 export default App;
+
+const AdminReadingMaterialsPage = lazy(() => import("@/pages/admin-reading-materials"));

@@ -603,6 +603,16 @@ export default function PortalHub() {
     enabled: !!token && !!portal && !chaseStatus?.isChase && stageUnlocked,
   });
 
+  // Admin-added reading materials summary — drives the sidebar count.
+  const { data: readingData } = useQuery<{
+    policies: Array<unknown>;
+    totalRequired: number;
+    outstanding: number;
+  }>({
+    queryKey: [`/api/portal/${token}/reading-materials`],
+    enabled: !!token && !!portal && !chaseStatus?.isChase && stageUnlocked,
+  });
+
   useEffect(() => {
     if (portal && showIntro === null) {
       // Show the Livaware compliance welcome to every active nurse the
@@ -672,6 +682,10 @@ export default function PortalHub() {
         ? { totalRequired: policiesData.totalRequired, outstanding: policiesData.outstanding }
         : null,
       selectPolicies: () => navigate(`/portal/policies`),
+      readingSummary: readingData
+        ? { totalRequired: readingData.totalRequired, outstanding: readingData.outstanding }
+        : null,
+      selectReading: () => navigate(`/portal/reading`),
       inductionSummary: portal.induction
         ? {
             total: portal.induction.total,
@@ -687,7 +701,7 @@ export default function PortalHub() {
       declarationsSummary: declarationsData ?? null,
       selectDeclaration: (key) => navigate(`/portal/declaration/${key}`),
     });
-  }, [portal, token, stepStatuses, navigate, policiesData, sopComprehensionData, declarationsData]);
+  }, [portal, token, stepStatuses, navigate, policiesData, readingData, sopComprehensionData, declarationsData]);
 
   // After the bootstrap fetch lands (cookie now set), normalize the URL to
   // /portal so the original token never lingers in the address bar / history.

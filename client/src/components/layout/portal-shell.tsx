@@ -643,6 +643,8 @@ interface BuildGroupsArgs {
   selectOnboardingStep: (stepKey: string) => void;
   policiesSummary?: { totalRequired: number; outstanding: number } | null;
   selectPolicies?: () => void;
+  readingSummary?: { totalRequired: number; outstanding: number } | null;
+  selectReading?: () => void;
   availabilityEnabled?: boolean;
   selectAvailability?: () => void;
   invoicesEnabled?: boolean;
@@ -685,6 +687,8 @@ export function buildPortalGroups({
   selectOnboardingStep,
   policiesSummary,
   selectPolicies,
+  readingSummary,
+  selectReading,
   availabilityEnabled,
   selectAvailability,
   invoicesEnabled,
@@ -757,6 +761,22 @@ export function buildPortalGroups({
     } else {
       policiesStatus = "in_progress";
       policiesHint = `${policiesSummary.outstanding} of ${policiesSummary.totalRequired} outstanding`;
+    }
+  }
+
+  // Admin-added reading materials — mirrors the policies status logic.
+  let readingStatus: PortalItemStatus = "in_progress";
+  let readingHint: string | undefined;
+  if (readingSummary) {
+    if (readingSummary.totalRequired === 0) {
+      readingStatus = "completed";
+      readingHint = "No reading requires confirmation";
+    } else if (readingSummary.outstanding === 0) {
+      readingStatus = "completed";
+      readingHint = `All ${readingSummary.totalRequired} read`;
+    } else {
+      readingStatus = "in_progress";
+      readingHint = `${readingSummary.outstanding} of ${readingSummary.totalRequired} outstanding`;
     }
   }
 
@@ -966,6 +986,19 @@ export function buildPortalGroups({
           hint: isLocked ? lockedHint : stageLocked ? stageLockedHint : policiesHint,
           onClick: isLocked || stageLocked ? undefined : selectPolicies,
           disabled: isLocked || stageLocked || !selectPolicies,
+        },
+        {
+          key: "induction:reading",
+          label: "Reading materials",
+          status: isLocked || stageLocked ? ("locked" as PortalItemStatus) : readingStatus,
+          hint: isLocked ? lockedHint : stageLocked ? stageLockedHint : readingHint,
+          onClick: isLocked || stageLocked
+            ? undefined
+            : selectReading ??
+              (() => {
+                window.location.href = `/portal/reading`;
+              }),
+          disabled: isLocked || stageLocked,
         },
         ...(sopComprehensionSummary
           ? [

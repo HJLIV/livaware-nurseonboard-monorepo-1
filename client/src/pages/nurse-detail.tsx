@@ -786,14 +786,20 @@ function formatReadDuration(seconds: number | null | undefined): string {
 
 const NURSE_DETAIL_SKIM_THRESHOLD = 10;
 
-function PoliciesTab({ nurseId }: { nurseId: string }) {
+function PoliciesTab({ nurseId, variant = "policies" }: { nurseId: string; variant?: "policies" | "reading" }) {
   const { user } = useAuth();
   // Stricter admin tier — without this, the time-spent / scrolled / pdf
   // columns are hidden so reading-behaviour signals stay with compliance
   // leads only.
   const canViewReadBehaviour = !!user?.canViewPolicyReadBehaviour;
+  const isReading = variant === "reading";
+  const noun = isReading ? "reading materials" : "policies";
   const { data, isLoading } = useQuery<NursePoliciesResponse>({
-    queryKey: [`/api/nurses/${nurseId}/policy-acknowledgements`],
+    queryKey: [
+      isReading
+        ? `/api/nurses/${nurseId}/reading-materials-progress`
+        : `/api/nurses/${nurseId}/policy-acknowledgements`,
+    ],
   });
 
   if (isLoading) {
@@ -809,7 +815,7 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">No policies published yet</p>
+          <p className="text-sm text-muted-foreground">No {noun} published yet</p>
         </CardContent>
       </Card>
     );
@@ -823,7 +829,7 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="text-sm">
             <span className="font-medium">{data.totalRequired ?? 0}</span>
-            <span className="text-muted-foreground"> required policies</span>
+            <span className="text-muted-foreground"> required {noun}</span>
           </div>
           {outstandingCount > 0 ? (
             <Badge
@@ -842,7 +848,7 @@ function PoliciesTab({ nurseId }: { nurseId: string }) {
         <table className="w-full text-sm">
           <thead className="border-b text-left">
             <tr className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground/70">
-              <th className="px-4 py-3 font-medium">Policy</th>
+              <th className="px-4 py-3 font-medium">{isReading ? "Reading item" : "Policy"}</th>
               <th className="px-4 py-3 font-medium">Status</th>
               {canViewReadBehaviour && (
                 <>
@@ -1478,8 +1484,12 @@ export default function NurseDetail() {
             <ArcadeTab nurseId={nurseId} />
           </TabsContent>
 
-          <TabsContent value="policies" className="mt-6">
+          <TabsContent value="policies" className="mt-6 space-y-4">
             <PoliciesTab nurseId={nurseId} />
+            <div>
+              <h3 className="text-sm font-medium mb-2 text-muted-foreground">Reading materials</h3>
+              <PoliciesTab nurseId={nurseId} variant="reading" />
+            </div>
           </TabsContent>
 
           <TabsContent value="induction" className="mt-6 space-y-4">

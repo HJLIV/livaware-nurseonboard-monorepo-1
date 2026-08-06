@@ -232,6 +232,10 @@ export async function registerRoutes(
   const { registerPolicyRoutes } = await import("./routes/policies");
   registerPolicyRoutes(app);
 
+  // === READING MATERIALS (admin-added, read-tracked) ===
+  const { registerReadingMaterialRoutes } = await import("./routes/reading-materials");
+  registerReadingMaterialRoutes(app);
+
   // === SUPER ADMIN (activity dashboard) ===
   const { registerSuperAdminRoutes } = await import("./routes/super-admin");
   registerSuperAdminRoutes(app);
