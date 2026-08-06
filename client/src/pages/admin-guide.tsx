@@ -332,6 +332,11 @@ const SOP_SECTIONS: SOPSection[] = [
           "DOB, passport / RTW document number, gov.uk share code and the right-to-work document upload all live on the Age & Eligibility declaration. The Demographics step no longer asks for them and the legacy Right to Work step is now a checklist that links straight to that declaration. The admin Demographics tab shows DOB and passport read-only, labelled 'from Age & Eligibility declaration' when a value is present there.",
       },
       {
+        action: "Issuing individual agreements (projects, patients, deployments)",
+        detail:
+          'On a nurse\'s profile, open the "Individual Agreements" tab to issue an ad-hoc agreement — pick a type (project / patient / deployment), give it a title, and upload the agreement document (PDF or Word). The nurse sees it in their portal under "Individual agreements", reads it, ticks a read confirmation and signs with their typed legal name — the same ceremony as the Service Agreement. Signing generates a signature-record PDF saved to their documents. Unsigned agreements can be voided or have their document replaced; signed ones are locked.',
+      },
+      {
         action: "Hepatitis B / BBV — single source of truth",
         detail:
           "Hep B vaccination, anti-HBs titre, HBsAg, Hep C and HIV status are all asked on the Occupational Health questionnaire. The EPP declaration shows a read-only BBV summary panel that mirrors those answers — to update them, the candidate edits Occupational Health.",

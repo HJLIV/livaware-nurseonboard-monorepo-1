@@ -788,6 +788,11 @@ export function registerNurseRoutes(app: Express) {
       const { buildServiceAgreementState } = await import("./service-agreement");
       const serviceAgreement = await buildServiceAgreementState(nurse.id);
 
+      // Individual agreements (task 191) — count block so the hub/sidebar can
+      // surface pending ad-hoc agreements without an extra request.
+      const { buildAgreementsSummary } = await import("./individual-agreements");
+      const agreementsSummary = await buildAgreementsSummary(nurse.id);
+
       res.json({
         nurse: {
           id: nurse.id,
@@ -799,6 +804,7 @@ export function registerNurseRoutes(app: Express) {
         gate,
         induction: inductionGate,
         serviceAgreement,
+        agreements: agreementsSummary,
         token: "me",
         firstVisit: isFirstVisit,
         sessionIssued: !!bootstrappedSessionId,

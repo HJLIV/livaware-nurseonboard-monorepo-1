@@ -661,6 +661,8 @@ export default function PortalHub() {
       token,
       serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
       selectServiceAgreement: () => navigate(`/portal/service-agreement`),
+      agreementsSummary: (portal as any)?.agreements ?? null,
+      selectAgreements: () => navigate(`/portal/agreements`),
       journey: portal.journey,
       stepStatuses,
       gate: portal.gate ?? null,

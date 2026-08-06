@@ -72,6 +72,7 @@ const PortalPoliciesPage = lazy(() => import("@/pages/portal/policies"));
 const PortalReadingPage = lazy(() => import("@/pages/portal/reading"));
 const PortalInductionPage = lazy(() => import("@/pages/portal/induction"));
 const PortalServiceAgreementPage = lazy(() => import("@/pages/portal/service-agreement"));
+const PortalAgreementsPage = lazy(() => import("@/pages/portal/agreements"));
 const PortalDeclarationPage = lazy(() => import("@/pages/portal/declaration"));
 const PortalSopComprehensionPage = lazy(() => import("@/pages/portal/sop-comprehension"));
 const PortalSectionPage = lazy(() => import("@/pages/portal/section"));
@@ -213,6 +214,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/arcade/walkthrough/:id">{() => <ArcadeWalkthrough />}</Route>
         <Route path="/portal/page" component={() => <PortalPage />} />
         <Route path="/portal/service-agreement" component={() => <PortalServiceAgreementPage />} />
+        <Route path="/portal/agreements" component={() => <PortalAgreementsPage />} />
         <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
         <Route path="/portal/reading" component={() => <PortalReadingPage />} />
         <Route path="/portal/induction" component={() => <PortalInductionPage />} />
@@ -231,6 +233,7 @@ function AuthenticatedRouter() {
             existing bootstrap links and external email links. */}
         <Route path="/portal/page/:token" component={PortalPage} />
         <Route path="/portal/service-agreement/:token" component={PortalServiceAgreementPage} />
+        <Route path="/portal/agreements/:token" component={PortalAgreementsPage} />
         <Route path="/portal/policies/:token" component={PortalPoliciesPage} />
         <Route path="/portal/reading/:token" component={PortalReadingPage} />
         <Route path="/portal/induction/:token" component={PortalInductionPage} />

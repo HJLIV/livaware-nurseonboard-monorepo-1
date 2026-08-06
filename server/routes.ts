@@ -193,6 +193,9 @@ export async function registerRoutes(
   const { registerServiceAgreementRoutes } = await import("./routes/service-agreement");
   registerServiceAgreementRoutes(app);
 
+  const { registerIndividualAgreementRoutes } = await import("./routes/individual-agreements");
+  registerIndividualAgreementRoutes(app);
+
   // === PORTAL (nurse-facing self-service) ===
   const { registerPortalRoutes } = await import("./routes/portal");
   registerPortalRoutes(app);

@@ -1635,6 +1635,61 @@ export const insertNurseDeclarationSchema = createInsertSchema(nurseDeclarations
 export type NurseDeclaration = typeof nurseDeclarations.$inferSelect;
 export type InsertNurseDeclaration = z.infer<typeof insertNurseDeclarationSchema>;
 
+// ==================== INDIVIDUAL NURSE AGREEMENTS (task 191) ====================
+// Ad-hoc, admin-issued agreements for a specific project, patient, or
+// deployment. The admin uploads the agreement document (PDF/DOCX, stored as a
+// normal `documents` row); the nurse reviews and signs it in the portal using
+// the same typed-signature ceremony as the Service Agreement. On signing, a
+// signature-certificate PDF is generated and stored as another `documents` row
+// (signedPdfDocumentId). Unsigned agreements can be voided (or their document
+// replaced); a replaced/voided document never mutates a signed record.
+export const nurseAgreementStatusEnum = pgEnum("nurse_agreement_status", [
+  "pending",
+  "signed",
+  "voided",
+]);
+export const nurseAgreementContextEnum = pgEnum("nurse_agreement_context", [
+  "project",
+  "patient",
+  "deployment",
+  "other",
+]);
+
+export const nurseAgreements = pgTable("nurse_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  title: text("title").notNull(),
+  contextType: nurseAgreementContextEnum("context_type").notNull().default("other"),
+  // Free-text label for the specific project/patient/deployment.
+  contextLabel: text("context_label"),
+  status: nurseAgreementStatusEnum("status").notNull().default("pending"),
+  // The uploaded agreement document the nurse reads (documents.id).
+  sourceDocumentId: varchar("source_document_id").notNull(),
+  // Signature block — mirrors nurse_declarations.
+  signatureName: text("signature_name"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  signedAt: timestamp("signed_at"),
+  // Generated signature-certificate PDF (documents.id).
+  signedPdfDocumentId: varchar("signed_pdf_document_id"),
+  createdBy: text("created_by"),
+  voidedAt: timestamp("voided_at"),
+  voidedBy: text("voided_by"),
+  voidReason: text("void_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("nurse_agreements_nurse_id_idx").on(table.nurseId),
+]);
+
+export const insertNurseAgreementSchema = createInsertSchema(nurseAgreements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type NurseAgreement = typeof nurseAgreements.$inferSelect;
+export type InsertNurseAgreement = z.infer<typeof insertNurseAgreementSchema>;
+
 // ==================== NURSE AVAILABILITY (task 124) ====================
 // Per-nurse, per-day, per-shift (AM/PM/Night) availability for the
 // rolling current-month + 6-month-ahead window. Designed for cross-app

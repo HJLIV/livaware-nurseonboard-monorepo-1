@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { OnboardingAccessPanel } from "@/components/admin/onboarding-access-panel";
 import { DeclarationsPanel } from "@/components/admin/declarations-panel";
 import { ServiceAgreementPanel } from "@/components/admin/service-agreement-panel";
+import { IndividualAgreementsPanel } from "@/components/admin/individual-agreements-panel";
 import { InductionProgressPanel } from "@/components/admin/induction-progress-panel";
 import { SopComprehensionPanel } from "@/components/admin/sop-comprehension-panel";
 import { PortalAccessPanel } from "@/components/admin/portal-access-panel";
@@ -5533,6 +5534,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsTrigger value="indemnity" className="text-xs gap-1.5"><ShieldCheck className="h-3 w-3" />Indemnity<StepStatusDot status={stepStatuses.indemnity} /></TabsTrigger>
             <TabsTrigger value="declarations" className="text-xs gap-1.5"><ClipboardCheck className="h-3 w-3" />Declarations</TabsTrigger>
             <TabsTrigger value="service_agreement" className="text-xs gap-1.5"><FileSignature className="h-3 w-3" />Service Agreement</TabsTrigger>
+            <TabsTrigger value="individual_agreements" className="text-xs gap-1.5"><FileSignature className="h-3 w-3" />Individual Agreements</TabsTrigger>
           </TabsList>
           <div className="mt-6">
             <TabsContent value="identity"><IdentityTab candidate={candidate} /></TabsContent>
@@ -5546,6 +5548,7 @@ function SectionTabs({ candidateId, candidate, stepStatuses, currentStep }: { ca
             <TabsContent value="indemnity"><IndemnityTab candidateId={candidateId} candidateName={candidate.fullName} /></TabsContent>
             <TabsContent value="declarations"><DeclarationsPanel candidateId={candidateId} /></TabsContent>
             <TabsContent value="service_agreement"><ServiceAgreementPanel candidateId={candidateId} /></TabsContent>
+            <TabsContent value="individual_agreements"><IndividualAgreementsPanel candidateId={candidateId} /></TabsContent>
           </div>
         </Tabs>
         </>

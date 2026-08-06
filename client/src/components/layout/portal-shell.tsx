@@ -666,6 +666,11 @@ interface BuildGroupsArgs {
   // is admin-approved, then becomes signable, then completed once signed.
   serviceAgreementSigned?: boolean;
   selectServiceAgreement?: () => void;
+  // Individual agreements (task 191) — ad-hoc admin-issued agreements for a
+  // project/patient/deployment. Hidden when there are none; never gate-locked
+  // (the admin's act of issuing one IS the gate).
+  agreementsSummary?: { total: number; outstanding: number } | null;
+  selectAgreements?: () => void;
 }
 
 // Additional onboarding declarations the candidate must complete alongside
@@ -704,6 +709,8 @@ export function buildPortalGroups({
   gate,
   serviceAgreementSigned,
   selectServiceAgreement,
+  agreementsSummary,
+  selectAgreements,
 }: BuildGroupsArgs): PortalSidebarGroup[] {
   const isLocked = !!gate && gate.unlocked === false;
   const lockedHint = "Locked — finish Assessment first";
@@ -957,6 +964,29 @@ export function buildPortalGroups({
       items: [
         // Service Agreement — first Induction item, gated on admin approval.
         ...(serviceAgreementSigned !== undefined ? [serviceAgreementItem] : []),
+        // Individual agreements (task 191) — only shown when at least one
+        // exists; intentionally not locked by assessment/compliance gates.
+        ...(agreementsSummary && agreementsSummary.total > 0
+          ? [
+              {
+                key: "induction:agreements",
+                label: "Individual agreements",
+                status:
+                  agreementsSummary.outstanding > 0
+                    ? ("in_progress" as PortalItemStatus)
+                    : ("completed" as PortalItemStatus),
+                hint:
+                  agreementsSummary.outstanding > 0
+                    ? `${agreementsSummary.outstanding} to sign`
+                    : "All signed",
+                onClick:
+                  selectAgreements ??
+                  (() => {
+                    window.location.href = `/portal/agreements`;
+                  }),
+              },
+            ]
+          : []),
         {
           key: "induction:handbook",
           label: "Staff Handbook induction",
