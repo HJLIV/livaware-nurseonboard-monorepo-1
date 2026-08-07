@@ -177,21 +177,36 @@ function AgreementCard({
         </div>
 
         {signed ? (
-          <p className="text-sm text-muted-foreground">
-            You signed this agreement as{" "}
-            <span className="font-medium text-foreground">{agreement.signatureName}</span>
-            {agreement.signedAt ? ` on ${new Date(agreement.signedAt).toLocaleString()}` : ""}. A
-            signed record has been saved to your file.
-            {doc?.filePath && (
-              <>
-                {" "}
-                <a href={doc.filePath} target="_blank" rel="noreferrer" className="underline">
-                  View the agreement document
-                </a>
-                .
-              </>
-            )}
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              You signed this agreement as{" "}
+              <span className="font-medium text-foreground">{agreement.signatureName}</span>
+              {agreement.signedAt ? ` on ${new Date(agreement.signedAt).toLocaleString()}` : ""}. Your
+              signed copy below contains the full agreement and your signature details.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {agreement.signedPdfDocumentId && (
+                <Button asChild size="sm">
+                  <a
+                    href={`/api/documents/${agreement.signedPdfDocumentId}/download`}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid={`link-signed-pdf-${agreement.id}`}
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Download your signed agreement (PDF)
+                  </a>
+                </Button>
+              )}
+              {doc?.filePath && (
+                <Button asChild variant="outline" size="sm">
+                  <a href={doc.filePath} target="_blank" rel="noreferrer">
+                    Original document
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
         ) : (
           <>
             {hasInAppContent ? (

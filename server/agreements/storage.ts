@@ -1,7 +1,7 @@
 // Thin DB layer for individual nurse agreements (task 191). Kept separate
 // from the big server/storage.ts, mirroring server/declarations/storage.ts.
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
 import { nurseAgreements, type NurseAgreement } from "@shared/schema";
 
@@ -105,6 +105,54 @@ export async function markSigned(
       updatedAt: new Date(),
     })
     .where(and(eq(nurseAgreements.id, id), eq(nurseAgreements.status, "pending")))
+    .returning();
+  return row;
+}
+
+// ─── Regeneration support (task 201) ─────────────────────────────────
+//
+// These two touch already-signed rows on purpose, but only ever the
+// derived fields (extracted wording + the pointer to the regenerated
+// record). The signature itself — name, timestamp, IP, device — is never
+// rewritten.
+
+export async function listSigned(): Promise<NurseAgreement[]> {
+  return db.select().from(nurseAgreements)
+    .where(eq(nurseAgreements.status, "signed"))
+    .orderBy(desc(nurseAgreements.createdAt));
+}
+
+export async function setExtractedContent(
+  id: string,
+  content: { contentMarkdown: string | null; extractionError: string | null },
+): Promise<void> {
+  await db.update(nurseAgreements)
+    .set({
+      contentMarkdown: content.contentMarkdown,
+      extractionError: content.extractionError,
+      updatedAt: new Date(),
+    })
+    .where(eq(nurseAgreements.id, id));
+}
+
+// Compare-and-swap on the current pointer: two concurrent rebuilds must not
+// both win, or the loser's PDF is left linked-then-orphaned.
+export async function relinkSignedPdf(
+  id: string,
+  signedPdfDocumentId: string,
+  expectedCurrentId: string | null,
+): Promise<NurseAgreement | undefined> {
+  const [row] = await db.update(nurseAgreements)
+    .set({ signedPdfDocumentId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(nurseAgreements.id, id),
+        eq(nurseAgreements.status, "signed"),
+        expectedCurrentId === null
+          ? isNull(nurseAgreements.signedPdfDocumentId)
+          : eq(nurseAgreements.signedPdfDocumentId, expectedCurrentId),
+      ),
+    )
     .returning();
   return row;
 }

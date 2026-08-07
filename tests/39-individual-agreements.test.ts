@@ -345,6 +345,128 @@ describe("Task 191 — Individual agreements", () => {
     expect(contextLine).toContain("Patient X");
   });
 
+  // ─── Task 201 — sealed signed PDF (wording + execution details) ────
+
+  // Pull a stored document down as a Buffer and read its text back out with
+  // the same extractor the app uses for uploads.
+  async function downloadPdfText(documentId: string): Promise<string> {
+    const res = await agent
+      .get(`/api/documents/${documentId}/download`)
+      .buffer(true)
+      .parse((response, cb) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
+        response.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    const buffer = res.body as Buffer;
+    expect(buffer.subarray(0, 5).toString()).toBe("%PDF-");
+    const { extractPolicyFromFile } = await import("../server/policy-extractor");
+    const { body } = await extractPolicyFromFile(buffer, "signed.pdf", "application/pdf");
+    return body;
+  }
+
+  it("the signed PDF contains the agreement wording and the execution details", async () => {
+    const nurse = await createTestNurse(agent, {});
+    const link = await createPortalLink(agent, nurse.id);
+    const pdf = await makeRealPdf(
+      "Clause one: the nurse shall attend the twilight shift at Rosewood House.",
+    );
+    const createRes = await agent
+      .post(`/api/nurses/${nurse.id}/agreements`)
+      .field("title", "Sealed agreement")
+      .attach("file", pdf);
+    expect(createRes.status).toBe(201);
+
+    const signRes = await supertest(app)
+      .post(`/api/portal/${link.token}/agreements/${createRes.body.agreement.id}/sign`)
+      .set("User-Agent", "vitest-sealer")
+      .send({ confirmRead: true, signatureName: nurse.fullName });
+    expect(signRes.status).toBe(200);
+
+    const text = await downloadPdfText(signRes.body.signedPdfDocumentId);
+    // The wording itself, not just a pointer to the uploaded file.
+    expect(text).toContain("twilight shift at Rosewood House");
+    // …followed by the execution block.
+    expect(text).toContain("Execution");
+    expect(text).toContain(nurse.fullName);
+    expect(text).toContain("vitest-sealer");
+    expect(text).toContain("SHA-256 fingerprint");
+  });
+
+  it("degrades to certifying the original when the wording could not be extracted", async () => {
+    const nurse = await createTestNurse(agent, {});
+    const link = await createPortalLink(agent, nurse.id);
+    const created = await createAgreement(agent, nurse.id, { title: "Unreadable original" });
+    expect(created.contentMarkdown).toBeNull();
+
+    const signRes = await supertest(app)
+      .post(`/api/portal/${link.token}/agreements/${created.id}/sign`)
+      .send({ confirmRead: true, signatureName: nurse.fullName });
+    expect(signRes.status).toBe(200);
+
+    const text = await downloadPdfText(signRes.body.signedPdfDocumentId);
+    expect(text).toContain("could not be reproduced");
+    expect(text).toContain("Execution");
+    expect(text).toContain(nurse.fullName);
+  });
+
+  it("regenerating rebuilds a legacy record with the wording and supersedes the old PDF", async () => {
+    const { db } = await import("../server/db");
+    const { nurseAgreements } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const nurse = await createTestNurse(agent, {});
+    const link = await createPortalLink(agent, nurse.id);
+    const pdf = await makeRealPdf("Legacy clause: mileage is reimbursed at the standard rate.");
+    const createRes = await agent
+      .post(`/api/nurses/${nurse.id}/agreements`)
+      .field("title", "Legacy agreement")
+      .attach("file", pdf);
+    const agreementId = createRes.body.agreement.id as string;
+
+    // Simulate a record signed before the wording was captured/embedded.
+    await db
+      .update(nurseAgreements)
+      .set({ contentMarkdown: null, extractionError: "legacy" })
+      .where(eq(nurseAgreements.id, agreementId));
+
+    const signRes = await supertest(app)
+      .post(`/api/portal/${link.token}/agreements/${agreementId}/sign`)
+      .send({ confirmRead: true, signatureName: nurse.fullName });
+    expect(signRes.status).toBe(200);
+    const oldDocId = signRes.body.signedPdfDocumentId as string;
+    expect(await downloadPdfText(oldDocId)).not.toContain("mileage is reimbursed");
+
+    const regen = await agent
+      .post(`/api/agreements/regenerate-signed-pdfs`)
+      .send({ agreementIds: [agreementId] });
+    expect(regen.status).toBe(200);
+    expect(regen.body.regenerated).toBe(1);
+    expect(regen.body.failed).toHaveLength(0);
+
+    const listRes = await agent.get(`/api/nurses/${nurse.id}/agreements`);
+    const row = listRes.body.agreements.find((a: any) => a.id === agreementId);
+    expect(row.status).toBe("signed");
+    expect(row.signatureName).toBe(nurse.fullName);
+    expect(row.signedPdfDocumentId).not.toBe(oldDocId);
+
+    const rebuilt = await downloadPdfText(row.signedPdfDocumentId);
+    expect(rebuilt).toContain("mileage is reimbursed");
+    expect(rebuilt).toContain(nurse.fullName);
+
+    // The superseded record is cleaned up rather than left in the file list.
+    await vi.waitFor(async () => {
+      const gone = await agent.get(`/api/documents/${oldDocId}/download`);
+      expect(gone.status).toBe(404);
+    }, { timeout: 5000 });
+  });
+
+  it("regeneration is admin-only", async () => {
+    const res = await supertest(app).post(`/api/agreements/regenerate-signed-pdfs`).send({});
+    expect(res.status).toBe(401);
+  });
+
   it("portal summary includes an agreements count block", async () => {
     const nurse = await createTestNurse(agent, {});
     const link = await createPortalLink(agent, nurse.id);

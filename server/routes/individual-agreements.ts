@@ -16,9 +16,7 @@
 //   POST   /api/portal/:token/agreements/:id/sign     sign
 
 import type { Express, Request } from "express";
-import path from "path";
 import fs from "fs";
-import crypto from "crypto";
 import { db } from "../db";
 import { nurses } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -27,12 +25,17 @@ import {
   validatePortalToken,
   upload,
   uploadLimiter,
-  uploadsDir,
 } from "../middleware";
 import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import * as agreements from "../agreements/storage";
-import { generateAgreementSignaturePDF } from "../agreements/pdf";
+import {
+  buildSignedAgreementPdf,
+  storeSignedAgreementPdf,
+  discardStoredPdf,
+  mirrorToBucket,
+} from "../agreements/seal";
+import { regenerateSignedAgreementPdfs } from "../agreements/regenerate";
 import { extractPolicyFromFile } from "../policy-extractor";
 import { sendIndividualAgreementIssuedEmail, isOutlookConfigured } from "../outlook";
 import { mintChasePortalLinkForNurse } from "../training-notifications";
@@ -50,10 +53,6 @@ function agentFor(req: Request): string {
 function clientIp(req: Request): string | null {
   const fwd = (req.headers["x-forwarded-for"] as string | undefined) || "";
   return fwd.split(",")[0]?.trim() || req.ip || null;
-}
-
-function safeFilenamePart(s: string): string {
-  return s.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 60);
 }
 
 // The shared multer filter also accepts images; agreements must be PDF or
@@ -355,6 +354,27 @@ export function registerIndividualAgreementRoutes(app: Express) {
     },
   );
 
+  // ─── Admin: rebuild sealed records ───────────────────────────────
+  // One-off maintenance for agreements signed before the wording was
+  // embedded in the PDF. Signature data is never altered — only the
+  // rendered record is rebuilt (and the wording re-extracted if it was
+  // never captured).
+  app.post("/api/agreements/regenerate-signed-pdfs", requireAdmin, async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.agreementIds)
+        ? req.body.agreementIds.filter((id: unknown) => typeof id === "string")
+        : undefined;
+      const result = await regenerateSignedAgreementPdfs({
+        triggeredBy: agentFor(req),
+        agreementIds: ids,
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("[agreements] regeneration run failed:", err?.message || err);
+      res.status(500).json({ message: err?.message || "Failed to regenerate signed records" });
+    }
+  });
+
   // ─── Portal: list (voided hidden) ────────────────────────────────
   app.get("/api/portal/:token/agreements", validatePortalToken, async (req, res) => {
     try {
@@ -406,9 +426,10 @@ export function registerIndividualAgreementRoutes(app: Express) {
         const ipAddress = clientIp(req);
         const userAgent = (req.headers["user-agent"] as string | undefined) ?? null;
 
-        // Render the signature certificate BEFORE recording the signature so a
-        // rendering failure never leaves a signed-but-PDF-less record — same
-        // ordering as the Service Agreement sign flow.
+        // Render the sealed record (agreement wording + execution details)
+        // BEFORE recording the signature so a rendering failure never leaves
+        // a signed-but-PDF-less record — same ordering as the Service
+        // Agreement sign flow.
         const pdfSource = {
           ...agreement,
           signatureName,
@@ -419,7 +440,11 @@ export function registerIndividualAgreementRoutes(app: Express) {
         };
         let pdfBuffer: Buffer;
         try {
-          pdfBuffer = await generateAgreementSignaturePDF(pdfSource, nurse, sourceDoc);
+          pdfBuffer = await buildSignedAgreementPdf({
+            agreement: pdfSource,
+            nurse,
+            sourceDocument: sourceDoc,
+          });
         } catch (err: any) {
           console.error("[agreements] pdf render failed (signature NOT recorded):", err?.message || err);
           return res.status(500).json({
@@ -428,33 +453,24 @@ export function registerIndividualAgreementRoutes(app: Express) {
           });
         }
 
-        // Persist the certificate PDF (file + documents row) BEFORE the
+        // Persist the sealed PDF (file + documents row) BEFORE the
         // pending→signed transition, so a signed row ALWAYS carries a
-        // retrievable certificate. If persistence fails, the agreement is
+        // retrievable record. If persistence fails, the agreement is
         // untouched (still pending) and the nurse can simply retry. If the
         // later transition loses a race, the orphaned file/doc is cleaned up.
-        const datePart = new Date().toISOString().split("T")[0];
-        const filename = `individual-agreement-${safeFilenamePart(nurse.fullName)}-${datePart}-${crypto
-          .randomBytes(4)
-          .toString("hex")}.pdf`;
         let signedPdfDocumentId: string;
+        let filename: string;
         try {
-          await fs.promises.writeFile(path.join(uploadsDir, filename), pdfBuffer);
-          const doc = await storage.createDocument({
+          const stored = await storeSignedAgreementPdf({
             nurseId,
-            type: "individual_agreement_signed",
-            category: "agreement",
-            filename,
-            originalFilename: `${agreement.title} — Signed — ${nurse.fullName}.pdf`,
-            filePath: `/api/uploads/${filename}`,
-            fileSize: pdfBuffer.length,
-            mimeType: "application/pdf",
-            uploadedBy: "system",
+            nurseFullName: nurse.fullName,
+            agreementTitle: agreement.title,
+            buffer: pdfBuffer,
           });
-          signedPdfDocumentId = doc.id;
+          signedPdfDocumentId = stored.documentId;
+          filename = stored.filename;
         } catch (err: any) {
           console.error("[agreements] pdf storage failed (signature NOT recorded):", err?.message || err);
-          fs.promises.unlink(path.join(uploadsDir, filename)).catch(() => {});
           return res.status(500).json({
             message:
               "We couldn't store your signed agreement record. Your signature was not recorded — please try again.",
@@ -470,12 +486,9 @@ export function registerIndividualAgreementRoutes(app: Express) {
         if (!signed) {
           // Conditional pending→signed update matched no row: a concurrent
           // sign/void/replace won the race. Clean up the now-orphaned
-          // certificate file + document row; nothing was recorded for this
+          // record file + document row; nothing was recorded for this
           // request, so a 409 is accurate.
-          fs.promises.unlink(path.join(uploadsDir, filename)).catch(() => {});
-          storage.deleteDocument(signedPdfDocumentId).catch((cleanupErr: any) =>
-            console.error("[agreements] orphan doc cleanup failed:", cleanupErr?.message || cleanupErr),
-          );
+          void discardStoredPdf(signedPdfDocumentId, filename);
           return res.status(409).json({ message: "This agreement has already been signed or is no longer available." });
         }
 
@@ -490,11 +503,7 @@ export function registerIndividualAgreementRoutes(app: Express) {
           agreementId: agreement.id,
           documentId: signedPdfDocumentId,
         });
-        import("../object-storage")
-          .then(({ triggerBucketMirror }) => triggerBucketMirror(filename))
-          .catch((mirrorErr: any) =>
-            console.error("[agreements] bucket mirror failed:", mirrorErr?.message || mirrorErr),
-          );
+        mirrorToBucket(filename);
 
         const finalRow = await agreements.getById(agreement.id);
         res.json({

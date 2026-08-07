@@ -153,6 +153,38 @@ export function IndividualAgreementsPanel({ candidateId }: { candidateId: string
       toast({ title: "Could not void agreement", description: err?.message, variant: "destructive" }),
   });
 
+  // Rebuilds the sealed PDF for a signed agreement from the signature already
+  // on record — used for agreements signed before the wording was embedded.
+  const rebuildMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/agreements/regenerate-signed-pdfs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ agreementIds: [id] }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || res.statusText);
+      return res.json() as Promise<{ regenerated: number; failed: { reason: string }[] }>;
+    },
+    onSuccess: (result) => {
+      invalidate();
+      if (result.regenerated > 0) {
+        toast({
+          title: "Signed record rebuilt",
+          description: "The PDF now contains the full agreement wording and signature details.",
+        });
+      } else {
+        toast({
+          title: "Could not rebuild the record",
+          description: result.failed?.[0]?.reason || "No record was regenerated.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (err: any) =>
+      toast({ title: "Could not rebuild the record", description: err?.message, variant: "destructive" }),
+  });
+
   const replaceMutation = useMutation({
     mutationFn: async ({ id, file }: { id: string; file: File }) => {
       const form = new FormData();
@@ -285,24 +317,37 @@ export function IndividualAgreementsPanel({ candidateId }: { candidateId: string
               )}
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {a.sourceDocument?.filePath && (
-                  <Button asChild variant="outline" size="sm">
-                    <a href={a.sourceDocument.filePath} target="_blank" rel="noreferrer">
-                      <Download className="h-3.5 w-3.5 mr-1.5" />
-                      {a.sourceDocument.originalFilename || "Agreement document"}
-                    </a>
-                  </Button>
-                )}
                 {a.status === "signed" && a.signedPdfDocumentId && (
-                  <Button asChild variant="outline" size="sm">
+                  <Button asChild size="sm">
                     <a
                       href={`/api/documents/${a.signedPdfDocumentId}/download`}
                       target="_blank"
                       rel="noreferrer"
                       data-testid={`link-signed-pdf-${a.id}`}
                     >
-                      <Download className="h-3.5 w-3.5 mr-1.5" /> Signed record (PDF)
+                      <Download className="h-3.5 w-3.5 mr-1.5" /> Signed agreement (PDF)
                     </a>
+                  </Button>
+                )}
+                {a.sourceDocument?.filePath && (
+                  <Button asChild variant="outline" size="sm">
+                    <a href={a.sourceDocument.filePath} target="_blank" rel="noreferrer">
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      {a.status === "signed"
+                        ? "Original document"
+                        : a.sourceDocument.originalFilename || "Agreement document"}
+                    </a>
+                  </Button>
+                )}
+                {a.status === "signed" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => rebuildMutation.mutate(a.id)}
+                    disabled={rebuildMutation.isPending}
+                    data-testid={`button-rebuild-signed-pdf-${a.id}`}
+                  >
+                    <RefreshCcw className="h-3.5 w-3.5 mr-1.5" /> Rebuild signed PDF
                   </Button>
                 )}
                 {a.status === "pending" && (
