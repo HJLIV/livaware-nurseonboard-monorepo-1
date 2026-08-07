@@ -1566,6 +1566,73 @@ register({
     ].join("\n"),
 });
 
+// ─── Individual agreement issued (task 195) ─────────────────────────
+register({
+  key: "individual_agreement_issued",
+  label: "Individual agreement issued",
+  description:
+    "Sent to a nurse when an admin issues an individual agreement (project, patient, or deployment) that needs their signature in the portal.",
+  category: "nurse",
+  envelope: {
+    headerTitle: "NurseOnboard",
+    headerSubtitle: "Livaware Ltd — Secure Nurse Portal",
+    footerText: CQC_FOOTER,
+    footerSecondLine: AUTOMATED_LINE,
+  },
+  tokens: [
+    { name: "{{NAME}}", description: "Full name" },
+    { name: "{{FIRST_NAME}}", description: "First name" },
+    { name: "{{AGREEMENT_TITLE}}", description: "The agreement's title" },
+    { name: "{{CONTEXT}}", description: "Project / patient / deployment context line" },
+    { name: "{{PORTAL_URL}}", description: "The personal portal link" },
+  ],
+  defaultSubject: "Livaware Ltd — An agreement needs your signature: {{AGREEMENT_TITLE}}",
+  fields: [
+    { name: "greeting", label: "Greeting line", kind: "text", default: "Dear {{NAME}}," },
+    {
+      name: "intro",
+      label: "Opening paragraph(s)",
+      kind: "textarea",
+      rows: 3,
+      default:
+        "We've issued a new individual agreement for you: \u201C{{AGREEMENT_TITLE}}\u201D ({{CONTEXT}}). Please read it in full and sign it on screen in your secure portal — it only takes a few minutes.",
+    },
+    { name: "ctaLabel", label: "Button text", kind: "text", default: "Read & Sign the Agreement" },
+    {
+      name: "note",
+      label: "Note under the button",
+      kind: "textarea",
+      rows: 2,
+      default:
+        "This link is personal to you — please do not share it. If you have any questions about the agreement, contact our onboarding team before signing.",
+    },
+    { name: "signoff", label: "Sign-off", kind: "textarea", rows: 2, default: "Kind regards,\nLivaware Onboarding Team" },
+  ],
+  renderBody: (v, t) => {
+    const url = t.PORTAL_URL || "#";
+    return `
+      <p style="font-size:16px; color:#F0ECE4; margin-bottom:8px;">${escapeHtml(applyTokens(v.greeting, t))}</p>
+      ${paragraphs(applyTokens(v.intro, t))}
+      ${ctaButton(applyTokens(v.ctaLabel, t), url)}
+      ${fallbackLinkLine(url)}
+      ${smallNote(applyTokens(v.note, t))}
+      <p style="font-size:14px; color:#E0DCD4; margin-top:24px; white-space:pre-line;">${escapeHtml(applyTokens(v.signoff, t))}</p>
+    `;
+  },
+  renderText: (v, t) =>
+    [
+      applyTokens(v.greeting, t),
+      "",
+      applyTokens(v.intro, t),
+      "",
+      `${applyTokens(v.ctaLabel, t)}: ${t.PORTAL_URL || ""}`,
+      "",
+      applyTokens(v.note, t),
+      "",
+      applyTokens(v.signoff, t),
+    ].join("\n"),
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────

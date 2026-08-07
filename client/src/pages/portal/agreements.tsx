@@ -5,7 +5,7 @@
 // and is signed with the same typed-signature ceremony as the Service
 // Agreement. Voided agreements are never shown here.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PolicyBody } from "@/components/policy-body";
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2,
@@ -48,6 +49,8 @@ interface IndividualAgreement {
   signedPdfDocumentId: string | null;
   createdAt: string;
   sourceDocument: AgreementSourceDocument | null;
+  contentMarkdown: string | null;
+  extractionError: string | null;
 }
 
 interface PortalData {
@@ -84,6 +87,34 @@ function AgreementCard({
   const doc = agreement.sourceDocument;
   const isPdf = (doc?.mimeType || "").includes("pdf");
   const signed = agreement.status === "signed";
+  const hasInAppContent = !!agreement.contentMarkdown;
+
+  // Read-to-end gate (same ceremony as the Service Agreement): when the
+  // agreement is rendered in-app, the nurse must scroll to the end of the
+  // document before the signing controls unlock. When we fall back to the
+  // raw file view we can't track reading, so the gate is open.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [scrolledToEnd, setScrolledToEnd] = useState(!hasInAppContent);
+
+  useEffect(() => {
+    if (signed || !hasInAppContent) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const check = () => {
+      if (el.scrollHeight <= el.clientHeight + 8) {
+        setScrolledToEnd(true);
+        return;
+      }
+      const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (remaining <= 24) setScrolledToEnd(true);
+    };
+    const raf = window.requestAnimationFrame(check);
+    el.addEventListener("scroll", check, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(raf);
+      el.removeEventListener("scroll", check);
+    };
+  }, [signed, hasInAppContent]);
 
   const signMutation = useMutation({
     mutationFn: async () => {
@@ -111,7 +142,7 @@ function AgreementCard({
     },
   });
 
-  const canSign = confirmRead && signatureName.trim().length > 1;
+  const canSign = scrolledToEnd && confirmRead && signatureName.trim().length > 1;
 
   return (
     <Card data-testid={`agreement-card-${agreement.id}`}>
@@ -163,7 +194,39 @@ function AgreementCard({
           </p>
         ) : (
           <>
-            {doc?.filePath ? (
+            {hasInAppContent ? (
+              <>
+                <div className="rounded-lg border overflow-hidden">
+                  <div
+                    ref={bodyRef}
+                    className="max-h-[55vh] overflow-y-auto p-6"
+                    data-testid={`agreement-body-${agreement.id}`}
+                  >
+                    <PolicyBody body={agreement.contentMarkdown} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  {!scrolledToEnd ? (
+                    <p className="text-xs text-muted-foreground/70">
+                      Scroll to the end of the agreement above to enable signing.
+                    </p>
+                  ) : (
+                    <span />
+                  )}
+                  {doc?.filePath && (
+                    <a
+                      href={doc.filePath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-muted-foreground underline inline-flex items-center gap-1"
+                      data-testid={`link-original-document-${agreement.id}`}
+                    >
+                      <Download className="h-3 w-3" /> View original document
+                    </a>
+                  )}
+                </div>
+              </>
+            ) : doc?.filePath ? (
               isPdf ? (
                 <div className="rounded-lg border overflow-hidden">
                   <iframe
@@ -197,7 +260,9 @@ function AgreementCard({
               </p>
             )}
 
-            <div className="space-y-4 pt-2 border-t">
+            <div
+              className={`space-y-4 pt-2 border-t ${scrolledToEnd ? "" : "opacity-50 pointer-events-none"}`}
+            >
               <div className="flex items-start gap-2.5">
                 <Checkbox
                   id={`confirm-${agreement.id}`}

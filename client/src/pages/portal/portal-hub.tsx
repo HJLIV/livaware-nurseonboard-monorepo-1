@@ -19,6 +19,7 @@ import {
   GraduationCap,
   Lock,
   Compass,
+  FileSignature,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -259,13 +260,16 @@ function JourneyHome({
   chaseModules,
   onJump,
   onOpenChase,
+  onOpenAgreements,
 }: {
   portal: PortalData;
   groups: PortalSidebarGroup[];
   chaseModules: { label: string; status: "red" | "amber" | "green" }[];
   onJump: (view: "assessment" | "compliance" | "induction" | "training") => void;
   onOpenChase: () => void;
+  onOpenAgreements: () => void;
 }) {
+  const outstandingAgreements = (portal as any)?.agreements?.outstanding ?? 0;
   const { nurse, gate } = portal;
   const isAssessmentLocked = gate ? !gate.unlocked : false;
   const isStageLocked = gate?.complianceApproved === false;
@@ -400,6 +404,34 @@ function JourneyHome({
                   : "Once an admin signs off your compliance pack, your handbook, policies, SOP quizzes and Skills Arcade will all become available."}
               </p>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {outstandingAgreements > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="portal-home-agreements">
+          <CardContent className="p-5 sm:p-6 flex items-start gap-4">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 shrink-0">
+              <FileSignature className="h-5 w-5" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-amber-700/80 dark:text-amber-400/80 mb-1">
+                Signature required
+              </p>
+              <h2 className="font-serif text-xl font-light tracking-tight mb-1">
+                {outstandingAgreements === 1
+                  ? "An individual agreement is awaiting your signature"
+                  : `${outstandingAgreements} individual agreements are awaiting your signature`}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Please read and sign {outstandingAgreements === 1 ? "it" : "them"} on screen — it only
+                takes a few minutes.
+              </p>
+            </div>
+            <Button onClick={onOpenAgreements} size="sm" className="shrink-0 mt-1" data-testid="button-open-agreements">
+              Read & sign
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -768,6 +800,7 @@ export default function PortalHub() {
           }
           onJump={(view) => navigate(`/portal/section/${view}`)}
           onOpenChase={() => navigate(`/portal/${token}`)}
+          onOpenAgreements={() => navigate(`/portal/agreements`)}
         />
       )}
     </PortalShell>

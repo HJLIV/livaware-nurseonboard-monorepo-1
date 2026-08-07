@@ -33,6 +33,9 @@ import { logAction } from "../services/audit";
 import { storage } from "../storage";
 import * as agreements from "../agreements/storage";
 import { generateAgreementSignaturePDF } from "../agreements/pdf";
+import { extractPolicyFromFile } from "../policy-extractor";
+import { sendIndividualAgreementIssuedEmail, isOutlookConfigured } from "../outlook";
+import { mintChasePortalLinkForNurse } from "../training-notifications";
 
 const CONTEXT_TYPES = ["project", "patient", "deployment", "other"] as const;
 type ContextType = (typeof CONTEXT_TYPES)[number];
@@ -70,6 +73,85 @@ async function rejectNonAgreementFile(
   return true;
 }
 
+// Extract the uploaded document's text as Markdown so the portal can
+// render the agreement in-app (task 195). Extraction failure is recorded,
+// never fatal — the client falls back to the raw file view.
+async function extractAgreementContent(
+  file: Express.Multer.File,
+): Promise<{ contentMarkdown: string | null; extractionError: string | null }> {
+  try {
+    const buffer = await fs.promises.readFile(file.path);
+    const { body } = await extractPolicyFromFile(buffer, file.originalname, file.mimetype);
+    return { contentMarkdown: body, extractionError: null };
+  } catch (err: any) {
+    const message = err?.message || "Text could not be extracted from the document.";
+    console.error("[agreements] content extraction failed (falling back to file view):", message);
+    return { contentMarkdown: null, extractionError: message };
+  }
+}
+
+// Resolve the public base URL for the emailed portal link from trusted
+// configuration ONLY — never from request headers (Host/X-Forwarded-Proto
+// are client-controlled, and this URL carries a 30-day bearer token).
+// Same env-var order as the training-chase scheduler.
+function resolvePortalBaseUrl(): string {
+  const portalBaseUrl = process.env.PORTAL_BASE_URL;
+  if (portalBaseUrl && portalBaseUrl.trim()) return portalBaseUrl.trim();
+  const publicAppUrl = process.env.PUBLIC_APP_URL;
+  if (publicAppUrl && publicAppUrl.trim()) return publicAppUrl.trim();
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (devDomain && devDomain.trim()) return `https://${devDomain.trim()}`;
+  return "http://localhost:5000";
+}
+
+const CONTEXT_TITLES: Record<ContextType, string> = {
+  project: "Project",
+  patient: "Patient",
+  deployment: "Deployment",
+  other: "Agreement",
+};
+
+// Fire-and-forget notification to the nurse that a new agreement needs
+// their signature. Mail failure never blocks issuing; success is audited.
+function notifyNurseOfIssuedAgreement(opts: {
+  nurse: { id: string; fullName: string; email: string | null };
+  agreementId: string;
+  title: string;
+  contextType: ContextType;
+  contextLabel: string | null;
+  sentBy: string;
+  portalBaseUrl: string;
+}): void {
+  void (async () => {
+    try {
+      if (!opts.nurse.email) return;
+      if (!isOutlookConfigured()) return;
+      const { portalUrl } = await mintChasePortalLinkForNurse({
+        nurseId: opts.nurse.id,
+        sentBy: opts.sentBy,
+        portalBaseUrl: opts.portalBaseUrl,
+      });
+      const contextLine = opts.contextLabel
+        ? `${CONTEXT_TITLES[opts.contextType]}: ${opts.contextLabel}`
+        : CONTEXT_TITLES[opts.contextType];
+      await sendIndividualAgreementIssuedEmail(
+        opts.nurse.email,
+        opts.nurse.fullName,
+        portalUrl,
+        opts.title,
+        contextLine,
+      );
+      await logAction(opts.nurse.id, "service_agreement", "individual_agreement_email_sent", "system", {
+        agreementId: opts.agreementId,
+        title: opts.title,
+        recipientEmail: opts.nurse.email,
+      });
+    } catch (err: any) {
+      console.error("[agreements] issue email failed (agreement still created):", err?.message || err);
+    }
+  })();
+}
+
 // Shape returned to both admin and portal. The portal additionally receives
 // the source-document URL so the nurse can read the agreement inline.
 async function serialize(a: Awaited<ReturnType<typeof agreements.getById>> & object) {
@@ -87,6 +169,8 @@ async function serialize(a: Awaited<ReturnType<typeof agreements.getById>> & obj
     signedPdfDocumentId: a.signedPdfDocumentId,
     createdBy: a.createdBy,
     createdAt: a.createdAt.toISOString(),
+    contentMarkdown: a.contentMarkdown ?? null,
+    extractionError: a.extractionError ?? null,
     voidedAt: a.voidedAt?.toISOString() ?? null,
     voidedBy: a.voidedBy,
     voidReason: a.voidReason,
@@ -161,6 +245,7 @@ export function registerIndividualAgreementRoutes(app: Express) {
             : null;
 
         const sourceDocumentId = await createSourceDocument(nurseId, req.file);
+        const content = await extractAgreementContent(req.file);
         const created = await agreements.create({
           nurseId,
           title,
@@ -168,6 +253,8 @@ export function registerIndividualAgreementRoutes(app: Express) {
           contextLabel,
           sourceDocumentId,
           createdBy: agentFor(req),
+          contentMarkdown: content.contentMarkdown,
+          extractionError: content.extractionError,
         });
         await logAction(nurseId, "service_agreement", "individual_agreement_created", agentFor(req), {
           agreementId: created.id,
@@ -175,6 +262,15 @@ export function registerIndividualAgreementRoutes(app: Express) {
           contextType,
           contextLabel,
           sourceDocumentId,
+        });
+        notifyNurseOfIssuedAgreement({
+          nurse: { id: nurse.id, fullName: nurse.fullName, email: nurse.email ?? null },
+          agreementId: created.id,
+          title,
+          contextType,
+          contextLabel,
+          sentBy: agentFor(req),
+          portalBaseUrl: resolvePortalBaseUrl(),
         });
         res.status(201).json({ agreement: await serialize(created) });
       } catch (err: any) {
@@ -238,7 +334,8 @@ export function registerIndividualAgreementRoutes(app: Express) {
           return res.status(400).json({ message: "Agreement documents must be PDF or Word files." });
         }
         const sourceDocumentId = await createSourceDocument(existing.nurseId, req.file);
-        const updated = await agreements.replaceSourceDocument(existing.id, sourceDocumentId);
+        const content = await extractAgreementContent(req.file);
+        const updated = await agreements.replaceSourceDocument(existing.id, sourceDocumentId, content);
         if (!updated) {
           // Lost a race — signed/voided concurrently; the row is untouched.
           return res.status(409).json({

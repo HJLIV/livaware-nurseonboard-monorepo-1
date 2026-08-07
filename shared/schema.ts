@@ -1665,6 +1665,11 @@ export const nurseAgreements = pgTable("nurse_agreements", {
   status: nurseAgreementStatusEnum("status").notNull().default("pending"),
   // The uploaded agreement document the nurse reads (documents.id).
   sourceDocumentId: varchar("source_document_id").notNull(),
+  // Extracted Markdown of the uploaded document so the portal can render
+  // the agreement in-app (task 195). Null + extractionError set means the
+  // client should fall back to the raw file view.
+  contentMarkdown: text("content_markdown"),
+  extractionError: text("extraction_error"),
   // Signature block — mirrors nurse_declarations.
   signatureName: text("signature_name"),
   ipAddress: text("ip_address"),

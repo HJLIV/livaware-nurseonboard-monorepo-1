@@ -3437,6 +3437,8 @@ export default function PortalPage() {
       token,
       serviceAgreementSigned: (portalHub as any)?.serviceAgreement?.signed,
       selectServiceAgreement: () => navigate(`/portal/service-agreement`),
+      agreementsSummary: (portalHub as any)?.agreements ?? null,
+      selectAgreements: () => navigate(`/portal/agreements`),
       journey,
       stepStatuses,
       gate: portalHub?.gate ?? null,

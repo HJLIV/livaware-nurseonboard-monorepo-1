@@ -42,6 +42,8 @@ export async function create(input: {
   contextLabel: string | null;
   sourceDocumentId: string;
   createdBy: string;
+  contentMarkdown?: string | null;
+  extractionError?: string | null;
 }): Promise<NurseAgreement> {
   const [row] = await db.insert(nurseAgreements).values({
     nurseId: input.nurseId,
@@ -50,6 +52,8 @@ export async function create(input: {
     contextLabel: input.contextLabel,
     sourceDocumentId: input.sourceDocumentId,
     createdBy: input.createdBy,
+    contentMarkdown: input.contentMarkdown ?? null,
+    extractionError: input.extractionError ?? null,
     status: "pending",
   }).returning();
   return row;
@@ -62,9 +66,16 @@ export async function create(input: {
 export async function replaceSourceDocument(
   id: string,
   sourceDocumentId: string,
+  content?: { contentMarkdown: string | null; extractionError: string | null },
 ): Promise<NurseAgreement | undefined> {
   const [row] = await db.update(nurseAgreements)
-    .set({ sourceDocumentId, updatedAt: new Date() })
+    .set({
+      sourceDocumentId,
+      ...(content
+        ? { contentMarkdown: content.contentMarkdown, extractionError: content.extractionError }
+        : {}),
+      updatedAt: new Date(),
+    })
     .where(and(eq(nurseAgreements.id, id), eq(nurseAgreements.status, "pending")))
     .returning();
   return row;

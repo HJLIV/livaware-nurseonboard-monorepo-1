@@ -183,6 +183,8 @@ export default function PortalServiceAgreementPage() {
       gate: portal.gate ?? null,
       serviceAgreementSigned: portal.serviceAgreement?.signed ?? signed,
       selectServiceAgreement: () => navigate(`/portal/service-agreement`),
+      agreementsSummary: (portal as any)?.agreements ?? null,
+      selectAgreements: () => navigate(`/portal/agreements`),
       selectOverview: () => navigate(`/portal`),
       selectOnboardingStep: (k) => navigate(`/portal/page?step=${k}`),
       selectPolicies: () => navigate(`/portal/policies`),

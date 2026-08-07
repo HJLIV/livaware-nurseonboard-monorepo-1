@@ -6,6 +6,19 @@ import fs from "fs";
 import os from "os";
 import { getTestApp, createTestNurse, createPortalLink } from "./helpers";
 
+// Task 195 — issue email: mock the mailer so we can (a) force the
+// "Outlook configured" branch and (b) assert the fire-and-forget send
+// without touching Graph. All other outlook exports stay real.
+vi.mock("../server/outlook", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/outlook")>();
+  return {
+    ...actual,
+    isOutlookConfigured: () => true,
+    sendIndividualAgreementIssuedEmail: vi.fn().mockResolvedValue(undefined),
+  };
+});
+import { sendIndividualAgreementIssuedEmail } from "../server/outlook";
+
 // Task 191 — Individual agreements for projects / patients / deployments.
 // Admin uploads an agreement document for a specific nurse; the nurse reads
 // and signs it in the portal (typed signature + explicit read confirmation);
@@ -250,6 +263,86 @@ describe("Task 191 — Individual agreements", () => {
     expect(retryRes.status).toBe(200);
     expect(retryRes.body.agreement.status).toBe("signed");
     expect(retryRes.body.agreement.signedPdfDocumentId).toBeTruthy();
+  });
+
+  // ─── Task 195 — in-app content extraction + issue email ───────────
+
+  async function makeRealPdf(text: string): Promise<string> {
+    const { default: PDFDocument } = await import("pdfkit");
+    const p = path.join(os.tmpdir(), `agreement-real-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+    await new Promise<void>((resolve, reject) => {
+      const doc = new PDFDocument();
+      const stream = fs.createWriteStream(p);
+      doc.pipe(stream);
+      doc.fontSize(14).text(text);
+      doc.end();
+      stream.on("finish", () => resolve());
+      stream.on("error", reject);
+    });
+    return p;
+  }
+
+  it("extracts document text on create so the portal can render the agreement in-app", async () => {
+    const nurse = await createTestNurse(agent, {});
+    const link = await createPortalLink(agent, nurse.id);
+    const pdf = await makeRealPdf("The nurse agrees to provide care with dignity and respect at all times.");
+    const res = await agent
+      .post(`/api/nurses/${nurse.id}/agreements`)
+      .field("title", "Readable agreement")
+      .attach("file", pdf);
+    expect(res.status).toBe(201);
+    expect(res.body.agreement.contentMarkdown).toContain("dignity and respect");
+    expect(res.body.agreement.extractionError).toBeNull();
+
+    // Portal list carries the same content for in-app rendering.
+    const portalRes = await supertest(app).get(`/api/portal/${link.token}/agreements`);
+    const row = portalRes.body.agreements.find((a: any) => a.id === res.body.agreement.id);
+    expect(row.contentMarkdown).toContain("dignity and respect");
+  });
+
+  it("records an extraction failure and leaves content null so the client falls back to the file view", async () => {
+    const nurse = await createTestNurse(agent, {});
+    // makeTempPdf writes a not-really-parseable PDF — extraction must fail
+    // gracefully without blocking creation.
+    const created = await createAgreement(agent, nurse.id, { title: "Unparseable" });
+    expect(created.contentMarkdown).toBeNull();
+    expect(created.extractionError).toBeTruthy();
+  });
+
+  it("replace-document re-extracts content for the new file", async () => {
+    const nurse = await createTestNurse(agent, {});
+    const created = await createAgreement(agent, nurse.id, { title: "Swap me" });
+    expect(created.contentMarkdown).toBeNull();
+
+    const pdf = await makeRealPdf("Replacement clause: the deployment starts on Monday.");
+    const replaceRes = await agent
+      .post(`/api/agreements/${created.id}/replace-document`)
+      .attach("file", pdf);
+    expect(replaceRes.status).toBe(200);
+    expect(replaceRes.body.agreement.contentMarkdown).toContain("Replacement clause");
+    expect(replaceRes.body.agreement.extractionError).toBeNull();
+  });
+
+  it("emails the nurse (fire-and-forget) when an agreement is issued", async () => {
+    const mockSend = vi.mocked(sendIndividualAgreementIssuedEmail);
+    mockSend.mockClear();
+    const nurse = await createTestNurse(agent, {});
+    const created = await createAgreement(agent, nurse.id, {
+      title: "Emailed agreement",
+      contextType: "patient",
+      contextLabel: "Patient X",
+    });
+    expect(created.status).toBe("pending");
+
+    await vi.waitFor(() => {
+      expect(mockSend).toHaveBeenCalled();
+    }, { timeout: 5000 });
+    const [email, name, portalUrl, title, contextLine] = mockSend.mock.calls[0];
+    expect(email).toBe(nurse.email);
+    expect(name).toBe(nurse.fullName);
+    expect(portalUrl).toContain("/portal/");
+    expect(title).toBe("Emailed agreement");
+    expect(contextLine).toContain("Patient X");
   });
 
   it("portal summary includes an agreements count block", async () => {

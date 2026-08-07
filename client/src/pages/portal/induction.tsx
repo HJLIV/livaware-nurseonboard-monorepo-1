@@ -394,6 +394,8 @@ export default function PortalInductionPage() {
       gate: portal.gate ?? null,
       serviceAgreementSigned: (portal as any)?.serviceAgreement?.signed,
       selectServiceAgreement: () => navigate(`/portal/service-agreement`),
+      agreementsSummary: (portal as any)?.agreements ?? null,
+      selectAgreements: () => navigate(`/portal/agreements`),
     });
   }, [portal, token, stepStatuses, navigate, policies, inductionSummary, sopComprehension]);
 

@@ -167,6 +167,26 @@ export async function sendOnboardingUnlockedEmail(
     });
   }
 
+  export async function sendIndividualAgreementIssuedEmail(
+    recipientEmail: string,
+    recipientName: string,
+    portalUrl: string,
+    agreementTitle: string,
+    contextLine: string,
+  ) {
+    await sendViaTemplate({
+      key: "individual_agreement_issued",
+      tokens: {
+        NAME: recipientName,
+        FIRST_NAME: (recipientName || "").trim().split(/\s+/)[0] || "there",
+        PORTAL_URL: portalUrl,
+        AGREEMENT_TITLE: agreementTitle,
+        CONTEXT: contextLine,
+      },
+      to: { email: recipientEmail, name: recipientName },
+    });
+  }
+
   export async function sendApplicantWelcomeEmail(
     recipientEmail: string,
     recipientName: string,
