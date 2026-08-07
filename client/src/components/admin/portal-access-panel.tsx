@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { KeyRound, LogOut, Send } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChevronDown, KeyRound, LogOut, Send } from "lucide-react";
 
 interface PortalSessionRow {
   id: string;
@@ -58,17 +59,52 @@ function fmt(d: string | null | undefined): string {
   try { return new Date(d).toLocaleString(); } catch { return d; }
 }
 
+// This panel is diagnostics, not day-to-day work, so it stays shut until an
+// admin asks for it. Their choice is remembered the same way the sidebar rail
+// remembers its collapsed state.
+const PORTAL_ACCESS_OPEN_KEY = "portal-access-panel-open";
+
 export function PortalAccessPanel({ candidateId }: { candidateId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [lastDevCode, setLastDevCode] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  // Which nurse the panel has actually been opened for. Latching stops the
+  // audit log being re-fetched on every toggle, and scoping it to the nurse
+  // stops a stale latch from fetching for the *next* nurse while the panel
+  // sits collapsed (this component stays mounted across nurse navigation).
+  const [openedFor, setOpenedFor] = useState<string | null>(null);
+  const contentId = useId();
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(PORTAL_ACCESS_OPEN_KEY) === "1") setOpen(true);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (open) setOpenedFor(candidateId);
+  }, [open, candidateId]);
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(PORTAL_ACCESS_OPEN_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
 
   const { data, isLoading } = useQuery<PortalSessionsResponse>({
     queryKey: [`/api/nurses/${candidateId}/portal-sessions`],
   });
 
-  const { data: audit } = useQuery<AuditEntry[]>({
+  // The collapsed summary only needs the sessions above; skip the heavier
+  // audit log until someone actually opens the panel.
+  const { data: audit, isLoading: auditLoading } = useQuery<AuditEntry[]>({
     queryKey: [`/api/nurses/${candidateId}/audit-log`],
+    enabled: openedFor === candidateId,
   });
 
   const recentEvents = (audit || [])
@@ -103,15 +139,48 @@ export function PortalAccessPanel({ candidateId }: { candidateId: string }) {
     onError: (err: any) => toast({ title: "Could not revoke", description: err?.message, variant: "destructive" }),
   });
 
+  const sessions = data?.sessions || [];
+  const activeSessions = sessions.filter(
+    (s) => !s.revokedAt && new Date(s.expiresAt).getTime() > Date.now(),
+  ).length;
+  const summary = isLoading
+    ? "Loading…"
+    : data?.lastSignIn
+      ? `Last sign-in ${fmt(data.lastSignIn.issuedAt)}${activeSessions > 0 ? ` · ${activeSessions} active` : ""}`
+      : "Never signed in";
+
   return (
     <Card data-testid="portal-access-panel">
-      <CardHeader>
-        <CardTitle className="font-serif text-lg font-light tracking-tight flex items-center gap-2">
-          <KeyRound className="w-4 h-4 text-muted-foreground" />
-          Portal access
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        aria-controls={contentId}
+        data-testid="button-toggle-portal-access"
+        className={cn(
+          "flex w-full items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-muted/30",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          open ? "rounded-t-xl" : "rounded-xl",
+        )}
+      >
+        <KeyRound className="w-4 h-4 shrink-0 text-muted-foreground" />
+        <span className="font-serif text-lg font-light tracking-tight">Portal access</span>
+        {!open && (
+          <span
+            className="ml-auto truncate text-xs text-muted-foreground"
+            data-testid="text-portal-access-summary"
+          >
+            {summary}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 shrink-0 text-muted-foreground transition-transform",
+            open ? "ml-auto rotate-180" : "",
+          )}
+        />
+      </button>
+      <CardContent id={contentId} hidden={!open} className="space-y-4 pt-0">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
@@ -119,7 +188,8 @@ export function PortalAccessPanel({ candidateId }: { candidateId: string }) {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/60">Last sign-in</p>
-                <p className="text-sm">
+                {/* div, not p: the badge below is block-level. */}
+                <div className="text-sm">
                   {data?.lastSignIn ? (
                     <>
                       {fmt(data.lastSignIn.issuedAt)} · <Badge variant="outline" className="ml-1">{data.lastSignIn.issuedVia}</Badge>
@@ -128,7 +198,7 @@ export function PortalAccessPanel({ candidateId }: { candidateId: string }) {
                   ) : (
                     <span className="text-muted-foreground">Never signed in</span>
                   )}
-                </p>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" disabled={sendCode.isPending} onClick={() => sendCode.mutate()} data-testid="button-send-portal-code">
@@ -192,7 +262,9 @@ export function PortalAccessPanel({ candidateId }: { candidateId: string }) {
 
             <div>
               <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-2">Recent portal events</p>
-              {recentEvents.length === 0 ? (
+              {auditLoading ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : recentEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No portal activity yet.</p>
               ) : (
                 <ul className="space-y-1.5 text-sm">
