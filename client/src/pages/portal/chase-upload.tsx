@@ -279,11 +279,12 @@ export default function ChaseUpload({
           <div className="flex items-center gap-3">
             <img
               src="/images/livaware-logo-white.png"
-              alt="Livaware"
+              alt="Basecamp by Livaware"
               className="h-7 w-auto invert dark:invert-0"
             />
             <div className="h-6 w-px bg-border" />
             <div>
+              <p className="text-[10px] font-semibold tracking-[0.16em] uppercase text-primary">Basecamp</p>
               <p className="text-sm font-medium">Outstanding Training</p>
               <p className="text-xs text-muted-foreground">Upload your certificates</p>
             </div>

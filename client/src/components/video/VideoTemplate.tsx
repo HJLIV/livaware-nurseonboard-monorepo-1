@@ -22,7 +22,7 @@ type Caption = { at: number; text: string };
 
 const SCENE_CAPTIONS: Caption[][] = [
   [
-    { at: 0, text: 'Welcome to Livaware NurseOnboard.' },
+    { at: 0, text: 'Welcome to Basecamp.' },
     { at: 4000, text: 'Sign in with your magic link or Microsoft 365 single sign-on.' },
     { at: 8500, text: 'Your portal opens to your personal onboarding hub.' },
   ],
@@ -56,7 +56,7 @@ const SCENE_CAPTIONS: Caption[][] = [
     { at: 12000, text: 'Re-download any approved invoice from your portal at any time.' },
   ],
   [
-    { at: 0, text: 'That is your Livaware journey, end to end.' },
+    { at: 0, text: 'That is Basecamp, end to end.' },
     { at: 4500, text: 'Compliance, competency, arcade, availability and invoicing — all in one portal.' },
     { at: 9000, text: 'Welcome aboard.' },
   ],

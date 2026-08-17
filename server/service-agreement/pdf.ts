@@ -37,7 +37,7 @@ export async function generateServiceAgreementPDF(
       bufferPages: true,
       info: {
         Title: `${config.title} — ${nurse.fullName}`,
-        Author: "Livaware Ltd – NurseOnboard",
+        Author: "Livaware Ltd – Basecamp",
         Subject: "Signed Service Agreement (Registered Nurse)",
       },
     });
@@ -135,7 +135,7 @@ export async function generateServiceAgreementPDF(
       const footerY = doc.page.height - doc.page.margins.bottom + 10;
       doc.fillColor(MED_GREY).fontSize(8).font("Helvetica")
         .text(
-          `Livaware NurseOnboard · ${config.title} · Page ${i + 1} of ${range.count}`,
+          `Basecamp by Livaware Ltd · ${config.title} · Page ${i + 1} of ${range.count}`,
           leftMargin, footerY, { width: pageWidth, align: "center" },
         );
     }

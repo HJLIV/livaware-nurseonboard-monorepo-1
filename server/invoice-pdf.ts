@@ -36,7 +36,7 @@ export async function generateInvoicePdf(input: InvoicePdfInput): Promise<Buffer
       bufferPages: true,
       info: {
         Title: `Invoice ${invoiceNumber} — ${inv.fullName}`,
-        Author: "Livaware Ltd – NurseOnboard",
+        Author: "Livaware Ltd – Basecamp",
         Subject: `Nurse Timesheet Invoice ${invoiceNumber}`,
       },
     });

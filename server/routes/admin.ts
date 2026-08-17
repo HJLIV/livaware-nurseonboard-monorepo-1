@@ -340,7 +340,7 @@ export function registerNurseRoutes(app: Express) {
       let emailStatus: "sent" | "failed" | "skipped" = "skipped";
       let emailError: string | undefined;
       // `module` not used for templating — bulk invites now use the
-      // warm Livaware welcome template for parity with single-send.
+      // warm Basecamp welcome template for parity with single-send.
       void module;
       if (sendEmail && nurse.email && outlookReady) {
         try {

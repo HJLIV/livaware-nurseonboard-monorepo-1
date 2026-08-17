@@ -39,7 +39,7 @@ export default function PortalSignIn() {
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60">Livaware nurse portal</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60">Basecamp</p>
           <CardTitle className="font-serif text-2xl font-light tracking-tight">
             Sign in to your portal
           </CardTitle>

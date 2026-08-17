@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { LogIn, ArrowRight, Activity, ShieldCheck, Gamepad2, ClipboardCheck, GraduationCap, CalendarCheck, FileCheck2 } from "lucide-react";
 import { NurseSignIn } from "@/components/auth/nurse-sign-in";
+import { BasecampTrail } from "@/components/auth/basecamp-trail";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -31,24 +32,22 @@ const adminHero = {
   eyebrow: "Clinical Workforce Platform",
   title: (
     <>
-      Every nurse's<br />
-      <em className="text-shimmer not-italic">journey,</em><br />
-      perfected.
+      Every journey<br />
+      needs a <em className="text-shimmer not-italic">Basecamp</em>.
     </>
   ),
-  blurb: "From first application to full competency — a single platform that guides, tracks, and elevates your clinical workforce.",
+  blurb: "From first application to full competency — one home where compliance, training, availability, timesheets and invoices all live.",
 };
 
 const nurseHero = {
   eyebrow: "Your nurse portal",
   title: (
     <>
-      Your career,<br />
-      <em className="text-shimmer not-italic">all in</em><br />
-      one place.
+      Your journey,<br />
+      home at <em className="text-shimmer not-italic">Basecamp</em>.
     </>
   ),
-  blurb: "Stay on top of your compliance, finish your training, sharpen your clinical skills, and share your availability — all from one secure portal.",
+  blurb: "Stay on top of your compliance, finish your training, sharpen your clinical skills, and share your availability — it all lives here at Basecamp.",
 };
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -138,21 +137,23 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       {/* ── Left Panel: Brand + Features ── */}
       <div className="login-panel-bg noise-overlay relative hidden lg:flex lg:w-[52%] flex-col justify-between p-10 overflow-hidden">
 
-        {/* Decorative circles */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="animate-float absolute -top-20 -right-20 w-96 h-96 rounded-full border border-[hsl(39_45%_61%/0.12)]" />
-          <div className="animate-float animate-delay-200 absolute top-1/3 -left-16 w-64 h-64 rounded-full border border-[hsl(39_45%_61%/0.08)]" />
-          <div className="animate-glow-pulse absolute bottom-1/4 right-1/4 w-48 h-48 rounded-full bg-[hsl(39_45%_50%/0.06)]" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-[hsl(39_45%_61%/0.05)]" />
-        </div>
+        {/* Animated brand scene — the onboarding journey as a trail up a mountain */}
+        <BasecampTrail variant="panel" className="pointer-events-none absolute inset-0" />
 
-        {/* Logo */}
-        <div className="relative animate-fade-in-up">
-          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-8 w-auto" />
+        {/* Logo — company mark + product wordmark lockup */}
+        <div className="relative animate-fade-in-up flex items-center gap-3">
+          <img src="/images/livaware-logo-white.png" alt="Basecamp by Livaware" className="h-8 w-auto" />
+          <div className="h-5 w-px bg-white/20" aria-hidden="true" />
+          <p className="text-xs font-medium tracking-[0.14em] uppercase text-[hsl(39_45%_61%)]">Basecamp</p>
         </div>
 
         {/* Hero text */}
-        <div key={tab} className="relative min-h-0 flex-1 flex flex-col justify-center space-y-4 animate-fade-in-up animate-delay-100">
+        <div key={tab} className="relative z-10 min-h-0 flex-1 flex flex-col justify-center space-y-4 animate-fade-in-up animate-delay-100">
+          {/* Scrim: keeps the scene art from visually running through the copy */}
+          <div
+            aria-hidden="true"
+            className="absolute -inset-x-10 -inset-y-8 -z-10 pointer-events-none bg-[radial-gradient(ellipse_56%_54%_at_28%_50%,hsl(242_80%_9%/0.9)_0%,hsl(242_80%_10%/0.55)_55%,transparent_80%)]"
+          />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[hsl(39_45%_61%)] mb-3">
               {(tab === "nurse" ? nurseHero : adminHero).eyebrow}
@@ -217,14 +218,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         {/* Mobile logo */}
         <div className="mb-6 flex items-center gap-3 lg:hidden animate-fade-in-up">
-          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto invert dark:invert-0" />
+          <img src="/images/livaware-logo-white.png" alt="Basecamp by Livaware" className="h-7 w-auto invert dark:invert-0" />
+          <div className="h-5 w-px bg-border" aria-hidden="true" />
+          <p className="text-xs font-medium tracking-[0.14em] uppercase text-primary">Basecamp</p>
         </div>
 
         <div className="w-full max-w-sm animate-fade-in-up animate-delay-100">
 
+          {/* Mobile journey trail — the left panel is hidden on small screens */}
+          <div className="lg:hidden mb-7 -mx-2 rounded-xl border border-white/10 bg-[hsl(242_95%_8%)] px-2 py-1">
+            <BasecampTrail variant="mobile" />
+          </div>
+
           {/* Heading */}
           <div className="mb-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-1.5">Livaware</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-1.5">Basecamp</p>
             <h2 className="font-serif text-2xl font-light text-foreground tracking-tight mb-1">
               {tab === "nurse" ? "Welcome, nurse" : "Welcome back"}
             </h2>

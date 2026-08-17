@@ -553,7 +553,11 @@ export function SidebarNav({
               L
             </div>
           ) : (
-            <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto brightness-90" />
+            <>
+              <img src="/images/livaware-logo-white.png" alt="Basecamp by Livaware" className="h-7 w-auto brightness-90" />
+              <div className="h-5 w-px bg-sidebar-border" aria-hidden="true" />
+              <p className="whitespace-nowrap text-[11px] font-medium tracking-[0.14em] uppercase text-primary">Basecamp</p>
+            </>
           )}
         </div>
 

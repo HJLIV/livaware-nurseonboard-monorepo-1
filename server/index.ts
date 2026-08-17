@@ -168,6 +168,21 @@ app.use((req, res, next) => {
     })();
   }
 
+  // One-time backfill: rewrite any stored email_templates fields that still
+  // contain the old product name "NurseOnboard" / "Nurse Onboarding" from
+  // before the rename to Basecamp. Safe to run on every boot — it only
+  // writes rows that still contain the old strings.
+  if (process.env.NODE_ENV !== "test") {
+    void (async () => {
+      try {
+        const { backfillEmailTemplateNames } = await import("./email-template-name-backfill");
+        await backfillEmailTemplateNames();
+      } catch (err: any) {
+        console.error("[email-templates] name backfill failed:", err?.message || err);
+      }
+    })();
+  }
+
   // Background scheduler for the two automated chase jobs:
   //   - Weekly bulk chase email (toggleable, default off)
   //   - Mailbox reply scan       (toggleable, default on, default 30 min)

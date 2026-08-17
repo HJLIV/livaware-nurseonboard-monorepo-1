@@ -39,7 +39,7 @@ export function Scene1() {
           animate={phase >= 2 ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
         >
-          Your Livaware <br />Journey Begins
+          Your Basecamp <br />Journey Begins
         </motion.h1>
 
         <motion.p 

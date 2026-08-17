@@ -109,7 +109,7 @@ export function registerAdminRoutes(app: Express) {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = req.headers["host"] || "localhost:5000";
         const portalUrl = `${protocol}://${host}/portal/${link.token}`;
-        // First-touch send — always use the warmer Livaware welcome
+        // First-touch send — always use the warmer Basecamp welcome
         // template so the candidate's first contact is on-brand and
         // contains the onboard.livaware.co.uk return-URL instructions.
         await sendApplicantWelcomeEmail(candidate.email, candidate.fullName, portalUrl, expiresAt);
@@ -1468,7 +1468,7 @@ export function registerAdminRoutes(app: Express) {
     const stage = (candidate.currentStage === "skills_arcade" ? "skills_arcade" : candidate.currentStage === "onboard" ? "onboard" : "preboard") as "preboard" | "onboard" | "skills_arcade";
 
     // Admin "Email the candidate their portal link" action (Actions menu).
-    // Cascaded onto the warm Livaware welcome template so every admin-
+    // Cascaded onto the warm Basecamp welcome template so every admin-
     // initiated portal email — first touch or resend — uses the on-brand
     // template that points the candidate at onboard.livaware.co.uk for
     // future sign-ins. `stage` is no longer needed for templating.
@@ -1600,7 +1600,7 @@ export function registerAdminRoutes(app: Express) {
       const pdfBuffer = await generateCandidatePDF(candidateId);
       const safeName = candidate.fullName.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_");
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="NurseOnboard_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="Basecamp_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf"`);
       res.setHeader("Content-Length", pdfBuffer.length);
       res.send(pdfBuffer);
     } catch (error: any) {

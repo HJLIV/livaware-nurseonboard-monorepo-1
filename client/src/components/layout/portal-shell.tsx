@@ -373,12 +373,12 @@ export function PortalShell({
           >
             <img
               src="/images/livaware-logo-white.png"
-              alt="Livaware"
+              alt="Basecamp by Livaware"
               className="h-6 w-auto"
             />
             <div className="h-5 w-px bg-border" />
             <p className="text-xs font-medium tracking-[0.14em] uppercase text-primary">
-              NurseOnboard
+              Basecamp
             </p>
           </Link>
           <div className="ml-auto flex items-center gap-3 min-w-0">
@@ -569,7 +569,7 @@ export function PortalShell({
       <footer className="border-t border-border bg-card py-4 mt-auto hidden lg:block">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <p className="text-xs text-muted-foreground text-center">
-            Livaware Ltd — Secure Nurse Onboarding Portal
+            Basecamp by Livaware Ltd — Secure Nurse Onboarding Portal
           </p>
         </div>
       </footer>

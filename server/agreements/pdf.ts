@@ -74,7 +74,7 @@ export async function generateSignedAgreementPDF(
       },
       info: {
         Title: `${agreement.title} — Signed — ${nurse.fullName}`,
-        Author: "Livaware Ltd – NurseOnboard",
+        Author: "Livaware Ltd – Basecamp",
         Subject: "Signed Individual Agreement",
         Keywords: `individual agreement; ${agreement.id}${fingerprint ? `; sha256:${fingerprint}` : ""}`,
       },
@@ -198,7 +198,7 @@ export async function generateSignedAgreementPDF(
       const footerY = doc.page.height - doc.page.margins.bottom + 10;
       doc.fillColor(MED_GREY).fontSize(7.5).font("Helvetica")
         .text(
-          `Livaware NurseOnboard · Signed Individual Agreement · Ref ${agreement.id} · Page ${i + 1} of ${range.count}`,
+          `Basecamp by Livaware Ltd · Signed Individual Agreement · Ref ${agreement.id} · Page ${i + 1} of ${range.count}`,
           leftMargin, footerY, { width: pageWidth, align: "center" },
         );
     }

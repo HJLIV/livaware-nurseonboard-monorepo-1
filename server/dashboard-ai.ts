@@ -23,7 +23,7 @@ export async function generateDashboardSummary(): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: `You are a concise admin dashboard assistant for a UK healthcare staffing company (NurseOnboard). Given the current pipeline statistics and candidate data, write a brief structured markdown summary covering:
+    system: `You are a concise admin dashboard assistant for a UK healthcare staffing company (Basecamp by Livaware Ltd). Given the current pipeline statistics and candidate data, write a brief structured markdown summary covering:
 - **Pipeline Overview**: How many candidates total and their distribution across stages
 - **Action Required**: Escalations, blocked candidates, or bottlenecks that need attention
 - **References**: Any pending references that need chasing

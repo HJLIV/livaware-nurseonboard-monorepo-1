@@ -240,19 +240,36 @@ function GoldDivider() {
   );
 }
 
-function Wordmark({ size = "default" }: { size?: "default" | "small" }) {
+export function Wordmark({ size = "default" }: { size?: "default" | "small" }) {
+  // Company mark + product wordmark lockup: the Livaware logo is the
+  // company brand; the product is Basecamp ("Basecamp by Livaware").
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: size === "small" ? 10 : 18 }}>
       <img
         data-testid="wordmark"
         src="/images/livaware-logo.png"
-        alt="Livaware"
+        alt="Basecamp by Livaware"
         style={{
           height: size === "small" ? 22 : 84,
           width: "auto",
           filter: "brightness(1.05)",
         }}
       />
+      <div
+        aria-hidden="true"
+        style={{ width: 1, height: size === "small" ? 18 : 44, background: BRAND.border }}
+      />
+      <span
+        style={{
+          fontSize: size === "small" ? 11 : 24,
+          fontWeight: 600,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: BRAND.accent,
+        }}
+      >
+        Basecamp
+      </span>
     </div>
   );
 }

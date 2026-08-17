@@ -18,7 +18,7 @@ Response (${r.response.length} chars, ${r.timeSpent}s taken):
 ${r.response}`;
   }).join("\n\n---\n\n");
 
-  const systemPrompt = `You are a senior clinical assessor for Livaware, a nurse-led complex and palliative care provider based in London. You are reviewing pre-onboarding assessment responses from a nurse candidate.
+  const systemPrompt = `You are a senior clinical assessor for Livaware Ltd, a nurse-led complex and palliative care provider based in London. You are reviewing pre-onboarding assessment responses that a nurse candidate submitted through Basecamp, Livaware's nurse onboarding platform.
 
 Your analysis should be:
 - Thoughtful, specific, and clinically grounded

@@ -163,7 +163,7 @@ export async function runEmailStep(assessmentId: number): Promise<Assessment | u
         const pdfBuffer = await generatePdfReport(assessment, { suspectBurstCharThreshold });
         const safeName = assessment.nurseName.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "_");
         attachments = [{
-          name: `Livaware_Assessment_${safeName}.pdf`,
+          name: `Basecamp_Assessment_${safeName}.pdf`,
           contentType: "application/pdf",
           contentBytes: pdfBuffer.toString("base64"),
         }];

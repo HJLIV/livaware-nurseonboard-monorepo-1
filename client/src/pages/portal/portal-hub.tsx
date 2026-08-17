@@ -111,7 +111,7 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
             </video>
           </div>
           <p className="text-[11px] text-muted-foreground/70 mt-2 text-center">
-            A quick walkthrough of every part of your portal.{" "}
+            A quick walkthrough of every part of your Basecamp portal.{" "}
             <a href="/videos/nurse-explainer.mp4" download className="underline hover:text-primary">
               Download MP4
             </a>
@@ -123,13 +123,13 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
             <Sparkles className="w-8 h-8 text-primary" />
           </div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/60 mb-3">
-            Welcome
+            Welcome to Basecamp
           </p>
           <h2 className="font-serif text-3xl font-light tracking-tight mb-4">
-            Ensuring compliance by Livaware
+            Your journey, home at Basecamp
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            As a leading provider in personal healthcare ecosystems, Livaware is committed to maintaining the highest standards of clinical excellence and compliance in the healthcare sector. We partner with Livaware Ltd to onboard and ensure initial compliance of staff to ensure only those with the most potential are provided to work in people's homes.
+            Basecamp is Livaware Ltd's home for nurse onboarding — the one place where your compliance, training, documents, and availability all live. As a nurse-led provider committed to the highest standards of clinical excellence, Livaware uses Basecamp to onboard every member of staff and ensure they are fully compliant before working in people's homes.
           </p>
         </div>
 
@@ -173,7 +173,7 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
               What to expect after onboarding
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-2">
-              Upon completion of the onboarding process, you will be fully equipped to become a Livaware. As a verified member, you'll have the opportunity to work directly with a variety of clients, ranging from individual end-users to larger institutions needing professional healthcare services.
+              Upon completion of the onboarding process, you will be fully verified and ready to work as part of the Livaware team. As a verified member, you'll have the opportunity to work directly with a variety of clients, ranging from individual end-users to larger institutions needing professional healthcare services.
             </p>
             <p className="text-sm text-muted-foreground leading-relaxed">
               At Livaware, we also recognise and reward excellence. Top performers will have the opportunity to engage in special assignments and projects in collaboration with Livaware, further enhancing your career trajectory and exposure in the healthcare industry.
@@ -342,7 +342,7 @@ function JourneyHome({
         </h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
           {isFresh
-            ? "Welcome to your Livaware nurse portal. Here's what your onboarding looks like — we'll walk you through it step by step."
+            ? "Welcome to your Basecamp portal. Here's what your onboarding looks like — we'll walk you through it step by step."
             : "Here's where you are in your onboarding — pick up where you left off."}
         </p>
       </div>

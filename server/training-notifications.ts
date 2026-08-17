@@ -204,8 +204,8 @@ export function buildChaseEmailHtml(
   return `
     <div style="font-family:'Be Vietnam Pro','Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#020121;">
       <div style="background:#0a0a2e;padding:28px 32px;text-align:center;border-bottom:1px solid #1e1e5a;">
-        <h1 style="color:#F0ECE4;font-family:'Georgia',serif;font-size:24px;font-weight:400;margin:0 0 4px;letter-spacing:-0.01em;">NurseOnboard</h1>
-        <p style="color:#8A8A94;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin:0;">Livaware Ltd — Mandatory Training Reminder</p>
+        <h1 style="color:#F0ECE4;font-family:'Georgia',serif;font-size:24px;font-weight:400;margin:0 0 4px;letter-spacing:-0.01em;">Basecamp</h1>
+        <p style="color:#8A8A94;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin:0;">Basecamp by Livaware Ltd — Mandatory Training Reminder</p>
       </div>
       <div style="padding:32px;">
         ${bodyHtml}
@@ -220,7 +220,7 @@ export function buildChaseEmailHtml(
         </p>
       </div>
       <div style="background:#0a0a2e;padding:16px 32px;text-align:center;border-top:1px solid #1e1e5a;">
-        <p style="font-size:11px;color:#8A8A94;margin:0;">Livaware Ltd — Secure Nurse Onboarding · CQC Regulation 19 / Schedule 3 Compliant</p>
+        <p style="font-size:11px;color:#8A8A94;margin:0;">Basecamp by Livaware Ltd — Secure Nurse Onboarding · CQC Regulation 19 / Schedule 3 Compliant</p>
       </div>
     </div>
   `;

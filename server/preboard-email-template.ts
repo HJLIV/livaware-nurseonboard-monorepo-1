@@ -59,8 +59,11 @@ export function buildEmailHtml(assessment: Assessment): string {
           <!-- Header -->
           <tr>
             <td style="padding: 0 0 32px;">
-              <div style="font-family: 'Palatino Linotype', Georgia, serif; color: #F0ECE4; font-size: 18px; letter-spacing: 0.05em;">
-                livaware
+              <div style="font-family: 'Palatino Linotype', Georgia, serif; color: #F0ECE4; font-size: 18px; letter-spacing: 0.08em;">
+                Basecamp
+              </div>
+              <div style="color: #8A8A94; font-size: 11px; letter-spacing: 0.05em; margin-top: 2px;">
+                by Livaware Ltd
               </div>
             </td>
           </tr>

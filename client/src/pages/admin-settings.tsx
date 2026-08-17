@@ -1727,7 +1727,7 @@ function LaunchAnnouncementCard({ outlookConfigured }: { outlookConfigured: bool
           <div>
             <CardTitle>Platform launch &amp; invoicing announcement</CardTitle>
             <CardDescription className="mt-1">
-              One-off launch email introducing every active nurse to the new NurseOnboard portal,
+              One-off launch email introducing every active nurse to the new Basecamp portal,
               embedding the explainer video, and informing them that all invoices must be submitted
               through this platform from <strong>1 June 2026</strong>.
             </CardDescription>

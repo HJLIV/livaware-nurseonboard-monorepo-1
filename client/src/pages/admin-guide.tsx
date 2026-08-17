@@ -691,7 +691,7 @@ export default function AdminGuidePage() {
             Walkthroughs & SOPs
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
-            Step-by-step procedures for managing the Livaware platform.
+            Step-by-step procedures for managing the Basecamp platform.
             Follow these standard operating procedures to ensure consistent, compliant onboarding.
           </p>
         </div>

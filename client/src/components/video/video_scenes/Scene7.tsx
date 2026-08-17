@@ -53,7 +53,7 @@ export function Scene7() {
         animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
         transition={{ duration: 0.8, delay: 0.5 }}
       >
-        Welcome to Livaware
+        Welcome to Basecamp
       </motion.div>
     </motion.div>
   );

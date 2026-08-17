@@ -140,8 +140,9 @@ export default function RefereeFormPage() {
     <div className="min-h-screen bg-[#020121]">
       <header className="bg-[#0a0a2e] border-b border-[#1e1e5a] px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <img src="/images/livaware-logo-white.png" alt="Livaware" className="h-7 w-auto" />
+          <img src="/images/livaware-logo-white.png" alt="Basecamp by Livaware" className="h-7 w-auto" />
           <div>
+            <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-[#C8A96E]">Basecamp</p>
             <h1 className="text-lg font-semibold text-[#F0ECE4] font-serif">Professional Reference Form</h1>
             <p className="text-xs text-[#8A8A94] tracking-wider uppercase">Livaware Ltd — CQC Regulation 19 / Schedule 3</p>
           </div>
@@ -313,7 +314,7 @@ export default function RefereeFormPage() {
 
         <footer className="text-center pb-8">
           <p className="text-xs text-[#8A8A94]">
-            Livaware Ltd — Secure Nurse Onboarding &middot; CQC Regulation 19 / Schedule 3 Compliant
+            Basecamp by Livaware Ltd — Secure Nurse Onboarding &middot; CQC Regulation 19 / Schedule 3 Compliant
           </p>
         </footer>
       </main>

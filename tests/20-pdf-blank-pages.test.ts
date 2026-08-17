@@ -50,7 +50,7 @@ const { generatePdfReport } = await import("../server/preboard-pdf-report");
 // ---------------------------------------------------------------------------
 
 const CANDIDATE_FOOTER =
-  "Livaware Ltd — NurseOnboard | CQC Regulation 19 / Schedule 3 Compliance Report | CONFIDENTIAL";
+  "Basecamp by Livaware Ltd | CQC Regulation 19 / Schedule 3 Compliance Report | CONFIDENTIAL";
 
 /**
  * Extract the visible text content of every page of a PDF buffer using

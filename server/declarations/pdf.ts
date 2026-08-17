@@ -55,7 +55,7 @@ export async function generateDeclarationPDF(
       bufferPages: true,
       info: {
         Title: `${declaration.title} — ${nurse.fullName}`,
-        Author: "Livaware Ltd – NurseOnboard",
+        Author: "Livaware Ltd – Basecamp",
         Subject: `Onboarding declaration: ${declaration.key}`,
       },
     });
@@ -137,7 +137,7 @@ export async function generateDeclarationPDF(
       const footerY = doc.page.height - doc.page.margins.bottom + 10;
       doc.fillColor(MED_GREY).fontSize(8).font("Helvetica")
         .text(
-          `Livaware NurseOnboard · ${declaration.title} · Page ${i + 1} of ${range.count}`,
+          `Basecamp by Livaware Ltd · ${declaration.title} · Page ${i + 1} of ${range.count}`,
           leftMargin, footerY, { width: pageWidth, align: "center" },
         );
     }

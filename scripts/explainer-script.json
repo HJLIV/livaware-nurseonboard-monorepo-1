@@ -7,7 +7,7 @@
       "key": "welcome",
       "startSec": 0,
       "durationSec": 16,
-      "text": "Welcome to Livaware NurseOnboard. Sign in with your magic link or with Microsoft three sixty five, and your personal portal will open straight to your onboarding hub."
+      "text": "Welcome to Basecamp. Sign in with your magic link or with Microsoft three sixty five, and your personal portal will open straight to your onboarding hub."
     },
     {
       "key": "compliance",
@@ -43,7 +43,7 @@
       "key": "wrapup",
       "startSec": 98,
       "durationSec": 12,
-      "text": "That's your Livaware journey, end to end — compliance, competency, arcade, availability and invoicing, all in one calm portal. Welcome aboard."
+      "text": "That's your Basecamp journey, end to end — compliance, competency, arcade, availability and invoicing, all in one calm portal. Welcome aboard."
     }
   ]
 }

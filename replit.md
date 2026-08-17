@@ -1,4 +1,4 @@
-# Livaware NurseOnboard
+# Basecamp (by Livaware Ltd)
 
 Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) combining **Clinical-Skills-Arcade**, **Nurse-Preboard**, and **Nurse-Onboard**. Deployed on Replit autoscale.
 
@@ -104,3 +104,7 @@ Conventions live under `.agents/skills/`. Read the relevant `SKILL.md` before ch
 - `new-portal-feature`, `new-admin-report`, `chase-and-notification-patterns`
 - `ai-service-conventions` — env precedence, fire-and-forget, `documents.aiStatus` taxonomy
 - `microsoft-graph-integration`, `vitest-api-tests`, `pre-merge-checklist`, `replit-md-maintenance`
+
+# Basecamp (by Livaware Ltd)
+
+Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) combining **Clinical-Skills-Arcade**, **Nurse-Preboard**, and **Nurse-Onboard**. Deployed on Replit autoscale.

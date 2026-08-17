@@ -418,7 +418,7 @@ export default function MassEmailPage() {
                     data-testid="input-body"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Sent inside the standard Livaware branded email. Blank lines start new paragraphs.
+                    Sent inside the standard Basecamp branded email. Blank lines start new paragraphs.
                   </p>
                 </div>
                 <div>

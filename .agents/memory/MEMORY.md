@@ -3,3 +3,4 @@
 - [Hidden 500s in request logger](request-logger-blindspot.md) — server/index.ts request logger prints [ok] for any non-array object response, so error JSON bodies never surface in logs; add explicit console.error in route catches.
 - [One-off tsx scripts & PDF visual checks](one-off-scripts-and-pdf-checks.md) — tsx here is CJS (no top-level await) and /tmp scripts need absolute imports; render PDFs with pdftoppm and look at the PNG.
 - [Running the test suite](test-suite-execution.md) — detached `npm test` dies; run vitest in ~5-file chunks sequentially; strip live third-party tokens in setup.ts; snapshot/restore appSettings rows tests write.
+- [Login-panel scene geometry](login-panel-scene-geometry.md) — hero column owns mid-left of the brand panel; scene labels only in top band/right rail; verify via Playwright glyph-rect audit at 3 viewports, not screenshots.

@@ -52,7 +52,7 @@ export async function generatePdfReport(
         Title: `Nurse Assessment Report – ${assessment.nurseName}`,
         Author: "Livaware Ltd",
         Subject: "Nurse Pre-Onboarding Assessment",
-        Creator: "Livaware Assessment Platform",
+        Creator: "Basecamp by Livaware Ltd",
       },
     });
 
@@ -73,9 +73,9 @@ export async function generatePdfReport(
 
     doc.rect(0, 0, pageWidth, doc.page.height).fill(COLORS.bg);
 
-    doc.font("Helvetica").fontSize(14).fillColor(COLORS.text).text("LIVAWARE", margin, 60, { characterSpacing: 3 });
+    doc.font("Helvetica").fontSize(14).fillColor(COLORS.text).text("BASECAMP", margin, 60, { characterSpacing: 3 });
 
-    doc.fontSize(8).fillColor(COLORS.subtle).text("Nurse-Led · Complex & Palliative Care · London", margin, 80, { characterSpacing: 1 });
+    doc.fontSize(8).fillColor(COLORS.subtle).text("by Livaware Ltd · Nurse-Led · Complex & Palliative Care · London", margin, 80, { characterSpacing: 1 });
 
     drawGoldDivider(doc, 100, margin, contentWidth);
 

@@ -205,7 +205,7 @@ export function RegisterNurseDialog({ trigger }: { trigger?: React.ReactNode }) 
                     Send welcome email now
                   </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Emails the applicant a warm Livaware welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
+                    Emails the applicant a warm Basecamp welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
                   </p>
                 </div>
               </label>

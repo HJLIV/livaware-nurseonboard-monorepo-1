@@ -401,7 +401,7 @@ function HomeView({
         </h1>
         <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
           {mock.isFresh
-            ? "Welcome to your Livaware nurse portal. Here's what your onboarding looks like — we'll walk you through it step by step."
+            ? "Welcome to your Basecamp portal. Here's what your onboarding looks like — we'll walk you through it step by step."
             : "Here's where you are in your onboarding — pick up where you left off."}
         </p>
       </div>

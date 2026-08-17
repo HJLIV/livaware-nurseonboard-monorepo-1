@@ -87,10 +87,10 @@ function buildFilters(req: Request): SQL[] {
 // Blank lines split paragraphs; everything is escaped (no raw HTML).
 export function renderMassEmailHtml(body: string): string {
   return renderEnvelope({
-    headerTitle: "Livaware",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Staff Communication",
     bodyHtml: paragraphs(body),
-    footerText: "Livaware Ltd — Secure Nurse Onboarding",
+    footerText: "Basecamp by Livaware Ltd — Secure Nurse Onboarding",
     footerSecondLine: "Replies to this email reach our onboarding team directly.",
   });
 }

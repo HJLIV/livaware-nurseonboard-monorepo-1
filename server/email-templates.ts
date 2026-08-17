@@ -232,8 +232,8 @@ export function applyTokens(text: string, tokens: Record<string, string>): strin
 
 // ─── Standard footer/text helpers ────────────────────────────────────
 
-const STD_FOOTER = "Livaware Ltd — Secure Nurse Onboarding";
-const CQC_FOOTER = "Livaware Ltd — Secure Nurse Onboarding · CQC Regulation 19 / Schedule 3 Compliant";
+const STD_FOOTER = "Basecamp by Livaware Ltd — Secure Nurse Onboarding";
+const CQC_FOOTER = "Basecamp by Livaware Ltd — Secure Nurse Onboarding · CQC Regulation 19 / Schedule 3 Compliant";
 const AUTOMATED_LINE = "This is an automated message. Please do not reply directly to this email.";
 const REPLY_LINE = "Replies to this email reach our onboarding team directly.";
 
@@ -255,7 +255,7 @@ register({
     "Sent when an admin issues a fresh secure portal link (e.g. after a candidate loses their original email).",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Secure Nurse Portal",
     footerText: CQC_FOOTER,
     footerSecondLine: AUTOMATED_LINE,
@@ -279,7 +279,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "Here is your secure personal link to the Livaware nurse portal. You can use it to pick up wherever you left off, update your details, or share anything we still need from you.",
+        "Here is your secure personal link to your Basecamp portal. You can use it to pick up wherever you left off, update your details, or share anything we still need from you.",
     },
     { name: "ctaLabel", label: "Button text", kind: "text", default: "Open Your Portal" },
     {
@@ -365,8 +365,8 @@ register({
   category: "nurse",
   envelope: {
     headerEyebrow: "Your journey starts here",
-    headerTitle: "Livaware",
-    headerSubtitle: "Nurse Onboarding Portal",
+    headerTitle: "Basecamp",
+    headerSubtitle: "Basecamp by Livaware Ltd",
     gradientHeader: true,
     footerText: CQC_FOOTER,
     footerSecondLine: REPLY_LINE,
@@ -377,7 +377,7 @@ register({
     { name: "{{PORTAL_URL}}", description: "Personal portal link" },
     { name: "{{EXPIRY}}", description: "Formatted link expiry date" },
   ],
-  defaultSubject: "Welcome to Livaware — your journey starts here",
+  defaultSubject: "Welcome to Basecamp — your journey starts here",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Hello {{FIRST_NAME}}," },
     {
@@ -475,8 +475,8 @@ register({
   category: "nurse",
   envelope: {
     headerEyebrow: "You're through compliance",
-    headerTitle: "Livaware",
-    headerSubtitle: "Nurse Onboarding Portal",
+    headerTitle: "Basecamp",
+    headerSubtitle: "Basecamp by Livaware Ltd",
     gradientHeader: true,
     footerText: STD_FOOTER,
   },
@@ -485,7 +485,7 @@ register({
     { name: "{{FIRST_NAME}}", description: "Just the first name" },
     { name: "{{PORTAL_URL}}", description: "Personal portal link" },
   ],
-  defaultSubject: "Livaware — Your onboarding is unlocked",
+  defaultSubject: "Basecamp — Your onboarding is unlocked",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Hello {{FIRST_NAME}}," },
     {
@@ -582,8 +582,8 @@ register({
   category: "nurse",
   envelope: {
     headerEyebrow: "A gentle nudge",
-    headerTitle: "Livaware",
-    headerSubtitle: "Nurse Onboarding Portal",
+    headerTitle: "Basecamp",
+    headerSubtitle: "Basecamp by Livaware Ltd",
     gradientHeader: true,
     footerText: STD_FOOTER,
     footerSecondLine: REPLY_LINE,
@@ -593,7 +593,7 @@ register({
     { name: "{{FIRST_NAME}}", description: "Just the first name" },
     { name: "{{ITEMS_LIST}}", description: "Bullet list of outstanding items (generated at send time)" },
   ],
-  defaultSubject: "A gentle nudge from Livaware — a few things still to finish",
+  defaultSubject: "A gentle nudge from Basecamp — a few things still to finish",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Hello {{FIRST_NAME}}," },
     {
@@ -683,8 +683,8 @@ register({
   category: "nurse",
   envelope: {
     headerEyebrow: "Always one sign-in away",
-    headerTitle: "Livaware",
-    headerSubtitle: "Nurse Onboarding Portal",
+    headerTitle: "Basecamp",
+    headerSubtitle: "Basecamp by Livaware Ltd",
     gradientHeader: true,
     footerText: STD_FOOTER,
     footerSecondLine: REPLY_LINE,
@@ -694,7 +694,7 @@ register({
     { name: "{{FIRST_NAME}}", description: "Just the first name" },
     { name: "{{EMAIL}}", description: "Recipient email address" },
   ],
-  defaultSubject: "Your Livaware portal is always one sign-in away",
+  defaultSubject: "Your Basecamp portal is always one sign-in away",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Hello {{FIRST_NAME}}," },
     {
@@ -703,7 +703,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "A quick note to remind you that your Livaware portal is always open whenever you'd like to pick things up again — there's nothing to install, no password to reset, and no old email to dig out.",
+        "A quick note to remind you that your Basecamp portal is always open whenever you'd like to pick things up again — there's nothing to install, no password to reset, and no old email to dig out.",
     },
     { name: "howTitle", label: "Steps box title", kind: "text", default: "How to sign back in" },
     {
@@ -759,7 +759,7 @@ register({
     "One-time 6-digit code for passwordless portal sign-in. The big code block itself is rendered automatically.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Sign-in code",
     footerText: STD_FOOTER,
     footerSecondLine: AUTOMATED_LINE,
@@ -778,7 +778,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "Use the code below to sign back in to your Livaware nurse portal. It is valid for the next {{MINUTES}} minutes and can only be used once.",
+        "Use the code below to sign back in to your Basecamp portal. It is valid for the next {{MINUTES}} minutes and can only be used once.",
     },
     {
       name: "footerNote",
@@ -827,7 +827,7 @@ register({
     "Sent to a candidate's nominated referee asking them to complete the online reference form (CQC Reg 19).",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Reference Request",
     footerText: CQC_FOOTER,
     footerSecondLine: AUTOMATED_LINE,
@@ -887,9 +887,9 @@ register({
     "Sent when a nurse is invited to the Skills Arcade with temporary login credentials.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Skills Arcade Invitation",
-    footerText: "Livaware Ltd — Secure Nurse Onboarding · Skills Arcade",
+    footerText: "Basecamp by Livaware Ltd — Secure Nurse Onboarding · Skills Arcade",
     footerSecondLine: AUTOMATED_LINE,
   },
   tokens: [
@@ -898,7 +898,7 @@ register({
     { name: "{{PASSWORD}}", description: "Temporary password" },
     { name: "{{INVITED_BY}}", description: "Who sent the invite" },
   ],
-  defaultSubject: "Livaware Skills Arcade — Your Login Credentials",
+  defaultSubject: "Basecamp Skills Arcade — Your Login Credentials",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Dear {{NAME}}," },
     {
@@ -907,7 +907,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "You have been invited by {{INVITED_BY}} to join the Livaware Skills Arcade — our online training and competency platform for nursing professionals.",
+        "You have been invited by {{INVITED_BY}} to join the Basecamp Skills Arcade — our online training and competency platform for nursing professionals.",
     },
     {
       name: "intro2",
@@ -972,9 +972,9 @@ register({
     "Sent when a trainer assigns new scenario modules to a nurse.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Skills Arcade Assignment",
-    footerText: "Livaware Ltd — Secure Nurse Onboarding · Skills Arcade",
+    footerText: "Basecamp by Livaware Ltd — Secure Nurse Onboarding · Skills Arcade",
     footerSecondLine: AUTOMATED_LINE,
   },
   tokens: [
@@ -1056,7 +1056,7 @@ register({
     "Reminder sent to a nurse whose mandatory training is missing/expired/expiring. The bullet list of modules is auto-inserted at {{MODULES_LIST}}.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Mandatory Training Reminder",
     footerText: CQC_FOOTER,
   },
@@ -1095,7 +1095,7 @@ register({
     "Internal email sent to the onboarding inbox each time a document is uploaded (nurse or admin).",
   category: "internal",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Document Upload Notification",
     footerText: "Livaware Ltd — Internal Notification",
   },
@@ -1123,7 +1123,7 @@ register({
       kind: "textarea",
       rows: 2,
       default:
-        "This is an automated notification from NurseOnboard. The uploaded file is attached to this email.",
+        "This is an automated notification from Basecamp. The uploaded file is attached to this email.",
     },
   ],
   renderBody: (v, t) => `
@@ -1162,7 +1162,7 @@ register({
   category: "internal",
   envelope: {
     headerTitle: "Invoice {{INVOICE_NUMBER}}",
-    headerSubtitle: "Livaware NurseOnboard — New submission",
+    headerSubtitle: "Basecamp by Livaware Ltd — New submission",
     footerText: "Livaware Ltd — Invoice Notification",
   },
   tokens: [
@@ -1220,7 +1220,7 @@ register({
     "One-off broadcast email summarising recent platform changes (Skills Arcade, Policies, Availability, Invoicing).",
   category: "broadcast",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Platform Update",
     footerText: CQC_FOOTER,
   },
@@ -1237,7 +1237,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "We've made some important changes to your Livaware nurse portal that we want you to know about. Nothing you've already submitted has been lost — your existing progress and documents are all still safely on file.",
+        "We've made some important changes to your Basecamp portal that we want you to know about. Nothing you've already submitted has been lost — your existing progress and documents are all still safely on file.",
     },
     { name: "changesHeading", label: "Changes section heading", kind: "text", default: "What's changed" },
     {
@@ -1327,7 +1327,7 @@ register({
     "One-off launch email introducing the new portal and informing nurses about the 1 June 2026 invoicing change.",
   category: "broadcast",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Platform Launch",
     footerText: CQC_FOOTER,
   },
@@ -1336,7 +1336,7 @@ register({
     { name: "{{PORTAL_URL}}", description: "Portal sign-in URL" },
     { name: "{{VIDEO_URL}}", description: "Explainer video link (sections in {{#VIDEO_URL}}…{{/VIDEO_URL}} hide when empty)" },
   ],
-  defaultSubject: "Livaware NurseOnboard — Your new portal is live (and important invoicing change)",
+  defaultSubject: "Basecamp — Your new portal is live (and important invoicing change)",
   fields: [
     { name: "greeting", label: "Greeting", kind: "text", default: "Dear {{NAME}}," },
     {
@@ -1345,7 +1345,7 @@ register({
       kind: "textarea",
       rows: 3,
       default:
-        "Your new Livaware NurseOnboard portal is live. It is the single home for your compliance, training, availability, and from now on — your timesheets and invoices.",
+        "Your new Basecamp portal is live. It is the single home for your compliance, training, availability, and from now on — your timesheets and invoices.",
     },
     { name: "videoHeading", label: "Video section heading (only shows when video URL is set)", kind: "text", default: "Watch the 2-minute walkthrough" },
     {
@@ -1467,7 +1467,7 @@ register({
     "Sent to a nurse when an admin allocates them to a shift or removes them from one. The shift details box is auto-filled from the roster.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Rota Update",
     footerText: STD_FOOTER,
     footerSecondLine: AUTOMATED_LINE,
@@ -1574,7 +1574,7 @@ register({
     "Sent to a nurse when an admin issues an individual agreement (project, patient, or deployment) that needs their signature in the portal.",
   category: "nurse",
   envelope: {
-    headerTitle: "NurseOnboard",
+    headerTitle: "Basecamp",
     headerSubtitle: "Livaware Ltd — Secure Nurse Portal",
     footerText: CQC_FOOTER,
     footerSecondLine: AUTOMATED_LINE,

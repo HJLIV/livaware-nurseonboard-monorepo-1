@@ -118,7 +118,7 @@ function AddCandidateDialog() {
                 Send welcome email now
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Emails the candidate a warm Livaware welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
+                Emails the candidate a warm Basecamp welcome with their secure portal link and instructions to return at <span className="font-mono text-foreground/80">onboard.livaware.co.uk</span> any time.
               </p>
             </div>
           </label>
