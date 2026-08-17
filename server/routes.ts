@@ -251,6 +251,10 @@ export async function registerRoutes(
   const { registerSupervisionRoutes } = await import("./routes/supervisions");
   registerSupervisionRoutes(app);
 
+  // === ASSIGNED ACTIONS (task 212) — reflections & witness statements ===
+  const { registerAssignedActionRoutes } = await import("./routes/assigned-actions");
+  registerAssignedActionRoutes(app);
+
   // === INTERNAL TRAINING certificates (roster-wide completion matrix) ===
   const { registerInternalTrainingRoutes } = await import("./routes/internal-training");
   registerInternalTrainingRoutes(app);

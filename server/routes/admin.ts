@@ -793,6 +793,10 @@ export function registerNurseRoutes(app: Express) {
       const { buildAgreementsSummary } = await import("./individual-agreements");
       const agreementsSummary = await buildAgreementsSummary(nurse.id);
 
+      // Assigned actions (task 212) — outstanding count powers the glowing
+      // "Action required" widget in the portal shell + the hub To Do card.
+      const outstandingAssignedActions = await storage.countOutstandingAssignedActions(nurse.id);
+
       res.json({
         nurse: {
           id: nurse.id,
@@ -805,6 +809,7 @@ export function registerNurseRoutes(app: Express) {
         induction: inductionGate,
         serviceAgreement,
         agreements: agreementsSummary,
+        assignedActions: { outstanding: outstandingAssignedActions },
         token: "me",
         firstVisit: isFirstVisit,
         sessionIssued: !!bootstrappedSessionId,

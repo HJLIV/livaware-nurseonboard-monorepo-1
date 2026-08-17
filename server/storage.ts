@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, isNull, isNotNull } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   candidates, nmcVerifications, dbsVerifications, competencyDeclarations,
@@ -30,6 +30,7 @@ import {
   type EqualOpportunities, type InsertEqualOpportunities,
   emailTemplates, type EmailTemplate, type InsertEmailTemplate,
   nurseSupervisions, type NurseSupervision, type InsertNurseSupervision,
+  nurseAssignedActions, type NurseAssignedAction, type InsertNurseAssignedAction,
   internalTrainingCertificates, type InternalTrainingCertificate, type InsertInternalTrainingCertificate,
   hbcCourses, type HbcCourse, type InsertHbcCourse,
   hbcCandidateLinks, type HbcCandidateLink, type InsertHbcCandidateLink,
@@ -188,6 +189,13 @@ export interface IStorage {
   createSupervision(data: InsertNurseSupervision): Promise<NurseSupervision>;
   updateSupervision(id: string, data: Partial<InsertNurseSupervision>): Promise<NurseSupervision | undefined>;
   deleteSupervision(id: string): Promise<void>;
+
+  // Assigned actions (task 212) — super-admin → nurse structured write-ups.
+  listAssignedActionsByNurse(nurseId: string): Promise<NurseAssignedAction[]>;
+  getAssignedAction(id: string): Promise<NurseAssignedAction | undefined>;
+  createAssignedAction(data: InsertNurseAssignedAction): Promise<NurseAssignedAction>;
+  updateAssignedAction(id: string, data: Partial<InsertNurseAssignedAction>): Promise<NurseAssignedAction | undefined>;
+  countOutstandingAssignedActions(nurseId: string): Promise<number>;
 
   // Internal Training certificates — roster-wide completion tracking.
   getAllInternalTrainingCertificates(): Promise<InternalTrainingCertificate[]>;
@@ -864,6 +872,54 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSupervision(id: string): Promise<void> {
     await db.delete(nurseSupervisions).where(eq(nurseSupervisions.id, id));
+  }
+
+  // ─── Assigned actions (task 212) ──────────────────────────────────
+  async listAssignedActionsByNurse(nurseId: string): Promise<NurseAssignedAction[]> {
+    return db
+      .select()
+      .from(nurseAssignedActions)
+      .where(eq(nurseAssignedActions.nurseId, nurseId))
+      .orderBy(desc(nurseAssignedActions.createdAt));
+  }
+
+  async getAssignedAction(id: string): Promise<NurseAssignedAction | undefined> {
+    const [row] = await db
+      .select()
+      .from(nurseAssignedActions)
+      .where(eq(nurseAssignedActions.id, id))
+      .limit(1);
+    return row;
+  }
+
+  async createAssignedAction(data: InsertNurseAssignedAction): Promise<NurseAssignedAction> {
+    const [row] = await db.insert(nurseAssignedActions).values(data).returning();
+    return row;
+  }
+
+  async updateAssignedAction(
+    id: string,
+    data: Partial<InsertNurseAssignedAction>,
+  ): Promise<NurseAssignedAction | undefined> {
+    const [row] = await db
+      .update(nurseAssignedActions)
+      .set(data)
+      .where(eq(nurseAssignedActions.id, id))
+      .returning();
+    return row;
+  }
+
+  async countOutstandingAssignedActions(nurseId: string): Promise<number> {
+    const rows = await db
+      .select({ id: nurseAssignedActions.id })
+      .from(nurseAssignedActions)
+      .where(
+        and(
+          eq(nurseAssignedActions.nurseId, nurseId),
+          inArray(nurseAssignedActions.status, ["assigned", "in_progress"]),
+        ),
+      );
+    return rows.length;
   }
 
   // ─── Internal Training certificates ───────────────────────────────

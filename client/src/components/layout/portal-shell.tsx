@@ -63,6 +63,9 @@ interface PortalShellProps {
   activeKey: string;
   onItemSelect?: (item: PortalSidebarItem) => void;
   todoCounts?: PortalToDoCounts;
+  // Assigned actions (task 212): when > 0 a glowing "Action required"
+  // widget is pinned to the bottom of the desktop rail / mobile bar.
+  assignedActionsOutstanding?: number;
   children: ReactNode;
 }
 
@@ -298,9 +301,11 @@ export function PortalShell({
   candidateName,
   groups,
   activeKey,
+  assignedActionsOutstanding = 0,
   children,
 }: PortalShellProps) {
   const [location] = useLocation();
+  const onActionPage = location.startsWith("/portal/action");
 
   const activeNav = useMemo(
     () => resolveActiveNav(groups, activeKey, location),
@@ -452,6 +457,33 @@ export function PortalShell({
                   </Link>
                 );
               })}
+
+              {/* Assigned actions (task 212) — glowing "action required"
+                  widget pinned to the bottom of the rail whenever the
+                  nurse has an outstanding write-up. */}
+              {assignedActionsOutstanding > 0 && (
+                <Link
+                  href="/portal/action"
+                  aria-label={`Action required — ${assignedActionsOutstanding} write-up${assignedActionsOutstanding === 1 ? "" : "s"} to complete`}
+                  aria-current={onActionPage ? "page" : undefined}
+                  className={cn(
+                    "group relative mt-2 flex flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-[10px] font-medium tracking-wide uppercase transition-colors",
+                    "animate-pulse ring-1 ring-amber-500/60 shadow-[0_0_18px_2px_rgba(245,158,11,0.35)]",
+                    onActionPage
+                      ? "bg-amber-500/25 text-amber-500"
+                      : "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20",
+                  )}
+                  data-testid="portal-action-required-widget"
+                >
+                  <span className="relative">
+                    <AlertCircle className="h-5 w-5" />
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-black flex items-center justify-center tabular-nums">
+                      {assignedActionsOutstanding}
+                    </span>
+                  </span>
+                  <span className="text-[10px] leading-tight text-center">Action needed</span>
+                </Link>
+              )}
             </div>
           </nav>
 
@@ -472,7 +504,7 @@ export function PortalShell({
         className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-sidebar/95 backdrop-blur supports-[padding:max(0px)]:pb-[env(safe-area-inset-bottom)]"
         data-testid="portal-shell-bottom-nav"
       >
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}>
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${navItems.length + (assignedActionsOutstanding > 0 ? 1 : 0)}, minmax(0, 1fr))` }}>
           {navItems.map((nav) => {
             const Icon = nav.icon;
             return (
@@ -508,6 +540,29 @@ export function PortalShell({
               </Link>
             );
           })}
+          {/* Assigned actions (task 212) — glowing cell appended to the
+              bottom bar while any write-up is outstanding. */}
+          {assignedActionsOutstanding > 0 && (
+            <Link
+              href="/portal/action"
+              aria-label={`Action required — ${assignedActionsOutstanding} write-up${assignedActionsOutstanding === 1 ? "" : "s"} to complete`}
+              aria-current={onActionPage ? "page" : undefined}
+              className={cn(
+                "relative flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors min-h-[56px]",
+                "animate-pulse",
+                onActionPage ? "text-amber-500" : "text-amber-500",
+              )}
+              data-testid="portal-action-required-widget-mobile"
+            >
+              <span className="relative">
+                <AlertCircle className="h-5 w-5 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-semibold text-black flex items-center justify-center tabular-nums">
+                  {assignedActionsOutstanding}
+                </span>
+              </span>
+              <span className="leading-tight">Action</span>
+            </Link>
+          )}
         </div>
       </nav>
 

@@ -49,6 +49,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, Paperclip, Plus, Trash2 } from "lucide-react";
+import { AssignedActionsPanel } from "@/components/admin/assigned-actions-panel";
 import { cn } from "@/lib/utils";
 import { getStageDisplayName } from "@shared/schema";
 import { useAuth } from "@/lib/auth";
@@ -1157,6 +1158,12 @@ function SupervisionTab({ nurseId }: { nurseId: string }) {
         <Button onClick={openNew} data-testid="button-add-supervision">
           <Plus className="h-4 w-4 mr-1.5" /> Add entry
         </Button>
+      </div>
+
+      {/* Assigned write-ups (task 212) — super-admin assigns reflections /
+          witness statements; nurse completions land here for review. */}
+      <div className="border-t pt-6">
+        <AssignedActionsPanel nurseId={nurseId} />
       </div>
 
       {isLoading ? (

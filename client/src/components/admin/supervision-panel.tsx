@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { AssignedActionsPanel } from "@/components/admin/assigned-actions-panel";
 import { useAuth } from "@/lib/auth";
 import { useAuthRole } from "@/lib/use-auth-role";
 import { Download, Loader2, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
@@ -204,6 +205,12 @@ export function SupervisionPanel({ nurseId }: { nurseId: string }) {
         <Button onClick={openNew} data-testid="button-add-supervision">
           <Plus className="h-4 w-4 mr-1.5" /> Add entry
         </Button>
+      </div>
+
+      {/* Assigned write-ups (task 212) — super-admin assigns reflections /
+          witness statements; nurse completions land here for review. */}
+      <div className="border-t pt-6">
+        <AssignedActionsPanel nurseId={nurseId} />
       </div>
 
       {isLoading ? (

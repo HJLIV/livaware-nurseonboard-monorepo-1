@@ -73,6 +73,7 @@ const PortalReadingPage = lazy(() => import("@/pages/portal/reading"));
 const PortalInductionPage = lazy(() => import("@/pages/portal/induction"));
 const PortalServiceAgreementPage = lazy(() => import("@/pages/portal/service-agreement"));
 const PortalAgreementsPage = lazy(() => import("@/pages/portal/agreements"));
+const PortalAssignedActionPage = lazy(() => import("@/pages/portal/assigned-action"));
 const PortalDeclarationPage = lazy(() => import("@/pages/portal/declaration"));
 const PortalSopComprehensionPage = lazy(() => import("@/pages/portal/sop-comprehension"));
 const PortalSectionPage = lazy(() => import("@/pages/portal/section"));
@@ -215,6 +216,7 @@ function AuthenticatedRouter() {
         <Route path="/portal/page" component={() => <PortalPage />} />
         <Route path="/portal/service-agreement" component={() => <PortalServiceAgreementPage />} />
         <Route path="/portal/agreements" component={() => <PortalAgreementsPage />} />
+        <Route path="/portal/action" component={() => <PortalAssignedActionPage />} />
         <Route path="/portal/policies" component={() => <PortalPoliciesPage />} />
         <Route path="/portal/reading" component={() => <PortalReadingPage />} />
         <Route path="/portal/induction" component={() => <PortalInductionPage />} />

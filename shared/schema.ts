@@ -13,8 +13,15 @@ export const arcadeStatusEnum = pgEnum("arcade_status", ["not_started", "in_prog
 
 // Portal & Audit
 export const portalModuleEnum = pgEnum("portal_module", ["preboard", "onboard", "skills_arcade", "hub"]);
-export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "hbc", "lms", "internal_training", "service_agreement", "rostering", "semble"]);
+export const auditModuleEnum = pgEnum("audit_module", ["preboard", "onboard", "skills_arcade", "admin", "portal", "portal_auth", "system", "availability", "invoices", "announcements", "documents", "supervision", "assigned_actions", "hbc", "lms", "internal_training", "service_agreement", "rostering", "semble"]);
 export const supervisionTypeEnum = pgEnum("supervision_type", ["supervision", "appraisal", "reflection", "other"]);
+
+// Assigned actions (task 212) — super-admin → nurse structured write-ups
+// completed through the portal. Generic on `type` so future action types
+// plug in without a schema change.
+export const assignedActionTypeEnum = pgEnum("assigned_action_type", ["reflection", "witness_statement"]);
+export const reflectionFrameworkEnum = pgEnum("reflection_framework", ["gibbs", "kolb", "driscoll", "schon"]);
+export const assignedActionStatusEnum = pgEnum("assigned_action_status", ["assigned", "in_progress", "submitted", "reviewed"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["submitted", "approved", "paid", "reconciled", "rejected"]);
 
 // Onboard enums
@@ -1047,6 +1054,140 @@ export const insertNurseSupervisionSchema = createInsertSchema(nurseSupervisions
 });
 export type NurseSupervision = typeof nurseSupervisions.$inferSelect;
 export type InsertNurseSupervision = z.infer<typeof insertNurseSupervisionSchema>;
+
+// ==================== NURSE ASSIGNED ACTIONS (task 212) ====================
+// Super-admin → nurse structured write-ups completed through the portal.
+// Two launch types share one generic row shape:
+//   - reflection: a standardised reflective framework (Gibbs / Kolb /
+//     Driscoll / Schön) with an optional focus and personalised instructions.
+//   - witness_statement: a standardised factual-account format with event
+//     details, points to address, and a mandatory honesty declaration.
+// The nurse answers in paste-locked text areas (same integrity telemetry as
+// the preboard assessment); submissions land in the Supervision & Appraisals
+// profile section for admin review.
+export const nurseAssignedActions = pgTable("nurse_assigned_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nurseId: varchar("nurse_id").notNull().references(() => nurses.id),
+  type: assignedActionTypeEnum("type").notNull(),
+  // Reflections only — which reflective framework structures the prompts.
+  framework: reflectionFrameworkEnum("framework"),
+  // Optional admin-supplied context. `focusContext` names the patient /
+  // event / theme a reflection should centre on; `eventDetails` captures
+  // the what/when/where for a witness statement; `pointsToAddress` lists
+  // specific questions the nurse must cover; `instructions` is free-text
+  // personalisation shown at the top of the completion page.
+  focusContext: text("focus_context"),
+  eventDetails: text("event_details"),
+  pointsToAddress: text("points_to_address"),
+  instructions: text("instructions"),
+  status: assignedActionStatusEnum("status").default("assigned").notNull(),
+  // Prompt answers keyed by prompt key ({ [promptKey]: answerText }).
+  response: jsonb("response"),
+  honestyDeclarationAccepted: boolean("honesty_declaration_accepted").default(false).notNull(),
+  // Integrity telemetry from the paste-locked text entry (same semantics
+  // as the preboard assessment counters).
+  pasteAttempts: integer("paste_attempts").default(0).notNull(),
+  keystrokeCount: integer("keystroke_count").default(0).notNull(),
+  maxBurstChars: integer("max_burst_chars").default(0).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+}, (table) => [
+  index("nurse_assigned_actions_nurse_id_idx").on(table.nurseId),
+  index("nurse_assigned_actions_status_idx").on(table.status),
+]);
+export const insertNurseAssignedActionSchema = createInsertSchema(nurseAssignedActions).omit({
+  id: true, createdAt: true,
+});
+export type NurseAssignedAction = typeof nurseAssignedActions.$inferSelect;
+export type InsertNurseAssignedAction = z.infer<typeof insertNurseAssignedActionSchema>;
+
+export const ASSIGNED_ACTION_TYPE_LABELS: Record<string, string> = {
+  reflection: "Reflection",
+  witness_statement: "Witness statement",
+};
+
+// A single guided prompt on the completion page. `key` is the stable
+// response-map key; `title` is the section heading; `prompt` is the
+// guiding question shown to the nurse.
+export interface AssignedActionPrompt {
+  key: string;
+  title: string;
+  prompt: string;
+}
+
+export const REFLECTION_FRAMEWORKS: ReadonlyArray<{
+  key: string;
+  label: string;
+  description: string;
+  prompts: AssignedActionPrompt[];
+}> = [
+  {
+    key: "gibbs",
+    label: "Gibbs' Reflective Cycle",
+    description: "Six-stage cycle moving from description through to an action plan.",
+    prompts: [
+      { key: "description", title: "Description", prompt: "What happened? Describe the situation factually — where were you, who was involved, what occurred?" },
+      { key: "feelings", title: "Feelings", prompt: "What were you thinking and feeling before, during, and after the event?" },
+      { key: "evaluation", title: "Evaluation", prompt: "What went well, and what did not go so well? Be honest about both." },
+      { key: "analysis", title: "Analysis", prompt: "Why did things go the way they did? What contributed to the outcome?" },
+      { key: "conclusion", title: "Conclusion", prompt: "What else could you have done? What have you learned?" },
+      { key: "action_plan", title: "Action plan", prompt: "If a similar situation arose again, what would you do differently? What will you do to develop your practice?" },
+    ],
+  },
+  {
+    key: "kolb",
+    label: "Kolb's Experiential Learning Cycle",
+    description: "Four-stage cycle: experience, reflect, conceptualise, experiment.",
+    prompts: [
+      { key: "concrete_experience", title: "Concrete experience", prompt: "Describe the experience you are reflecting on — what did you do, and what happened?" },
+      { key: "reflective_observation", title: "Reflective observation", prompt: "Looking back, what did you notice? What was significant about the experience?" },
+      { key: "abstract_conceptualisation", title: "Abstract conceptualisation", prompt: "What does this experience tell you? How does it connect to what you know about good practice?" },
+      { key: "active_experimentation", title: "Active experimentation", prompt: "How will you apply what you have learned? What will you try next time?" },
+    ],
+  },
+  {
+    key: "driscoll",
+    label: "Driscoll's Model (What? So What? Now What?)",
+    description: "Three stem questions that move from event to learning to action.",
+    prompts: [
+      { key: "what", title: "What?", prompt: "What happened? What did you do? What was your role in the event?" },
+      { key: "so_what", title: "So what?", prompt: "Why does it matter? How did you feel? What was good or bad about the experience, and why?" },
+      { key: "now_what", title: "Now what?", prompt: "What will you do differently as a result? What learning or support do you need?" },
+    ],
+  },
+  {
+    key: "schon",
+    label: "Schön — Reflection in & on Action",
+    description: "Reflecting while acting, and looking back on the action afterwards.",
+    prompts: [
+      { key: "situation", title: "The situation", prompt: "Describe the situation and the decisions you faced in the moment." },
+      { key: "in_action", title: "Reflection in action", prompt: "What were you thinking and adjusting while the situation was unfolding? What informed those in-the-moment choices?" },
+      { key: "on_action", title: "Reflection on action", prompt: "Looking back now, how do you judge what you did? What would you repeat, and what would you change?" },
+    ],
+  },
+] as const;
+export type ReflectionFrameworkKey = "gibbs" | "kolb" | "driscoll" | "schon";
+
+export function getReflectionFramework(key: string) {
+  return REFLECTION_FRAMEWORKS.find((f) => f.key === key);
+}
+
+// Standard witness-statement structure. The admin-supplied `eventDetails`
+// and `pointsToAddress` are injected ahead of these fixed prompts on the
+// completion page; the honesty declaration is enforced separately
+// (server rejects a witness-statement submit without it).
+export const WITNESS_STATEMENT_PROMPTS: AssignedActionPrompt[] = [
+  { key: "account", title: "Your account of events", prompt: "Give a full, factual, chronological account of what happened. Stick to what you personally saw, heard, and did." },
+  { key: "actions_taken", title: "Actions you took", prompt: "What actions did you take, when, and why? Include anything you did to escalate or seek help." },
+  { key: "outcome", title: "Outcome and follow-up", prompt: "What was the outcome? Is there anything else you consider relevant that has not been covered?" },
+];
+
+export const WITNESS_STATEMENT_DECLARATION =
+  "I confirm that this statement is true to the best of my knowledge and belief, and that I have written it myself, in my own words.";
 
 // ── Semble push feature flag ────────────────────────────────────────────────
 // Temporarily disables the "Push to Semble" flow (button greyed out in the UI,

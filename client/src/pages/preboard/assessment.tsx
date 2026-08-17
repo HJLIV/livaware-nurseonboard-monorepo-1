@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import { usePasteBlockedTextEntry } from "@/hooks/use-paste-blocked-text-entry";
 import {
   BRAND,
   FONT,
@@ -121,13 +122,9 @@ function formatTime(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-const BLOCKED_INPUT_TYPES = new Set<string>([
-  "insertFromPaste",
-  "insertFromPasteAsQuotation",
-  "insertFromDrop",
-  "insertFromYank",
-  "insertReplacementText",
-]);
+// NOTE: BLOCKED_INPUT_TYPES and the paste/drop/shortcut blocking now live in
+// the shared usePasteBlockedTextEntry hook (task 212) — QuestionScreen
+// consumes it so this page and the assigned-action page behave identically.
 
 const tagColors = DOMAIN_COLORS;
 
@@ -1029,107 +1026,20 @@ function QuestionScreen({
     maxBurstChars: number,
   ) => void;
 }) {
-  const [text, setText] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [visible, setVisible] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const [pasteBlocked, setPasteBlocked] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pasteNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const pasteAttemptsRef = useRef(0);
-  const keystrokeCountRef = useRef(0);
-  const maxBurstCharsRef = useRef(0);
   const min = question.minChars;
 
-  const recordTextChunk = useCallback((added: number) => {
-    if (added > maxBurstCharsRef.current) {
-      maxBurstCharsRef.current = added;
-    }
-  }, []);
-
-  const flashPasteBlocked = useCallback(() => {
-    pasteAttemptsRef.current += 1;
-    setPasteBlocked(true);
-    if (pasteNoticeTimerRef.current) clearTimeout(pasteNoticeTimerRef.current);
-    pasteNoticeTimerRef.current = setTimeout(() => setPasteBlocked(false), 2400);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pasteNoticeTimerRef.current) clearTimeout(pasteNoticeTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      setSpeechSupported(true);
-      const recognition = new SR();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-GB";
-
-      let finalTranscript = "";
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interim = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + " ";
-            const trimmedTranscript = transcript.trim();
-            setText((prev) => {
-              const spacer = prev.length > 0 && !prev.endsWith(" ") && !prev.endsWith("\n") ? " " : "";
-              return prev + spacer + trimmedTranscript;
-            });
-            recordTextChunk(trimmedTranscript.length);
-          } else {
-            interim = transcript;
-          }
-        }
-      };
-
-      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        if (event.error !== "aborted" && event.error !== "no-speech") {
-          console.warn("Speech recognition error:", event.error);
-        }
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
-      }
-    };
-  }, [question.id]);
-
-  const toggleListening = useCallback(() => {
-    if (!recognitionRef.current || submitted) return;
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch {
-        setIsListening(false);
-      }
-    }
-  }, [isListening, submitted]);
+  // Paste-locked text entry + integrity telemetry + dictation — shared
+  // with the assigned-action completion page via usePasteBlockedTextEntry
+  // (task 212). The hook owns the text value, paste/drop/shortcut
+  // blocking, paste-attempt flash, keystroke/burst counters, and the
+  // SpeechRecognition lifecycle.
+  const entry = usePasteBlockedTextEntry({ disabled: submitted });
+  const { text, isListening, speechSupported, pasteBlocked, toggleListening, textareaRef } = entry;
 
   useEffect(() => {
     setTimeout(() => setVisible(true), 50);
@@ -1144,27 +1054,24 @@ function QuestionScreen({
 
   const handleSubmit = useCallback(() => {
     if (submitted) return;
-    const trimmed = text.trim();
+    const trimmed = entry.text.trim();
     if (trimmed.length < min) return;
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (recognitionRef.current) try { recognitionRef.current.stop(); } catch {}
-    setIsListening(false);
+    entry.stopListening();
     setSubmitted(true);
-    const attempts = pasteAttemptsRef.current;
-    const keystrokes = keystrokeCountRef.current;
-    const maxBurst = maxBurstCharsRef.current;
+    const { pasteAttempts, keystrokeCount, maxBurstChars } = entry.getTelemetry();
     setTimeout(
       () =>
         onSubmit(
           trimmed,
           elapsed,
-          attempts,
-          keystrokes,
-          maxBurst,
+          pasteAttempts,
+          keystrokeCount,
+          maxBurstChars,
         ),
       700,
     );
-  }, [submitted, text, min, onSubmit, elapsed]);
+  }, [submitted, entry, min, onSubmit, elapsed]);
 
   const chars = text.trim().length;
   const ready = chars >= min;
@@ -1380,90 +1287,10 @@ function QuestionScreen({
             Your response to question {index + 1}
           </label>
           <textarea
+            {...entry.textareaProps}
             id="response-textarea"
             data-testid="input-response"
             className="assessment-textarea"
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => {
-              if (submitted) return;
-              const native = e.nativeEvent as Event;
-              const nextValue = e.target.value;
-              const inputType =
-                typeof InputEvent !== "undefined" && native instanceof InputEvent
-                  ? native.inputType
-                  : undefined;
-              if (typeof inputType === "string" && BLOCKED_INPUT_TYPES.has(inputType)) {
-                flashPasteBlocked();
-                if (textareaRef.current) textareaRef.current.value = text;
-                return;
-              }
-              // If the change didn't come from a real InputEvent (e.g. a script
-              // dispatched a synthetic `input` Event after mutating .value) and
-              // the value actually changed, treat it as an injection attempt.
-              // Benign browser/IME paths that fire non-InputEvents without
-              // changing the value are left alone.
-              if (
-                inputType === undefined &&
-                typeof InputEvent !== "undefined" &&
-                nextValue !== text
-              ) {
-                flashPasteBlocked();
-                if (textareaRef.current) textareaRef.current.value = text;
-                return;
-              }
-              const delta = nextValue.length - text.length;
-              if (delta > 0) recordTextChunk(delta);
-              setText(nextValue);
-            }}
-            onKeyDown={(e) => {
-              if (submitted) return;
-              if (e.key.length === 1 || e.key === "Backspace" || e.key === "Delete" || e.key === "Enter" || e.key === "Tab") {
-                keystrokeCountRef.current += 1;
-              }
-            }}
-            onPaste={(e) => {
-              e.preventDefault();
-              flashPasteBlocked();
-            }}
-            onCut={(e) => {
-              e.preventDefault();
-            }}
-            onCopy={(e) => {
-              e.preventDefault();
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              flashPasteBlocked();
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-            }}
-            onBeforeInput={(e) => {
-              const inputType = (e.nativeEvent as InputEvent).inputType;
-              if (typeof inputType === "string" && BLOCKED_INPUT_TYPES.has(inputType)) {
-                e.preventDefault();
-                flashPasteBlocked();
-              }
-            }}
-            onAuxClick={(e) => {
-              if (e.button === 1) {
-                e.preventDefault();
-                flashPasteBlocked();
-              }
-            }}
-            onMouseDown={(e) => {
-              if (e.button === 1) {
-                e.preventDefault();
-                flashPasteBlocked();
-              }
-            }}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
             disabled={submitted}
             aria-label={`Your response to question ${index + 1}`}
             placeholder={isListening ? "Listening — speak your response..." : "Type or tap the mic to speak your response..."}
