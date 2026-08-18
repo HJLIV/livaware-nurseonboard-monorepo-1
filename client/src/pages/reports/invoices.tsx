@@ -29,7 +29,9 @@ interface InvoiceRow {
   invoiceNumber: string;
   fullName: string;
   status: Status; submittedAt: string;
+  rateType?: string; // "hourly" | "day_shift" (absent on old rows = hourly)
   totalAmount: number; totalHours: number; additionalCostsTotal: number;
+  entryCount?: number; // days of service for day/shift invoices
   paymentReference?: string | null; paymentDate?: string | null; rejectedReason?: string | null;
   patientInitials?: string[];
   locations?: string[];
@@ -51,9 +53,9 @@ interface FullInvoice extends InvoiceRow {
   fullName: string; email: string; address: string; phoneNumber: string;
   ltdCompany: string | null; utr: string | null;
   accountType: string; accountName: string; bankName: string; sortCode: string; accountNumber: string;
-  hourlyRate: number; paymentNotes: string | null;
+  rateType: string; hourlyRate: number; paymentNotes: string | null;
   attachmentUrl?: string | null; attachmentFilename?: string | null;
-  timesheetEntries: { id: string; date: string; startTime: string; endTime: string; patientInitials: string; location: string; hoursMinutes: number; amountPence: number }[];
+  timesheetEntries: { id: string; date: string; startTime: string | null; endTime: string | null; patientInitials: string; location: string; dayType?: string | null; hoursMinutes: number; amountPence: number }[];
   additionalCosts: { id: string; description: string; amountPence: number; receiptImageUrl: string | null }[];
 }
 
@@ -185,9 +187,13 @@ function InvoiceSidePanel({ id, onClose }: { id: string; onClose: () => void }) 
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div><div className="text-muted-foreground">Hours</div><div className="font-medium">{hoursLabel(data.totalHours)}</div></div>
+        {data.rateType === "day_shift" ? (
+          <div><div className="text-muted-foreground">Days of service</div><div className="font-medium" data-testid="text-side-days">{data.timesheetEntries.length}</div></div>
+        ) : (
+          <div><div className="text-muted-foreground">Hours</div><div className="font-medium">{hoursLabel(data.totalHours)}</div></div>
+        )}
         <div><div className="text-muted-foreground">Total</div><div className="font-medium">{gbp(data.totalAmount + data.additionalCostsTotal)}</div></div>
-        <div><div className="text-muted-foreground">Hourly rate</div><div>{gbp(data.hourlyRate)}</div></div>
+        <div><div className="text-muted-foreground">{data.rateType === "day_shift" ? "Day/shift rate" : "Hourly rate"}</div><div>{gbp(data.hourlyRate)}</div></div>
         <div><div className="text-muted-foreground">Costs</div><div>{gbp(data.additionalCostsTotal)}</div></div>
       </div>
       <div className="text-xs text-muted-foreground">
@@ -198,10 +204,10 @@ function InvoiceSidePanel({ id, onClose }: { id: string; onClose: () => void }) 
       </div>
       {data.attachmentUrl && <a href={data.attachmentUrl} target="_blank" rel="noreferrer" className="text-xs underline text-primary" data-testid="link-side-attachment">{data.attachmentFilename || "Attachment"}</a>}
       <div className="text-xs">
-        <div className="font-medium mb-1">Timesheet entries ({data.timesheetEntries.length})</div>
+        <div className="font-medium mb-1">{data.rateType === "day_shift" ? "Days of service" : "Timesheet entries"} ({data.timesheetEntries.length})</div>
         <div className="border rounded divide-y max-h-40 overflow-y-auto">
           {data.timesheetEntries.map((e) => (
-            <div key={e.id} className="p-1.5 grid grid-cols-3 gap-2"><span>{e.date}</span><span>{e.startTime}–{e.endTime}</span><span className="text-right">{gbp(e.amountPence)}</span></div>
+            <div key={e.id} className="p-1.5 grid grid-cols-3 gap-2"><span>{e.date}</span><span>{data.rateType === "day_shift" ? `${e.patientInitials} · ${e.location}${e.dayType === "deployment" ? " · Deployment 50%" : ""}` : `${e.startTime}–${e.endTime}`}</span><span className="text-right">{gbp(e.amountPence)}</span></div>
           ))}
         </div>
       </div>
@@ -296,7 +302,7 @@ export default function InvoicesReportPage() {
                     <th className="px-3 py-2">Nurse</th>
                     <th className="px-3 py-2">Patients</th>
                     <th className="px-3 py-2">Address</th>
-                    <th className="px-3 py-2">Hours</th>
+                    <th className="px-3 py-2">Hours / Days</th>
                     <th className="px-3 py-2">Amount</th>
                     <th className="px-3 py-2">Status</th>
                   </tr>
@@ -314,7 +320,7 @@ export default function InvoicesReportPage() {
                         <td className="px-3 py-2"><div className="font-medium">{n?.fullName || inv.fullName}</div><div className="text-[10px] text-muted-foreground">{n?.email}</div></td>
                         <td className="px-3 py-2 text-[11px]" data-testid={`cell-patients-${inv.id}`}>{patients.length ? patients.join(", ") : <span className="text-muted-foreground">—</span>}</td>
                         <td className="px-3 py-2 text-[11px] max-w-[220px] truncate" title={locations.join(" · ")} data-testid={`cell-locations-${inv.id}`}>{locations.length ? locations.join(" · ") : <span className="text-muted-foreground">—</span>}</td>
-                        <td className="px-3 py-2">{hoursLabel(inv.totalHours)}</td>
+                        <td className="px-3 py-2">{inv.rateType === "day_shift" ? `${inv.entryCount ?? 0} ${(inv.entryCount ?? 0) === 1 ? "day" : "days"}` : hoursLabel(inv.totalHours)}</td>
                         <td className="px-3 py-2">{gbp(inv.totalAmount + inv.additionalCostsTotal)}</td>
                         <td className="px-3 py-2"><Badge className={STATUS_BADGE[inv.status]}>{inv.status}</Badge></td>
                       </tr>

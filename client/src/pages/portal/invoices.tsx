@@ -26,8 +26,10 @@ interface InvoiceRow {
   invoiceNumber: string;
   fullName: string;
   status: Status;
+  rateType?: string; // "hourly" | "day_shift" (absent on old rows = hourly)
   totalAmount: number; // pence
-  totalHours: number; // minutes
+  totalHours: number; // minutes (0 for day/shift invoices)
+  entryCount?: number; // days of service for day/shift invoices
   additionalCostsTotal: number;
   submittedAt: string;
   paymentReference?: string | null;
@@ -41,8 +43,8 @@ interface FullInvoice extends InvoiceRow {
   ltdCompany: string | null; utr: string | null;
   address: string; email: string; phoneNumber: string;
   accountType: string; accountName: string; bankName: string; sortCode: string; accountNumber: string;
-  hourlyRate: number; paymentNotes: string | null;
-  timesheetEntries: { id: string; date: string; startTime: string; endTime: string; patientInitials: string; location: string; hoursMinutes: number; amountPence: number }[];
+  rateType: string; hourlyRate: number; paymentNotes: string | null;
+  timesheetEntries: { id: string; date: string; startTime: string | null; endTime: string | null; patientInitials: string; location: string; dayType?: string | null; hoursMinutes: number; amountPence: number }[];
   additionalCosts: { id: string; description: string; amountPence: number; receiptImageUrl: string | null }[];
 }
 
@@ -68,12 +70,13 @@ function parseHHMM(s: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-interface DraftEntry { date: string; startTime: string; endTime: string; patientInitials: string; location: string }
+interface DraftEntry { date: string; startTime: string; endTime: string; patientInitials: string; location: string; dayType?: "service" | "deployment" }
 interface DraftCost { description: string; amountGbp: string; receiptImageUrl?: string | null; receiptUploading?: boolean }
 
 interface BillingProfile {
   personalDetails?: { fullName?: string; ltdCompany?: string | null; utr?: string | null; address?: string; email?: string; phoneNumber?: string };
   bankDetails?: { accountType?: "personal" | "business"; accountName?: string; bankName?: string; sortCode?: string; accountNumber?: string };
+  rateType?: "hourly" | "day_shift";
   hourlyRatePence?: number;
   paymentNotes?: string | null;
   updatedAt?: string;
@@ -108,7 +111,9 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
     sortCode: lastInvoice?.sortCode ?? bp?.bankDetails?.sortCode ?? "",
     accountNumber: lastInvoice?.accountNumber ?? bp?.bankDetails?.accountNumber ?? "",
   });
+  const initialRateType = (lastInvoice?.rateType as "hourly" | "day_shift" | undefined) ?? bp?.rateType ?? "hourly";
   const initialRatePence = lastInvoice?.hourlyRate ?? bp?.hourlyRatePence ?? null;
+  const [rateType, setRateType] = useState<"hourly" | "day_shift">(initialRateType);
   const [hourlyRateGbp, setHourlyRateGbp] = useState<string>(initialRatePence != null ? (initialRatePence / 100).toFixed(2) : "");
   const [entries, setEntries] = useState<DraftEntry[]>([{ date: "", startTime: "", endTime: "", patientInitials: "", location: "" }]);
   const [costs, setCosts] = useState<DraftCost[]>([]);
@@ -118,7 +123,22 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
     const ratePence = Math.round(parseFloat(hourlyRateGbp || "0") * 100) || 0;
     let mins = 0;
     let amount = 0;
+    let days = 0;
+    let deploymentDays = 0;
     for (const e of entries) {
+      if (rateType === "day_shift") {
+        // Whole days: no times, each dated entry is charged the flat rate.
+        // Deployment/travel days are paid at 50% of the day rate.
+        if (!e.date) continue;
+        days += 1;
+        if (e.dayType === "deployment") {
+          deploymentDays += 1;
+          amount += Math.round(ratePence / 2);
+        } else {
+          amount += ratePence;
+        }
+        continue;
+      }
       if (!e.startTime || !e.endTime) continue;
       let m = parseHHMM(e.endTime) - parseHHMM(e.startTime);
       if (m < 0) m += 24 * 60;
@@ -126,8 +146,8 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
       amount += Math.round((m / 60) * ratePence);
     }
     const addl = costs.reduce((s, c) => s + Math.round(parseFloat(c.amountGbp || "0") * 100), 0);
-    return { mins, amount, addl, grandTotal: amount + addl, ratePence };
-  }, [entries, costs, hourlyRateGbp]);
+    return { mins, days, deploymentDays, amount, addl, grandTotal: amount + addl, ratePence };
+  }, [entries, costs, hourlyRateGbp, rateType]);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -142,7 +162,10 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
           phoneNumber: personal.phoneNumber,
         },
         bankDetails: bank,
-        timesheetEntries: entries.filter((e) => e.date && e.startTime && e.endTime),
+        timesheetEntries: rateType === "day_shift"
+          ? entries.filter((e) => e.date).map((e) => ({ date: e.date, patientInitials: e.patientInitials, location: e.location, dayType: e.dayType ?? "service" }))
+          : entries.filter((e) => e.date && e.startTime && e.endTime).map(({ dayType: _dayType, ...e }) => e),
+        rateType,
         hourlyRatePence: ratePence,
         additionalCosts: costs
           .filter((c) => c.description && c.amountGbp)
@@ -202,22 +225,42 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
 
         {step === 3 && (
           <div className="space-y-3" data-testid="step-timesheets">
-            <div className="flex items-end gap-3">
-              <div className="flex-1"><Label>Hourly rate (£)</Label><Input type="number" step="0.01" value={hourlyRateGbp} onChange={(e) => setHourlyRateGbp(e.target.value)} data-testid="input-hourly-rate" /></div>
-              <div className="text-sm text-muted-foreground pb-2">Total: <span className="font-medium text-foreground">{hoursLabel(totals.mins)}</span> · <span className="font-medium text-foreground">{gbp(totals.amount)}</span></div>
+            <div className="flex gap-2 text-xs">
+              {(["hourly", "day_shift"] as const).map((t) => (
+                <button key={t} type="button" onClick={() => setRateType(t)} className={`px-3 py-1 rounded-full border ${rateType === t ? "bg-primary text-primary-foreground border-transparent" : "bg-card"}`} data-testid={`button-rate-type-${t}`}>
+                  {t === "hourly" ? "Hourly rate" : "Day/Shift rate"}
+                </button>
+              ))}
             </div>
+            <div className="flex items-end gap-3">
+              <div className="flex-1"><Label>{rateType === "day_shift" ? "Day/shift rate (£)" : "Hourly rate (£)"}</Label><Input type="number" step="0.01" value={hourlyRateGbp} onChange={(e) => setHourlyRateGbp(e.target.value)} data-testid="input-hourly-rate" /></div>
+              <div className="text-sm text-muted-foreground pb-2" data-testid="text-running-total">Total: <span className="font-medium text-foreground">{rateType === "day_shift" ? `${totals.days} ${totals.days === 1 ? "day" : "days"}` : hoursLabel(totals.mins)}</span> · <span className="font-medium text-foreground">{gbp(totals.amount)}</span></div>
+            </div>
+            {rateType === "day_shift" && (
+              <p className="text-xs text-muted-foreground">Each entry is one day of service charged at the day/shift rate — no start/end times needed. Tick deployment/travel days to bill them at 50% of the day rate.</p>
+            )}
             <div className="space-y-2">
               {entries.map((e, idx) => (
-                <Card key={idx}><CardContent className="p-3 grid grid-cols-2 sm:grid-cols-6 gap-2 items-end">
+                <Card key={idx}><CardContent className={`p-3 grid grid-cols-2 gap-2 items-end ${rateType === "day_shift" ? "sm:grid-cols-5" : "sm:grid-cols-6"}`}>
                   <div className="col-span-2 sm:col-span-1"><Label className="text-[10px]">Date</Label><Input type="date" value={e.date} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], date: ev.target.value }; setEntries(c); }} data-testid={`input-date-${idx}`} /></div>
-                  <div><Label className="text-[10px]">Start</Label><Input type="time" value={e.startTime} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], startTime: ev.target.value }; setEntries(c); }} data-testid={`input-start-${idx}`} /></div>
-                  <div><Label className="text-[10px]">End</Label><Input type="time" value={e.endTime} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], endTime: ev.target.value }; setEntries(c); }} data-testid={`input-end-${idx}`} /></div>
+                  {rateType !== "day_shift" && (
+                    <>
+                      <div><Label className="text-[10px]">Start</Label><Input type="time" value={e.startTime} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], startTime: ev.target.value }; setEntries(c); }} data-testid={`input-start-${idx}`} /></div>
+                      <div><Label className="text-[10px]">End</Label><Input type="time" value={e.endTime} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], endTime: ev.target.value }; setEntries(c); }} data-testid={`input-end-${idx}`} /></div>
+                    </>
+                  )}
                   <div><Label className="text-[10px]">Patient initials</Label><Input value={e.patientInitials} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], patientInitials: ev.target.value }; setEntries(c); }} data-testid={`input-initials-${idx}`} /></div>
                   <div><Label className="text-[10px]">Location</Label><Input value={e.location} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], location: ev.target.value }; setEntries(c); }} data-testid={`input-location-${idx}`} /></div>
+                  {rateType === "day_shift" && (
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none pb-2.5">
+                      <input type="checkbox" className="accent-primary" checked={e.dayType === "deployment"} onChange={(ev) => { const c = [...entries]; c[idx] = { ...c[idx], dayType: ev.target.checked ? "deployment" : "service" }; setEntries(c); }} data-testid={`checkbox-deployment-${idx}`} />
+                      <span>Deployment/travel <span className="text-muted-foreground">(50%)</span></span>
+                    </label>
+                  )}
                   <div className="flex justify-end"><Button variant="ghost" size="sm" onClick={() => setEntries(entries.filter((_, i) => i !== idx))} disabled={entries.length === 1} data-testid={`button-remove-entry-${idx}`}><Trash2 className="h-4 w-4" /></Button></div>
                 </CardContent></Card>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => setEntries([...entries, { date: "", startTime: "", endTime: "", patientInitials: "", location: "" }])} data-testid="button-add-entry"><Plus className="h-4 w-4 mr-1" /> Add timesheet entry</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEntries([...entries, { date: "", startTime: "", endTime: "", patientInitials: "", location: "" }])} data-testid="button-add-entry"><Plus className="h-4 w-4 mr-1" /> {rateType === "day_shift" ? "Add day" : "Add timesheet entry"}</Button>
             </div>
           </div>
         )}
@@ -267,8 +310,17 @@ function NewInvoiceForm({ onCancel, onSubmitted, prefillNurse, lastInvoice, bill
           <div className="space-y-3" data-testid="step-review">
             <h3 className="font-medium text-sm">Review & submit</h3>
             <Card><CardContent className="p-4 text-sm space-y-2">
-              <div className="flex justify-between"><span className="text-muted-foreground">Hourly rate</span><span>{gbp(totals.ratePence)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Total hours</span><span>{hoursLabel(totals.mins)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{rateType === "day_shift" ? "Day/shift rate" : "Hourly rate"}</span><span>{gbp(totals.ratePence)}</span></div>
+              {rateType === "day_shift" ? (
+                <>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Days of service</span><span data-testid="text-review-days">{totals.days}</span></div>
+                  {totals.deploymentDays > 0 && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">incl. deployment/travel @ 50%</span><span data-testid="text-review-deployment-days">{totals.deploymentDays}</span></div>
+                  )}
+                </>
+              ) : (
+                <div className="flex justify-between"><span className="text-muted-foreground">Total hours</span><span>{hoursLabel(totals.mins)}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-muted-foreground">Timesheet total</span><span>{gbp(totals.amount)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Additional costs</span><span>{gbp(totals.addl)}</span></div>
               <div className="flex justify-between font-medium pt-2 border-t"><span>Grand total</span><span data-testid="text-grand-total">{gbp(totals.grandTotal)}</span></div>
@@ -330,7 +382,11 @@ function InvoiceDetailView({ id, onBack }: { id: string; onBack: () => void }) {
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-        <div><div className="text-[10px] uppercase text-muted-foreground">Hours</div><div className="font-serif text-xl">{hoursLabel(data.totalHours)}</div></div>
+        {data.rateType === "day_shift" ? (
+          <div><div className="text-[10px] uppercase text-muted-foreground">Days</div><div className="font-serif text-xl" data-testid="text-detail-days">{data.timesheetEntries.length}</div></div>
+        ) : (
+          <div><div className="text-[10px] uppercase text-muted-foreground">Hours</div><div className="font-serif text-xl">{hoursLabel(data.totalHours)}</div></div>
+        )}
         <div><div className="text-[10px] uppercase text-muted-foreground">Timesheet</div><div className="font-serif text-xl">{gbp(data.totalAmount)}</div></div>
         <div><div className="text-[10px] uppercase text-muted-foreground">Costs</div><div className="font-serif text-xl">{gbp(data.additionalCostsTotal)}</div></div>
         <div><div className="text-[10px] uppercase text-muted-foreground">Total</div><div className="font-serif text-xl">{gbp(data.totalAmount + data.additionalCostsTotal)}</div></div>
@@ -345,14 +401,22 @@ function InvoiceDetailView({ id, onBack }: { id: string; onBack: () => void }) {
         <div className="text-sm text-muted-foreground">Reconciled — ref <span className="font-mono">{data.paymentReference}</span> · {data.paymentDate}</div>
       )}
       <div>
-        <h4 className="text-sm font-medium mb-2">Timesheet entries</h4>
+        <h4 className="text-sm font-medium mb-2">{data.rateType === "day_shift" ? "Days of service" : "Timesheet entries"}</h4>
         <div className="rounded border divide-y text-sm">
           {data.timesheetEntries.map((e) => (
-            <div key={e.id} className="p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <div>{e.date}</div><div>{e.startTime}–{e.endTime}</div>
-              <div>{e.patientInitials}</div><div>{e.location}</div>
-              <div className="text-right">{hoursLabel(e.hoursMinutes)} · {gbp(e.amountPence)}</div>
-            </div>
+            data.rateType === "day_shift" ? (
+              <div key={e.id} className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>{e.date}{e.dayType === "deployment" && <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">· Deployment 50%</span>}</div>
+                <div>{e.patientInitials}</div><div>{e.location}</div>
+                <div className="text-right">{gbp(e.amountPence)}</div>
+              </div>
+            ) : (
+              <div key={e.id} className="p-2 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <div>{e.date}</div><div>{e.startTime}–{e.endTime}</div>
+                <div>{e.patientInitials}</div><div>{e.location}</div>
+                <div className="text-right">{hoursLabel(e.hoursMinutes)} · {gbp(e.amountPence)}</div>
+              </div>
+            )
           ))}
         </div>
       </div>
@@ -465,7 +529,7 @@ export default function PortalInvoicesPage() {
                 {data.invoices.map((inv) => (
                   <button key={inv.id} onClick={() => { setActiveId(inv.id); setView("detail"); }} className="w-full text-left p-4 hover:bg-muted/30 flex items-center gap-4" data-testid={`row-invoice-${inv.id}`}>
                     <div className="flex-1">
-                      <div className="font-medium">{gbp(inv.totalAmount + inv.additionalCostsTotal)} · {hoursLabel(inv.totalHours)}</div>
+                      <div className="font-medium">{gbp(inv.totalAmount + inv.additionalCostsTotal)} · {inv.rateType === "day_shift" ? `${inv.entryCount ?? 0} ${(inv.entryCount ?? 0) === 1 ? "day" : "days"}` : hoursLabel(inv.totalHours)}</div>
                       <div className="text-[11px] text-muted-foreground"><span className="font-mono" data-testid={`text-invoice-number-${inv.id}`}>{inv.invoiceNumber}</span> · Submitted {new Date(inv.submittedAt).toLocaleDateString("en-GB")}</div>
                     </div>
                     <Badge className={STATUS_BADGE[inv.status]} data-testid={`badge-status-${inv.id}`}>{inv.status}</Badge>

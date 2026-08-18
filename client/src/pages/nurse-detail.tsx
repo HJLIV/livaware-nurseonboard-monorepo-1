@@ -179,6 +179,8 @@ function SubmitOnBehalfForm({ nurseId, nurseName, nurseEmail, onDone }: {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [rateType, setRateType] = useState<"hourly" | "day_shift">("hourly");
+  const [deployment, setDeployment] = useState(false);
   const [hourlyRate, setHourlyRate] = useState("25.00");
   const [patientInitials, setPatientInitials] = useState("");
   const [location, setLocation] = useState("");
@@ -193,7 +195,10 @@ function SubmitOnBehalfForm({ nurseId, nurseName, nurseEmail, onDone }: {
       const body = {
         personalDetails: { fullName: nurseName, address, email: nurseEmail, phoneNumber: "" },
         bankDetails: { accountType: "personal", accountName, bankName, sortCode, accountNumber },
-        timesheetEntries: [{ date, startTime, endTime, patientInitials, location }],
+        timesheetEntries: rateType === "day_shift"
+          ? [{ date, patientInitials, location, dayType: deployment ? "deployment" : "service" }]
+          : [{ date, startTime, endTime, patientInitials, location }],
+        rateType,
         hourlyRatePence: Math.round(parseFloat(hourlyRate || "0") * 100),
         additionalCosts: [],
         paymentNotes: "Submitted on behalf by admin",
@@ -215,9 +220,29 @@ function SubmitOnBehalfForm({ nurseId, nurseName, nurseEmail, onDone }: {
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <div><label className="text-[10px] uppercase text-muted-foreground">Date</label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-onbehalf-date" /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Hourly rate (£)</label><Input type="number" step="0.01" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} data-testid="input-onbehalf-rate" /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Start</label><Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} data-testid="input-onbehalf-start" /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">End</label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} data-testid="input-onbehalf-end" /></div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase text-muted-foreground">{rateType === "day_shift" ? "Day/shift rate (£)" : "Hourly rate (£)"}</label>
+            <div className="flex gap-1 mb-1">
+              {(["hourly", "day_shift"] as const).map((t) => (
+                <button key={t} type="button" onClick={() => setRateType(t)} className={`px-2 py-0.5 rounded-full border text-[10px] ${rateType === t ? "bg-primary text-primary-foreground border-transparent" : "bg-card"}`} data-testid={`button-onbehalf-rate-type-${t}`}>
+                  {t === "hourly" ? "Hourly" : "Day/Shift"}
+                </button>
+              ))}
+            </div>
+            <Input type="number" step="0.01" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} data-testid="input-onbehalf-rate" />
+          </div>
+          {rateType !== "day_shift" && (
+            <>
+              <div><label className="text-[10px] uppercase text-muted-foreground">Start</label><Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} data-testid="input-onbehalf-start" /></div>
+              <div><label className="text-[10px] uppercase text-muted-foreground">End</label><Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} data-testid="input-onbehalf-end" /></div>
+            </>
+          )}
+          {rateType === "day_shift" && (
+            <label className="col-span-2 flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <input type="checkbox" className="accent-primary" checked={deployment} onChange={(e) => setDeployment(e.target.checked)} data-testid="checkbox-onbehalf-deployment" />
+              <span>Deployment/travel day <span className="text-muted-foreground">(paid at 50% of day rate)</span></span>
+            </label>
+          )}
           <div><label className="text-[10px] uppercase text-muted-foreground">Patient initials</label><Input value={patientInitials} onChange={(e) => setPatientInitials(e.target.value)} data-testid="input-onbehalf-initials" /></div>
           <div><label className="text-[10px] uppercase text-muted-foreground">Location</label><Input value={location} onChange={(e) => setLocation(e.target.value)} data-testid="input-onbehalf-location" /></div>
           <div className="col-span-2"><label className="text-[10px] uppercase text-muted-foreground">Address</label><Input value={address} onChange={(e) => setAddress(e.target.value)} data-testid="input-onbehalf-address" /></div>
@@ -228,7 +253,7 @@ function SubmitOnBehalfForm({ nurseId, nurseName, nurseEmail, onDone }: {
         </div>
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" size="sm" onClick={onDone} data-testid="button-onbehalf-cancel">Cancel</Button>
-          <Button size="sm" onClick={() => submit.mutate()} disabled={submit.isPending || !date || !startTime || !endTime} data-testid="button-onbehalf-submit">
+          <Button size="sm" onClick={() => submit.mutate()} disabled={submit.isPending || !date || (rateType === "hourly" && (!startTime || !endTime))} data-testid="button-onbehalf-submit">
             {submit.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />} Submit
           </Button>
         </div>

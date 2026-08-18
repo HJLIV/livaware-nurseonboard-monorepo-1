@@ -87,17 +87,27 @@ export async function generateInvoicePdf(input: InvoicePdfInput): Promise<Buffer
       );
     y += 48;
 
-    // Timesheet table
-    doc.fillColor(NAVY).fontSize(11).font("Helvetica-Bold").text("Timesheet entries", left, y);
+    // Timesheet table. Day/shift invoices are whole days with no recorded
+    // times, so the Time and Hours columns are dropped entirely.
+    const isDayShift = inv.rateType === "day_shift";
+    doc.fillColor(NAVY).fontSize(11).font("Helvetica-Bold").text(isDayShift ? "Days of service" : "Timesheet entries", left, y);
     y += 16;
-    const cols = [
-      { label: "Date", x: left, w: 70 },
-      { label: "Time", x: left + 70, w: 70 },
-      { label: "Patient", x: left + 140, w: 60 },
-      { label: "Location", x: left + 200, w: 160 },
-      { label: "Hours", x: left + 360, w: 50, align: "right" as const },
-      { label: "Amount", x: left + 410, w: pageWidth - 410, align: "right" as const },
-    ];
+    const cols = isDayShift
+      ? [
+          { label: "Date", x: left, w: 80 },
+          { label: "Day type", x: left + 80, w: 105 },
+          { label: "Patient", x: left + 185, w: 65 },
+          { label: "Location", x: left + 250, w: 160 },
+          { label: "Amount", x: left + 410, w: pageWidth - 410, align: "right" as const },
+        ]
+      : [
+          { label: "Date", x: left, w: 70 },
+          { label: "Time", x: left + 70, w: 70 },
+          { label: "Patient", x: left + 140, w: 60 },
+          { label: "Location", x: left + 200, w: 160 },
+          { label: "Hours", x: left + 360, w: 50, align: "right" as const },
+          { label: "Amount", x: left + 410, w: pageWidth - 410, align: "right" as const },
+        ];
     doc.rect(left, y, pageWidth, 18).fill(NAVY);
     doc.fillColor("#F0ECE4").fontSize(8).font("Helvetica-Bold");
     for (const c of cols) doc.text(c.label, c.x + 4, y + 5, { width: c.w - 8, align: c.align ?? "left" });
@@ -106,14 +116,16 @@ export async function generateInvoicePdf(input: InvoicePdfInput): Promise<Buffer
     doc.fillColor(DARK_GREY).fontSize(9).font("Helvetica");
     for (const e of entries) {
       if (y > doc.page.height - 200) { doc.addPage(); y = 60; }
-      const row = [
-        e.date,
-        `${e.startTime}–${e.endTime}`,
-        e.patientInitials,
-        e.location,
-        hours(e.hoursMinutes),
-        gbp(e.amountPence),
-      ];
+      const row = isDayShift
+        ? [e.date, e.dayType === "deployment" ? "Deployment (50%)" : "Service", e.patientInitials, e.location, gbp(e.amountPence)]
+        : [
+            e.date,
+            `${e.startTime}–${e.endTime}`,
+            e.patientInitials,
+            e.location,
+            hours(e.hoursMinutes),
+            gbp(e.amountPence),
+          ];
       const rowHeight = 18;
       doc.rect(left, y, pageWidth, rowHeight).strokeColor("#E5E5E0").lineWidth(0.5).stroke();
       cols.forEach((c, i) => doc.text(String(row[i]), c.x + 4, y + 5, { width: c.w - 8, align: c.align ?? "left" }));
@@ -146,8 +158,13 @@ export async function generateInvoicePdf(input: InvoicePdfInput): Promise<Buffer
         .text(value, boxX + 130, y + (bold ? 6 : 8), { width: 100, align: "right" });
       y += bold ? 22 : 16;
     };
-    row2("Hourly rate", gbp(inv.hourlyRate));
-    row2("Total hours", `${hours(inv.totalHours)} h`);
+    row2(isDayShift ? "Day/shift rate" : "Hourly rate", gbp(inv.hourlyRate));
+    if (isDayShift) {
+      const deploymentDays = entries.filter((e) => e.dayType === "deployment").length;
+      row2("Days of service", deploymentDays ? `${entries.length} (${deploymentDays} @ 50%)` : String(entries.length));
+    } else {
+      row2("Total hours", `${hours(inv.totalHours)} h`);
+    }
     row2("Timesheet total", gbp(inv.totalAmount));
     row2("Additional costs", gbp(inv.additionalCostsTotal));
     row2("Grand total", gbp(inv.totalAmount + inv.additionalCostsTotal), true);

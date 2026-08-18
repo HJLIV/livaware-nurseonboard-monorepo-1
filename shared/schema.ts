@@ -140,6 +140,7 @@ export const nurses = pgTable("nurses", {
       sortCode?: string;
       accountNumber?: string;
     };
+    rateType?: "hourly" | "day_shift";
     hourlyRatePence?: number;
     paymentNotes?: string | null;
     updatedAt?: string;
@@ -1906,7 +1907,8 @@ export const invoices = pgTable("invoices", {
   sortCode: text("sort_code").notNull(),
   accountNumber: text("account_number").notNull(),
   // Totals
-  hourlyRate: integer("hourly_rate_pence").notNull(), // pence
+  rateType: text("rate_type").default("hourly").notNull(), // "hourly" | "day_shift"
+  hourlyRate: integer("hourly_rate_pence").notNull(), // pence (carries the rate in both modes)
   totalHours: integer("total_hours_minutes").notNull(), // minutes (avoids float)
   totalAmount: integer("total_amount_pence").notNull(), // pence
   additionalCostsTotal: integer("additional_costs_total_pence").default(0).notNull(),
@@ -1939,10 +1941,15 @@ export const invoiceTimesheetEntries = pgTable("invoice_timesheet_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
   date: text("date").notNull(), // YYYY-MM-DD
-  startTime: text("start_time").notNull(), // HH:MM
-  endTime: text("end_time").notNull(),
+  // Times are only recorded for hourly invoices; day/shift entries are
+  // whole days with no start/end (null).
+  startTime: text("start_time"), // HH:MM (null in day/shift mode)
+  endTime: text("end_time"),
   patientInitials: text("patient_initials").notNull(),
   location: text("location").notNull(),
+  // Day/shift entries only: "service" (full day rate) or "deployment"
+  // (deployment/travel day, paid at 50% of the day rate). Null on hourly rows.
+  dayType: text("day_type"),
   hoursMinutes: integer("hours_minutes").notNull(),
   amountPence: integer("amount_pence").notNull(),
   position: integer("position").default(0).notNull(),
@@ -1986,10 +1993,15 @@ export const bankDetailsSchema = z.object({
 
 export const timesheetEntrySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM"),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM"),
+  // Required for hourly invoices (enforced in invoiceSubmissionSchema);
+  // absent/null for day/shift invoices, which are priced per day.
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "startTime must be HH:MM").optional().nullable(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "endTime must be HH:MM").optional().nullable(),
   patientInitials: z.string().min(1),
   location: z.string().min(1),
+  // Day/shift invoices only: deployment/travel days are paid at 50% of the
+  // agreed day rate. Ignored (stored null) on hourly invoices.
+  dayType: z.enum(["service", "deployment"]).optional().nullable(),
 });
 
 export const additionalCostItemSchema = z.object({
@@ -2002,9 +2014,24 @@ export const invoiceSubmissionSchema = z.object({
   personalDetails: personalDetailsSchema,
   bankDetails: bankDetailsSchema,
   timesheetEntries: z.array(timesheetEntrySchema).min(1, "At least one timesheet entry is required"),
-  hourlyRatePence: z.number().int().positive("Hourly rate is required"),
+  rateType: z.enum(["hourly", "day_shift"]).default("hourly"),
+  hourlyRatePence: z.number().int().positive("Rate is required"),
   additionalCosts: z.array(additionalCostItemSchema).default([]),
   paymentNotes: z.string().optional().nullable(),
+}).superRefine((val, ctx) => {
+  // Hourly invoices are priced from shift duration, so every entry must
+  // carry start/end times. Day/shift invoices are whole days — no times.
+  if (val.rateType === "hourly") {
+    val.timesheetEntries.forEach((e, i) => {
+      if (!e.startTime || !e.endTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["timesheetEntries", i],
+          message: "startTime and endTime are required for hourly invoices",
+        });
+      }
+    });
+  }
 });
 
 export type InvoiceSubmission = z.infer<typeof invoiceSubmissionSchema>;

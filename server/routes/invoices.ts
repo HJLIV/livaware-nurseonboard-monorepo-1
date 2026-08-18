@@ -97,21 +97,35 @@ function parseHHMM(s: string): number {
   return h * 60 + m;
 }
 
-function computeMinutesAndAmount(entry: { startTime: string; endTime: string }, hourlyRatePence: number): { minutes: number; amountPence: number } {
+function computeMinutes(entry: { startTime: string; endTime: string }): number {
   let mins = parseHHMM(entry.endTime) - parseHHMM(entry.startTime);
   if (mins < 0) mins += 24 * 60; // overnight shift
-  const amountPence = Math.round((mins / 60) * hourlyRatePence);
-  return { minutes: mins, amountPence };
+  return mins;
 }
 
 function calculateTotals(submission: InvoiceSubmission) {
   let totalMinutes = 0;
   let totalAmountPence = 0;
+  const isDayShift = submission.rateType === "day_shift";
   const entriesPriced = submission.timesheetEntries.map((e) => {
-    const { minutes, amountPence } = computeMinutesAndAmount(e, submission.hourlyRatePence);
+    if (isDayShift) {
+      // Day/shift mode: each entry is a whole day charged at the flat rate.
+      // Deployment/travel days are paid at 50% of the agreed day rate.
+      // No times, no duration-based calculation.
+      const dayType = e.dayType === "deployment" ? "deployment" : "service";
+      const amountPence = dayType === "deployment"
+        ? Math.round(submission.hourlyRatePence / 2)
+        : submission.hourlyRatePence;
+      totalAmountPence += amountPence;
+      return { ...e, dayType, startTime: null, endTime: null, hoursMinutes: 0, amountPence };
+    }
+    // Hourly mode: duration-proportional (times are guaranteed present by
+    // the submission schema's superRefine). dayType is a day/shift concept.
+    const minutes = computeMinutes({ startTime: e.startTime!, endTime: e.endTime! });
+    const amountPence = Math.round((minutes / 60) * submission.hourlyRatePence);
     totalMinutes += minutes;
     totalAmountPence += amountPence;
-    return { ...e, hoursMinutes: minutes, amountPence };
+    return { ...e, dayType: null, hoursMinutes: minutes, amountPence };
   });
   const additionalCostsTotal = (submission.additionalCosts || []).reduce((s, c) => s + c.amountPence, 0);
   return { entriesPriced, totalMinutes, totalAmountPence, additionalCostsTotal };
@@ -169,6 +183,7 @@ async function createInvoiceFromSubmission(
         bankName: submission.bankDetails.bankName,
         sortCode: submission.bankDetails.sortCode,
         accountNumber: submission.bankDetails.accountNumber,
+        rateType: submission.rateType ?? "hourly",
         hourlyRate: submission.hourlyRatePence,
         totalHours: totalMinutes,
         totalAmount: totalAmountPence,
@@ -182,10 +197,11 @@ async function createInvoiceFromSubmission(
         entriesPriced.map((e, idx) => ({
           invoiceId: created.id,
           date: e.date,
-          startTime: e.startTime,
-          endTime: e.endTime,
+          startTime: e.startTime ?? null,
+          endTime: e.endTime ?? null,
           patientInitials: e.patientInitials,
           location: e.location,
+          dayType: e.dayType ?? null,
           hoursMinutes: e.hoursMinutes,
           amountPence: e.amountPence,
           position: idx,
@@ -223,6 +239,7 @@ async function createInvoiceFromSubmission(
           sortCode: submission.bankDetails.sortCode,
           accountNumber: submission.bankDetails.accountNumber,
         },
+        rateType: submission.rateType ?? "hourly",
         hourlyRatePence: submission.hourlyRatePence,
         paymentNotes: submission.paymentNotes ?? null,
         updatedAt: new Date().toISOString(),
@@ -236,7 +253,7 @@ async function createInvoiceFromSubmission(
     module: "invoices",
     action: "invoice_submitted",
     agentName: agent,
-    detail: { source, invoiceId: createdId, totalAmountPence, totalMinutes, entries: entriesPriced.length },
+    detail: { source, invoiceId: createdId, rateType: submission.rateType ?? "hourly", totalAmountPence, totalMinutes, entries: entriesPriced.length },
   });
   const full = await loadFullInvoice(createdId);
   // Fire-and-forget: render PDF and email it to the invoices mailbox so the
@@ -329,6 +346,16 @@ export function registerInvoiceRoutes(app: Express) {
       .from(invoices)
       .where(eq(invoices.nurseId, nurseId))
       .orderBy(desc(invoices.submittedAt));
+    // Entry counts let the FE show "N days" for day/shift invoices in the
+    // list rows (where hours are meaningless).
+    const entryCounts = new Map<string, number>();
+    if (list.length) {
+      const entryRows = await db
+        .select({ invoiceId: invoiceTimesheetEntries.invoiceId })
+        .from(invoiceTimesheetEntries)
+        .where(inArray(invoiceTimesheetEntries.invoiceId, list.map((i) => i.id)));
+      for (const r of entryRows) entryCounts.set(r.invoiceId, (entryCounts.get(r.invoiceId) ?? 0) + 1);
+    }
     // Surface last bank/personal details so the FE can reliably prefill the
     // wizard without having to re-fetch each row.
     const lastFull = list.length ? await loadFullInvoice(list[0].id) : null;
@@ -339,7 +366,7 @@ export function registerInvoiceRoutes(app: Express) {
       .from(nurses)
       .where(eq(nurses.id, nurseId));
     res.json({
-      invoices: list.map(withInvoiceNumber),
+      invoices: list.map((inv) => ({ ...withInvoiceNumber(inv), entryCount: entryCounts.get(inv.id) ?? 0 })),
       lastInvoice: lastFull,
       billingProfile: nurseRow?.invoiceBillingProfile ?? null,
     });
@@ -481,18 +508,21 @@ export function registerInvoiceRoutes(app: Express) {
   // matrix, so admins can scan who/where each invoice covers without
   // opening the side panel.
   async function loadInvoiceSummaries(invoiceIds: string[]) {
-    const summaries = new Map<string, { patientInitials: string[]; locations: string[] }>();
+    const summaries = new Map<string, { patientInitials: string[]; locations: string[]; entryCount: number; deploymentDays: number }>();
     if (!invoiceIds.length) return summaries;
     const rows = await db
       .select({
         invoiceId: invoiceTimesheetEntries.invoiceId,
         patientInitials: invoiceTimesheetEntries.patientInitials,
         location: invoiceTimesheetEntries.location,
+        dayType: invoiceTimesheetEntries.dayType,
       })
       .from(invoiceTimesheetEntries)
       .where(inArray(invoiceTimesheetEntries.invoiceId, invoiceIds));
     for (const r of rows) {
-      const s = summaries.get(r.invoiceId) ?? { patientInitials: [], locations: [] };
+      const s = summaries.get(r.invoiceId) ?? { patientInitials: [], locations: [], entryCount: 0, deploymentDays: 0 };
+      s.entryCount += 1;
+      if (r.dayType === "deployment") s.deploymentDays += 1;
       if (r.patientInitials && !s.patientInitials.includes(r.patientInitials)) s.patientInitials.push(r.patientInitials);
       if (r.location && !s.locations.includes(r.location)) s.locations.push(r.location);
       summaries.set(r.invoiceId, s);
@@ -508,6 +538,7 @@ export function registerInvoiceRoutes(app: Express) {
         ...withInvoiceNumber(inv),
         patientInitials: summaries.get(inv.id)?.patientInitials ?? [],
         locations: summaries.get(inv.id)?.locations ?? [],
+        entryCount: summaries.get(inv.id)?.entryCount ?? 0,
       })),
       nurses: nurseRows,
     });
@@ -530,21 +561,26 @@ export function registerInvoiceRoutes(app: Express) {
   app.get("/api/admin/invoices/export.csv", requireAdmin, async (req, res) => {
     const { invoices: list, nurses: nurseRows } = await listInvoicesWithFilters(req);
     const nurseById = new Map(nurseRows.map((n) => [n.id, n]));
+    const summaries = await loadInvoiceSummaries(list.map((i) => i.id));
     const header = [
       "invoice_number", "invoice_id", "nurse_id", "name", "email", "status",
-      "submitted_at", "approved_at", "paid_at", "reconciled_at", "rejected_at",
-      "total_hours", "total_amount_gbp", "additional_costs_gbp", "payment_reference", "payment_date",
+      "rate_type", "submitted_at", "approved_at", "paid_at", "reconciled_at", "rejected_at",
+      "total_hours", "days_of_service", "deployment_days", "total_amount_gbp", "additional_costs_gbp", "payment_reference", "payment_date",
     ];
     const lines = [header.join(",")];
     for (const inv of list) {
       const n = nurseById.get(inv.nurseId);
+      const isDayShift = inv.rateType === "day_shift";
       lines.push([
         formatInvoiceNumber(inv.invoiceNumberSeq),
         inv.id, inv.nurseId, n?.fullName || "", n?.email || "", inv.status,
+        inv.rateType || "hourly",
         inv.submittedAt?.toISOString() || "",
         inv.approvedAt?.toISOString() || "", inv.paidAt?.toISOString() || "",
         inv.reconciledAt?.toISOString() || "", inv.rejectedAt?.toISOString() || "",
-        (inv.totalHours / 60).toFixed(2),
+        isDayShift ? "" : (inv.totalHours / 60).toFixed(2),
+        isDayShift ? String(summaries.get(inv.id)?.entryCount ?? 0) : "",
+        isDayShift ? String(summaries.get(inv.id)?.deploymentDays ?? 0) : "",
         pence(inv.totalAmount), pence(inv.additionalCostsTotal),
         inv.paymentReference || "", inv.paymentDate || "",
       ].map(csvEscape).join(","));
