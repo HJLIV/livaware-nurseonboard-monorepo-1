@@ -95,11 +95,11 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
       <div className="mx-auto max-w-2xl py-2">
         <div className="mb-10 animate-fade-in-up" data-testid="portal-welcome-video">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/50 mb-3 text-center">
-            Watch first — your 2 minute tour
+            Watch first — the Livaware standard of care, in 3 minutes
           </p>
           <div className="overflow-hidden rounded-2xl ring-1 ring-primary/20 bg-black shadow-lg">
             <video
-              src="/videos/nurse-explainer.mp4"
+              src="/videos/excellence-blueprint.mp4?v=3"
               controls
               playsInline
               preload="metadata"
@@ -107,12 +107,12 @@ function WelcomeIntro({ onContinue }: { onContinue: () => void }) {
               className="w-full h-auto block"
             >
               Your browser does not support embedded video.
-              <a href="/videos/nurse-explainer.mp4" className="underline">Download the explainer video</a>
+              <a href="/videos/excellence-blueprint.mp4?v=3" className="underline">Download the film</a>
             </video>
           </div>
           <p className="text-[11px] text-muted-foreground/70 mt-2 text-center">
-            A quick walkthrough of every part of your Basecamp portal.{" "}
-            <a href="/videos/nurse-explainer.mp4" download className="underline hover:text-primary">
+            The Anatomy of Excellence — our field guide to world-class in-residence care.{" "}
+            <a href="/videos/excellence-blueprint.mp4?v=3" download className="underline hover:text-primary">
               Download MP4
             </a>
           </p>

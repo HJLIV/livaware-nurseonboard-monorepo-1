@@ -1,0 +1,80 @@
+{
+  "fps": 30,
+  "totalMs": 213516,
+  "totalFrames": 6406,
+  "music": "/audio/music.mp3",
+  "scenes": [
+    {
+      "key": "title",
+      "startMs": 0,
+      "durMs": 16704,
+      "voStartMs": 2400,
+      "voDurMs": 12904,
+      "audio": "/audio/title.mp3"
+    },
+    {
+      "key": "delta",
+      "startMs": 16704,
+      "durMs": 19884,
+      "voStartMs": 18004,
+      "voDurMs": 17084,
+      "audio": "/audio/delta.mp3"
+    },
+    {
+      "key": "pillars",
+      "startMs": 36589,
+      "durMs": 28243,
+      "voStartMs": 37889,
+      "voDurMs": 25443,
+      "audio": "/audio/pillars.mp3"
+    },
+    {
+      "key": "foundation",
+      "startMs": 64832,
+      "durMs": 30359,
+      "voStartMs": 66132,
+      "voDurMs": 27559,
+      "audio": "/audio/foundation.mp3"
+    },
+    {
+      "key": "interaction",
+      "startMs": 95191,
+      "durMs": 32893,
+      "voStartMs": 96491,
+      "voDurMs": 30093,
+      "audio": "/audio/interaction.mp3"
+    },
+    {
+      "key": "seamless",
+      "startMs": 128084,
+      "durMs": 23829,
+      "voStartMs": 129384,
+      "voDurMs": 21029,
+      "audio": "/audio/seamless.mp3"
+    },
+    {
+      "key": "handover",
+      "startMs": 151913,
+      "durMs": 31979,
+      "voStartMs": 153213,
+      "voDurMs": 29179,
+      "audio": "/audio/handover.mp3"
+    },
+    {
+      "key": "signature",
+      "startMs": 183891,
+      "durMs": 24024,
+      "voStartMs": 185191,
+      "voDurMs": 20924,
+      "audio": "/audio/signature.mp3"
+    },
+    {
+      "key": "outro",
+      "startMs": 207916,
+      "durMs": 5600,
+      "voStartMs": 0,
+      "voDurMs": 0,
+      "audio": null
+    }
+  ]
+}

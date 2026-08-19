@@ -1,0 +1,56 @@
+{
+  "voiceId": "Fahco4VZzobUeiPqni1S",
+  "model": "eleven_turbo_v2_5",
+  "speed": 1.07,
+  "totalDurationSec": 213.516,
+  "scenes": [
+    {
+      "key": "title",
+      "startSec": 2.4,
+      "durationSec": 12.904,
+      "text": "Welcome to the anatomy of excellence — Livaware's field guide to world-class in-residence care. We are what we repeatedly do; excellence, then, is not an act, but a habit. This is the blueprint for yours."
+    },
+    {
+      "key": "delta",
+      "startSec": 18.004,
+      "durationSec": 17.084,
+      "text": "Clinical competence is the baseline expectation in healthcare — at Livaware, it is only the starting point. Above it rises the Excellence Delta: ten non-negotiable principles that turn adequate care into an exceptional experience — preserving dignity, building trust, elevating the journey."
+    },
+    {
+      "key": "pillars",
+      "startSec": 37.889,
+      "durationSec": 25.443,
+      "text": "Premium care rests on three pillars: your professional foundation — presentation, reliability, discretion. Patient interaction — communication, sovereign territory, anticipation, beyond expectations. And the seamless system — team unity, ownership, flawless transitions. These are not aspirational guidelines; they are the minimum standard at Livaware."
+    },
+    {
+      "key": "foundation",
+      "startSec": 66.132,
+      "durationSec": 27.559,
+      "text": "Pillar one: the visual promise. Immaculate presentation speaks before you do; every space is left as found, or better. Reliability means arriving at the exact time promised — never within a window. Discretion goes beyond G D P R: no visible identifiers in transit, never greeting a patient in public unless they greet you first, and a proactive call before a deadline slips — never an apology after."
+    },
+    {
+      "key": "interaction",
+      "startSec": 96.491,
+      "durationSec": 30.093,
+      "text": "Pillar two begins at the front door: you are a guest in sovereign territory — their home, their rules. Never impose; ask — would it work for you if I set up here? Anticipate: review the notes, spot the patterns, bring tomorrow's supplies today — meeting needs before they become requests. Communicate with warmth and specifics — real timeframes, confirmed understanding, even under pressure. The moments patients treasure most? They didn't have to do that — but it made such a difference."
+    },
+    {
+      "key": "seamless",
+      "startSec": 129.384,
+      "durationSec": 21.029,
+      "text": "Pillar three makes the system seamless. The team comes first — one unified front; staffing matters stay invisible. Own every outcome: you are the patient's advocate — never passing the buck, never blaming the last shift. I will resolve this for you. To the patient, we are Livaware — not individual practitioners."
+    },
+    {
+      "key": "handover",
+      "startSec": 153.213,
+      "durationSec": 29.179,
+      "text": "Handover is choreography. Step one, the silent review: five minutes with the notes — can you make sense of the day without being told? Step two: a private verbal handover; sign the SOAP note once understood. Step three: the formal bedside introduction. Step four: verification and closure — joint stock check, signed documentation, clear photographs uploaded. Even the morning coffee ritual travels with the same rigor as clinical data."
+    },
+    {
+      "key": "signature",
+      "startSec": 185.191,
+      "durationSec": 20.924,
+      "text": "Excellence is a habit we measure — reviewed, recognised, rewarded — so a difficult healthcare journey feels as positive as it can. Your patient should never navigate complex systems alone, or hear excuses instead of solutions. You are the architect of the Livaware experience: clinical excellence is your foundation; premium service is your signature."
+    }
+  ]
+}

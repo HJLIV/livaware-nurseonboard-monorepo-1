@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+
+/* Livaware blueprint palette — mirrors client/src/lib/design-system.ts */
+:root {
+  --color-bg: #060b18;
+  --color-surface: #0a1128;
+  --color-card: #0d1530;
+  --color-ink: #e8e4df;
+  --color-ink-soft: #c0bab2;
+  --color-muted: #8a8580;
+  --color-gold: #c8a96e;
+  --color-gold-dim: #a08850;
+  --color-teal: #7fbfb8;
+  --color-teal-dim: #4e7e79;
+  --color-border: #1e2640;
+  --color-danger: #f87171;
+
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-body: 'Be Vietnam Pro', system-ui, sans-serif;
+
+  /* template compat */
+  --color-bg-light: var(--color-bg);
+}
+
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-card: var(--color-card);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-muted: var(--color-muted);
+  --color-gold: var(--color-gold);
+  --color-gold-dim: var(--color-gold-dim);
+  --color-teal: var(--color-teal);
+  --color-teal-dim: var(--color-teal-dim);
+  --color-border: var(--color-border);
+  --color-danger: var(--color-danger);
+  --font-serif: var(--font-serif);
+  --font-body: var(--font-body);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: var(--color-bg);
+}
+
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  overflow: hidden;
+}

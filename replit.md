@@ -49,7 +49,7 @@ Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) com
 **Reports**: `/reports/onboarding`, `/reports/training`, `/reports/competency`, `/reports/declarations`, `/reports/availability`, `/reports/invoices`, `/admin/policies`, `/admin/reading-materials`.
 **Rostering (admin only)**: `/rostering/patients`, `/rostering/patients/:id`, `/rostering/rota`.
 **Skills Arcade**: `/arcade`, `/arcade/scenario/:id`, `/arcade/walkthrough/:id`, `/arcade/trainer`, `/arcade/admin/{modules,reports,users}`.
-**Portal (token-gated)**: `/portal/:token` (hub), `/portal/page/:token`, `/portal/service-agreement` (first, blocking step), `/portal/availability`, `/portal/my-shifts`, `/portal/invoices`, `/portal/policies/:token`, `/portal/reading/:token`, `/preboard/assessment`, `/referee/:token`.
+**Portal (token-gated)**: `/portal/:token` (hub), `/portal/page/:token`, `/portal/service-agreement` (first, blocking step), `/portal/availability`, `/portal/my-shifts`, `/portal/invoices`, `/portal/policies/:token`, `/portal/reading/:token`, `/preboard/assessment`, `/referee/:token`. The hub's welcome intro embeds the ~3-minute "Excellence Blueprint" standard-of-care film (`/videos/excellence-blueprint.mp4`, rendered from the `artifacts/excellence-blueprint` video artifact via its `scripts/render-video.mjs`); the login page nurse tab still uses the older `/videos/nurse-explainer.mp4`.
 **Super-admin**: `/super-admin/activity`, `/super-admin/mass-email`.
 
 Sidebar groups (admin) live in `client/src/components/layout/sidebar-nav.tsx`. Portal sidebar groups live in `portal-shell.tsx` `buildPortalGroups` and are stage-gated (e.g. Availability + Invoices visible only when `currentStage === "completed"`).

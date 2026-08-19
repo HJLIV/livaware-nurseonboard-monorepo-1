@@ -18,3 +18,10 @@ id = "6Gr_YBY_voB0mP_K8tO0P"
 uri = "file://previews/applicant-welcome-email.jpg"
 type = "image"
 title = "Applicant Welcome Email — updated copy"
+
+[[outputs]]
+id = "Q8J9r3HrzRZE2nhQnPwsY"
+uri = "file://artifacts/excellence-blueprint/public/audio/music.mp3"
+type = "audio"
+title = "ambient blueprint underscore"
+description = "Generated music: Quiet, minimal ambient underscore for a premium private healthcare brand film. Soft warm analog synth pads, very sparse gentle felt-piano notes, slow evolving drone, calm, dignified,…"
