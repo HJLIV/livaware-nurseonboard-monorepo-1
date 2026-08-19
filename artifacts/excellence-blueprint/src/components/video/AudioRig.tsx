@@ -8,6 +8,12 @@ import timings from '@/narration/timings.json';
 
 const MUSIC_VOLUME = 0.14;
 
+// timings.json stores root-absolute paths ("/audio/x.mp3"); resolve them
+// against the vite base so they keep working when the app is served from a
+// subpath (production mounts this artifact at /excellence-blueprint/).
+const withBase = (p: string) =>
+  import.meta.env.BASE_URL.replace(/\/$/, '') + p;
+
 export function AudioRig({ t, soundOn }: { t: number; soundOn: boolean }) {
   const voRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const musicRef = useRef<HTMLAudioElement | null>(null);
@@ -17,11 +23,11 @@ export function AudioRig({ t, soundOn }: { t: number; soundOn: boolean }) {
     const map = voRefs.current;
     for (const s of timings.scenes) {
       if (!s.audio) continue;
-      const el = new Audio(s.audio);
+      const el = new Audio(withBase(s.audio));
       el.preload = 'auto';
       map.set(s.key, el);
     }
-    const music = new Audio(timings.music);
+    const music = new Audio(withBase(timings.music));
     music.preload = 'auto';
     music.loop = true;
     music.volume = MUSIC_VOLUME;

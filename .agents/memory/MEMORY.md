@@ -6,4 +6,5 @@
 - [Login-panel scene geometry](login-panel-scene-geometry.md) — hero column owns mid-left of the brand panel; scene labels only in top band/right rail; verify via Playwright glyph-rect audit at 3 viewports, not screenshots.
 - [Video artifact render pipeline](video-render-pipeline.md) — REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE for playwright; JPEG frames not PNG; chunked foreground renders (nohup dies, pkill -f self-kills); concat paths resolve from the list file.
 - [pnpm workspace for artifacts](pnpm-artifact-workspace.md) — install artifacts/* in isolation (`--ignore-workspace`, no `catalog:`); a root pnpm install hijacks the npm root node_modules, and deploy only runs npm install.
+- [Artifact production routing](artifact-production-routing.md) — secondary artifacts must never claim "/" in artifact.toml (shadows the whole prod domain incl. /api); edit via sibling temp file + mv, takes effect on next publish.
 - [ElevenLabs beat sync](elevenlabs-beat-sync.md) — alignment JSON keys are top-level; divide char times by atempo; beat phrases must match script text verbatim (case + ASCII apostrophes) or they silently fall back.

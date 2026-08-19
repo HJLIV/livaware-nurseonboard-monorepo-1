@@ -6,9 +6,15 @@ version = "1.0.0"
 id = "artifacts/excellence-blueprint"
 router = "path"
 
+# IMPORTANT: this artifact is workspace-only (a source project for rendering
+# the portal welcome film). It must claim NO paths in production: the film is
+# delivered to nurses as /videos/excellence-blueprint.mp4 served by the main
+# app, which owns the entire published domain. When this artifact claimed "/"
+# with a catch-all rewrite it shadowed the whole site, including /api and the
+# nurse portal.
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ ]
 localPort = 21027
 
 [services.development]
@@ -18,10 +24,6 @@ run = "pnpm --filter @workspace/excellence-blueprint run dev"
 build = [ "pnpm", "--filter", "@workspace/excellence-blueprint", "run", "build" ]
 serve = "static"
 publicDir = "artifacts/excellence-blueprint/dist/public"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
 
 [services.env]
 PORT = "21027"

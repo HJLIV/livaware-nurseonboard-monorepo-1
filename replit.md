@@ -91,6 +91,7 @@ All state-changing routes log to `audit_logs` via `storage.createAuditLog({ nurs
 ## Deployment
 
 - Target `autoscale`, build `npm run build`, run `node dist/index.cjs`.
+- The video artifact (`artifacts/excellence-blueprint`) is workspace-only: its `artifact.toml` claims no production paths (`paths = []`). The film reaches nurses as `/videos/excellence-blueprint.mp4` served by the main app (embedded in the portal hub). The artifact must never claim `/` — a root claim with a catch-all rewrite shadows the whole domain, including `/api` and the nurse portal.
 
 ## Project-Specific Agent Skills
 
