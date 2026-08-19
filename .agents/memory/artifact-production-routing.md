@@ -1,14 +1,15 @@
 ---
-name: Artifact production routing
-description: How registered artifacts claim production URL paths via artifact.toml, and how to edit that file safely.
+name: Registered artifacts vs classic deployment
+description: Why a registered artifact takes down a legacy root app in production, and how to unregister one.
 ---
 
-The rule: a secondary artifact (video/slides/etc.) living alongside a root main app must never claim `/` in its `.replit-artifact/artifact.toml`.
+The rule: this project's main app (Express at the repo root, classic `[deployment]` build/run in `.replit`) cannot be published while ANY registered artifact exists. Keep media/source projects (like the welcome-film renderer) as plain directories, never registered artifacts.
 
-**Why:** In production all artifacts publish into the ONE deployment, and `[[services]] paths = ["/"]` plus a `/* → /index.html` rewrite routes every request on the domain — `/api/*`, deep links, everything — to the artifact's static bundle. This took the whole published site down (only the film rendered, on every URL). Dev is unaffected because dev routing is port-based, so the mistake is invisible until a publish.
+**Why:** The moment a `.replit-artifact/artifact.toml` registration exists, publishing switches to "artifact mode" (deploy log: `artifact mode enabled runnable=0 static=1` → `static-only deployment`). In that mode the classic `[deployment] run` is NEVER executed — the Express server does not start at all. Routing is then exclusively by artifact `paths` claims: with `paths=["/"]` + catch-all rewrite the artifact served its page on every URL including `/api/*`; with `paths=[]` the domain 404'd ("This deployment has no previewable artifacts"). Both took production down. Dev shows none of this (dev routing is port-based), so the breakage only appears on publish.
 
 **How to apply:**
-- If the artifact should not be publicly reachable at all, claim no paths: `paths = [ ]` (dev preview is port-based and unaffected). If it should be public, give it a scoped claim (`paths = ["/some-prefix"]`), scope any rewrite to that prefix, and set `BASE_PATH` (vite `base`) and `previewPath` to the same prefix so dev, preview, and prod agree.
-- Root-absolute asset URLs inside app code (e.g. audio paths in a JSON manifest) do not get vite's base treatment — resolve them via `import.meta.env.BASE_URL` at the consumption site.
-- `artifact.toml` is edit-protected: the Edit/WriteFile tools reject direct changes. Write the full updated TOML to a sibling temp file in `.replit-artifact/` and `mv` it over `artifact.toml` in the shell — the platform detects and applies the replacement (workflows/preview update automatically).
-- Routing config only takes effect on the next publish; verify prod afterwards with curl of `/`, an `/api/*` route, and the artifact subpath.
+- Never create/re-register an artifact in this project while the main app deploys classically. If a real second web surface is ever needed, that's a full multi-artifact migration (main app becomes an artifact too) — a deliberate project, not a config tweak.
+- To unregister: `rm -rf <dir>/.replit-artifact` (shell; Edit/WriteFile tools refuse artifact.toml). The platform detects it, removes the registry entry AND its managed workflow automatically. Also remove the artifact's `[[ports]]` mapping from `.replit`.
+- To edit (not remove) a registration: write the full TOML to a sibling temp file in `.replit-artifact/` and `mv` over artifact.toml.
+- Config changes only take effect on the next publish; verify with curl of prod `/` and an `/api/*` route (deploy logs show whether the server actually started).
+- The film itself ships as a static mp4 in the main app (`client/public/videos/`), embedded by the portal hub page — no artifact needed.
