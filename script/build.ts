@@ -1,5 +1,6 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
+import { execFileSync } from "child_process";
 import { rm, readFile } from "fs/promises";
 
 const allowlist = [
@@ -33,6 +34,15 @@ const allowlist = [
 ];
 
 async function buildAll() {
+  // Deployment builds only run `npm install` at the root, which leaves
+  // artifacts/* (pnpm projects) without node_modules. The platform builds each
+  // artifact right after this command, so their dependencies have to be on
+  // disk by the time this finishes.
+  console.log("installing artifact dependencies...");
+  execFileSync("bash", ["scripts/install-artifact-deps.sh"], {
+    stdio: "inherit",
+  });
+
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");

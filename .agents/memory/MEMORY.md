@@ -5,5 +5,5 @@
 - [Running the test suite](test-suite-execution.md) — detached `npm test` dies; run vitest in ~5-file chunks sequentially; strip live third-party tokens in setup.ts; snapshot/restore appSettings rows tests write.
 - [Login-panel scene geometry](login-panel-scene-geometry.md) — hero column owns mid-left of the brand panel; scene labels only in top band/right rail; verify via Playwright glyph-rect audit at 3 viewports, not screenshots.
 - [Video artifact render pipeline](video-render-pipeline.md) — REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE for playwright; JPEG frames not PNG; chunked foreground renders (nohup dies, pkill -f self-kills); concat paths resolve from the list file.
-- [pnpm workspace for artifacts](pnpm-artifact-workspace.md) — `catalog:` deps in artifacts/* need root pnpm-workspace.yaml catalog pins; root app stays npm.
+- [pnpm workspace for artifacts](pnpm-artifact-workspace.md) — install artifacts/* in isolation (`--ignore-workspace`, no `catalog:`); a root pnpm install hijacks the npm root node_modules, and deploy only runs npm install.
 - [ElevenLabs beat sync](elevenlabs-beat-sync.md) — alignment JSON keys are top-level; divide char times by atempo; beat phrases must match script text verbatim (case + ASCII apostrophes) or they silently fall back.

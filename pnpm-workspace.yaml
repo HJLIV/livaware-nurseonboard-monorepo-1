@@ -1,3 +1,13 @@
+# The root app is an npm project; only artifacts/* are pnpm projects. This file
+# exists so `pnpm --filter <artifact> run <script>` resolves from the repo root
+# (that is how the platform runs artifact dev/build commands).
+#
+# Artifact dependencies are installed in isolation by
+# scripts/install-artifact-deps.sh (`pnpm install --ignore-workspace` inside
+# each artifact), because a workspace-wide pnpm install would take over the
+# npm-managed root node_modules. As a result the catalog below is NOT resolved
+# during artifact installs: artifact package.json files must pin real version
+# ranges and must not use `catalog:` specifiers.
 packages:
   - 'artifacts/*'
 
