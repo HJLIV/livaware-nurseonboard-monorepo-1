@@ -49,7 +49,7 @@ Full-stack TypeScript monorepo (Express 5 + React/Vite + PostgreSQL/Drizzle) com
 **Reports**: `/reports/onboarding`, `/reports/training`, `/reports/competency`, `/reports/declarations`, `/reports/availability`, `/reports/invoices`, `/admin/policies`, `/admin/reading-materials`.
 **Rostering (admin only)**: `/rostering/patients`, `/rostering/patients/:id`, `/rostering/rota`.
 **Skills Arcade**: `/arcade`, `/arcade/scenario/:id`, `/arcade/walkthrough/:id`, `/arcade/trainer`, `/arcade/admin/{modules,reports,users}`.
-**Portal (token-gated)**: `/portal/:token` (hub), `/portal/page/:token`, `/portal/service-agreement` (first, blocking step), `/portal/availability`, `/portal/my-shifts`, `/portal/invoices`, `/portal/policies/:token`, `/portal/reading/:token`, `/preboard/assessment`, `/referee/:token`. The hub's welcome intro embeds the ~3-minute "Excellence Blueprint" standard-of-care film (`/videos/excellence-blueprint.mp4`, rendered from the `artifacts/excellence-blueprint` video artifact via its `scripts/render-video.mjs`); the login page nurse tab still uses the older `/videos/nurse-explainer.mp4`.
+**Portal (token-gated)**: `/portal/:token` (hub), `/portal/page/:token`, `/portal/service-agreement` (first, blocking step), `/portal/availability`, `/portal/my-shifts`, `/portal/invoices`, `/portal/policies/:token`, `/portal/reading/:token`, `/portal/internal-training`, `/preboard/assessment`, `/referee/:token`. The ~3-minute "Excellence Blueprint" standard-of-care film appears only on Internal Training when `currentStage === "completed"` and streams through the authenticated `/api/portal/:token/training/excellence-blueprint` endpoint; it is never exposed from `client/public`. The login page nurse tab still uses the older `/videos/nurse-explainer.mp4`.
 **Super-admin**: `/super-admin/activity`, `/super-admin/mass-email`.
 
 Sidebar groups (admin) live in `client/src/components/layout/sidebar-nav.tsx`. Portal sidebar groups live in `portal-shell.tsx` `buildPortalGroups` and are stage-gated (e.g. Availability + Invoices visible only when `currentStage === "completed"`).
@@ -91,7 +91,7 @@ All state-changing routes log to `audit_logs` via `storage.createAuditLog({ nurs
 ## Deployment
 
 - Target `autoscale`, build `npm run build`, run `node dist/index.cjs`.
-- `artifacts/excellence-blueprint/` is plain source (NOT a registered Replit artifact) used to render the portal welcome film. The film reaches nurses as `/videos/excellence-blueprint.mp4` served by the main app (embedded in the portal hub). NEVER re-register it (no `.replit-artifact/` dir): a registered artifact switches publishing into "artifact mode", which skips the classic `[deployment]` run command entirely — the Express server never starts and the whole site goes down.
+- `artifacts/excellence-blueprint/` is plain source (NOT a registered Replit artifact) used to render the protected nurse-training film. The rendered MP4 lives in `server/private-assets/` and the build copies it to `dist/private-assets/` (outside the static public directory); only the completed-stage portal API may stream it. NEVER re-register the source project (no `.replit-artifact/` dir): a registered artifact switches publishing into "artifact mode", which skips the classic `[deployment]` run command entirely — the Express server never starts and the whole site goes down.
 
 ## Project-Specific Agent Skills
 

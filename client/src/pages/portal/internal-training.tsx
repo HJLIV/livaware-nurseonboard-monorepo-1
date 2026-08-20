@@ -124,6 +124,39 @@ export default function PortalInternalTrainingPage() {
           </p>
         </div>
 
+        {portal?.nurse.currentStage === "completed" && (
+          <Card data-testid="portal-excellence-blueprint">
+            <CardContent className="p-4 sm:p-5 space-y-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/70">
+                  Livaware training
+                </p>
+                <h2 className="font-serif text-xl font-light tracking-tight mt-1">
+                  The Anatomy of Excellence
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Our three-minute field guide to world-class in-residence care.
+                </p>
+              </div>
+              <div className="overflow-hidden rounded-xl ring-1 ring-primary/20 bg-black shadow-sm">
+                <video
+                  src="/api/portal/me/training/excellence-blueprint"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full h-auto block"
+                  data-testid="video-excellence-blueprint"
+                >
+                  Your browser does not support embedded video.
+                </video>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                This protected training resource is available only to fully onboarded nurses.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : (

@@ -1,7 +1,7 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { execFileSync } from "child_process";
-import { rm, readFile } from "fs/promises";
+import { copyFile, mkdir, rm, readFile } from "fs/promises";
 
 const allowlist = [
   "@anthropic-ai/sdk",
@@ -47,6 +47,13 @@ async function buildAll() {
 
   console.log("building client...");
   await viteBuild();
+
+  console.log("copying protected training assets...");
+  await mkdir("dist/private-assets", { recursive: true });
+  await copyFile(
+    "server/private-assets/excellence-blueprint.mp4",
+    "dist/private-assets/excellence-blueprint.mp4",
+  );
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));

@@ -68,6 +68,102 @@ const EXT_CONTENT_TYPE: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+const EXCELLENCE_BLUEPRINT_FILE = "excellence-blueprint.mp4";
+
+function excellenceBlueprintPath(): string {
+  return process.env.NODE_ENV === "production"
+    ? path.resolve(__dirname, "private-assets", EXCELLENCE_BLUEPRINT_FILE)
+    : path.resolve(process.cwd(), "server", "private-assets", EXCELLENCE_BLUEPRINT_FILE);
+}
+
+function parseByteRange(
+  header: string,
+  fileSize: number,
+): { start: number; end: number } | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (!match[1] && !match[2])) return null;
+
+  let start: number;
+  let end: number;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(fileSize - suffixLength, 0);
+    end = fileSize - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : fileSize - 1;
+  }
+
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start < 0 ||
+    end < start ||
+    start >= fileSize
+  ) {
+    return null;
+  }
+  return { start, end: Math.min(end, fileSize - 1) };
+}
+
+function streamProtectedVideo(req: Request, res: Response): void {
+  const filePath = excellenceBlueprintPath();
+  if (!fs.existsSync(filePath)) {
+    console.error("[internal-training.excellence-blueprint] protected video is missing");
+    res.status(503).json({ message: "Training video is temporarily unavailable" });
+    return;
+  }
+
+  const fileSize = fs.statSync(filePath).size;
+  const rangeHeader = req.headers.range;
+  const commonHeaders = {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, no-store",
+    "Content-Type": "video/mp4",
+    "X-Content-Type-Options": "nosniff",
+  };
+
+  if (!rangeHeader) {
+    res.status(200).set({ ...commonHeaders, "Content-Length": String(fileSize) });
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", (err) => {
+      console.error(
+        "[internal-training.excellence-blueprint] file stream failed:",
+        err.message,
+      );
+      res.destroy();
+    });
+    stream.pipe(res);
+    return;
+  }
+
+  const range = parseByteRange(rangeHeader, fileSize);
+  if (!range) {
+    res.status(416).set({
+      ...commonHeaders,
+      "Content-Range": `bytes */${fileSize}`,
+    }).end();
+    return;
+  }
+
+  const contentLength = range.end - range.start + 1;
+  res.status(206).set({
+    ...commonHeaders,
+    "Content-Length": String(contentLength),
+    "Content-Range": `bytes ${range.start}-${range.end}/${fileSize}`,
+  });
+  const stream = fs.createReadStream(filePath, range);
+  stream.on("error", (err) => {
+    console.error(
+      "[internal-training.excellence-blueprint] range stream failed:",
+      err.message,
+    );
+    res.destroy();
+  });
+  stream.pipe(res);
+}
+
 const diskStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
   filename: (_req, file, cb) => {
@@ -368,6 +464,44 @@ export function registerInternalTrainingRoutes(app: Express) {
   );
 
   // ==================== PORTAL (nurse self-service) ====================
+
+  // Do not let the former public URL fall through to the SPA shell. The file
+  // no longer exists under client/public, and all access must use the
+  // authenticated endpoint below.
+  app.get("/videos/excellence-blueprint.mp4", (_req: Request, res: Response) => {
+    res.status(404).json({ message: "Not found" });
+  });
+
+  // The Excellence Blueprint contains proprietary training material. Keep
+  // both the UI and the bytes themselves unavailable until the nurse reaches
+  // the final completed stage; a copied API URL must not bypass this check.
+  app.get(
+    "/api/portal/:token/training/excellence-blueprint",
+    validatePortalToken,
+    async (req: Request, res: Response) => {
+      try {
+        const nurseId = (req as any).nurseId as string;
+        const nurse = await storage.getCandidate(nurseId);
+        if (!nurse) return res.status(404).json({ message: "Nurse not found" });
+        if (nurse.currentStage !== "completed") {
+          return res.status(403).json({
+            error: "nurse_stage_incomplete",
+            message: "Available after onboarding is complete.",
+          });
+        }
+        streamProtectedVideo(req, res);
+      } catch (err: any) {
+        console.error(
+          "[internal-training.excellence-blueprint] stream failed:",
+          err?.message || err,
+        );
+        if (!res.headersSent) {
+          return res.status(500).json({ message: "Failed to load training video" });
+        }
+        res.destroy();
+      }
+    },
+  );
 
   // List the fixed trainings + this nurse's uploaded state.
   app.get(
