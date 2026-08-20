@@ -1,0 +1,176 @@
+# Livaware Preboard Portal — Welcome Video
+## Script + Product Requirements Document
+**Version 1.1 — Voiceover / Claude Design production · Owner: Hemmen Jutla**
+
+---
+
+# PART 1 — SCRIPT (Voiceover)
+
+**Format:** Framed as a written message from the founder, read aloud. Opens on a card — *"a message from hemmen jutla, founder"* — closes on his signature. This preserves founder-embedded accountability without him on camera: the words are authored by him, visibly signed by him, and the first person stands.
+
+**Voice:** Strong recommendation — clone Hemmen's own voice via ElevenLabs (connected). Then it genuinely *is* the founder's voice and the letter device becomes belt-and-braces. Fallback: a warm, measured, RP-adjacent male VO; never an obviously synthetic or "corporate explainer" read.
+
+**Runtime target:** 2:30–2:45 (~380 words at measured pace). Deliberate pauses marked ⏸.
+
+---
+
+### COLD OPEN — [0:00–0:12]
+
+*Livaware navy (#020121). Lowercase marque resolves. Card: "a message from hemmen jutla, founder." Text dissolves as VO begins.*
+
+> Welcome. If you're hearing this, you've been selected to join Livaware — which means you've already done something most applicants don't. You got through.
+>
+> Before your first day, I want you to understand exactly what you've joined, and why the bar sits where it does.
+
+### WHAT LIVAWARE IS — [0:12–0:50]
+
+*Kinetic typography: single phrases land and dissolve — "clinic in residence" · "nurse-led" · "in people's homes." Abstract premium imagery only: light, texture, architecture. No people, no clients.*
+
+> I started Livaware alone, during COVID, carrying complex and palliative cases myself in people's homes. It has grown since — but the founding idea hasn't moved. We are a nurse-led care provider. A clinic in residence. Not a staffing supplier.
+>
+> Our clients don't book shifts from us. They place their health, their homes, and their families in our hands. Most of them can buy anything. The one thing they cannot buy is trust. ⏸ That's what we sell. And trust is built — or destroyed — in details. How you arrive. How you document. How you speak to a family at two in the morning. What you notice before anyone asks.
+
+### THE STANDARD — THE DISTRIBUTION — [0:50–1:35]
+
+*Hero visual: a distribution curve draws itself in a single fine line across the navy. The right tail illuminates. Nothing else on screen. Score drops out — VO over silence.*
+
+> Here's something we say out loud that most employers won't.
+>
+> In every profession, ability sits on a distribution — and genuine, sustained excellence is rare. Nursing is no exception. That's not a criticism of nurses. It's true of surgeons, of pilots, of chefs. Most people are good. ⏸ A small number are exceptional — not because the rest lack heart, but because holding the highest standard on every shift, when no one is watching, is genuinely hard.
+>
+> Livaware is built, deliberately, from that small number. Our selection process exists to find them. It's rigorous because it has to be. ⏸ And you're hearing this because it found you.
+>
+> So understand what that means: the standard that got you here isn't the entry test. It's the daily expectation.
+
+### THE DEAL — [1:35–2:05]
+
+*Single text card holds through the section: "the pay is the consequence of the standard. the standard is the condition of the pay."*
+
+> In exchange, we pay among the highest nursing rates in the country.
+>
+> That isn't generosity, and it isn't a perk. It's the other half of a deal. We remunerate at the top of the profession because we ask for the top of the profession — anticipation, discretion, immaculate presentation, absolute reliability, ownership of outcomes. You'll meet these formally in your training as our Ten Principles. They are not aspirational. They're operational.
+
+### CLOSE — [2:05–2:40]
+
+*Return to marque. Final frames: handwritten-style signature "hemmen," then tagline.*
+
+> Between now and your first day, this portal will take you through everything you need — who we are, how we work, what your first weeks look like.
+>
+> If some of this feels weighty — good. It should. This work matters, and we treat it that way.
+>
+> If it feels impossible, tell us now. Honesty is the first standard.
+>
+> And if it feels like the place you've been looking for your whole career — welcome to Livaware. We chose you carefully. We're glad you're here.
+
+*Tagline card: "helping people feel as well as possible, for as long as possible."*
+
+---
+
+# PART 2 — PRODUCT REQUIREMENTS DOCUMENT
+
+## 1. Overview
+
+| Field | Detail |
+|---|---|
+| Product | Preboard welcome video ("Video 1") in the Livaware preboard portal |
+| Audience | Nurses who have **accepted an offer** but not yet started (contractor or employed) |
+| Placement | First item in the preboard portal; gates progression to subsequent modules |
+| Runtime | 2:30–3:00 hard ceiling |
+| Production | Claude Design — motion-graphics/typography-led, VO-driven. No on-camera presenter, no AI avatar |
+| Authorship device | Signed founder letter, read aloud (ideally in Hemmen's cloned voice) |
+| Status | Draft v1.1 |
+
+## 2. Problem & purpose
+
+New starters arrive calibrated by NHS/agency-world norms and an incomplete picture of Livaware's positioning and expectation level. The cost surfaces later as standard-drift, early corrective conversations, and mis-hires discovered on shift rather than in preboard.
+
+**Purpose:** Before day one, every starter should (a) understand what Livaware is and is not, (b) internalise that the selection bar is the *daily* bar, (c) understand remuneration as the counterpart of the standard, and (d) have a dignified exit route if the fit is wrong — cheaper now than after deployment.
+
+## 3. Objectives & success measures
+
+| Objective | Measure |
+|---|---|
+| 100% completion pre–day one | Portal analytics: watched-to-end ≥ 95% |
+| Expectation calibration | 3-question comprehension check after video (§7); ≥ 90% first-pass |
+| Early self-deselection where fit is wrong | Track preboard withdrawal rate; a small non-zero rate is a *success* signal |
+| Reduced early standard-corrections | ENC/CNM feedback on first-month corrective conversations vs. prior cohorts |
+
+## 4. Key messages (priority order)
+
+1. **You were selected — the bar that found you is the bar that keeps you.** This is preboard, not recruitment: affirmation first, expectation second.
+2. **Livaware is a care provider, not a staffing supplier.** Clients buy trust, not shifts.
+3. **Excellence is rare in every profession — Livaware is built from the rare end.** Rarity is sustained standard-holding, never "most nurses lack something."
+4. **The deal: top-of-profession pay for top-of-profession standard.** Reciprocal, explicit, unsentimental.
+5. **Honest exit is available and honourable.**
+
+## 5. Creative treatment (Claude Design brief)
+
+- **Palette:** Livaware navy (#020121) as base throughout; single light accent for type and the curve line. Dark-mode-forward, premium, spacious. Claridge's, not corporate HR.
+- **Style:** Kinetic typography + fine-line motion graphics. Lowercase throughout (marque convention). Mid-century-inspired restraint — one idea on screen at a time, generous negative space, slow dissolves.
+- **Hero moment:** The distribution curve drawing itself in silence at [0:50], right tail illuminating. This is the visual argument of the film — give it room; nothing else competes with it.
+- **Imagery:** Abstract only — light, texture, architecture, fabric detail. **No stock people, no AI-generated faces, no avatar of Hemmen, no clients or residences** (Absolute Discretion; and synthetic humans undercut a trust message).
+- **Sound:** Minimal score at open and close only. Score fully out under the distribution and deal sections. VO clean, close-mic feel, measured pace with real pauses.
+- **Text cards:** Two only — the founder attribution at open, and the reciprocity line at [1:35]. Signature at close.
+- **Explicitly avoid:** upbeat corporate music, explainer-video energy, icon storms, school/grading imagery (exam papers, report cards — the plotted curve itself is fine), emojis anywhere in portal copy.
+
+## 6. Voiceover specification
+
+- **Primary route:** Hemmen's cloned voice (ElevenLabs, connected). His own voice for his own words in his own company — no third-party consent issues; disclosure is inherent in the signed-letter framing.
+- **Fallback route:** Professional-grade VO, warm, unhurried, RP-adjacent; audition against the distribution section, not the open — that's where a synthetic or "salesy" read fails.
+- **Read direction:** A letter read aloud, not a narration. Slower than feels natural on first take. The ⏸ marks are non-negotiable.
+- **QA gate:** If the clone sounds *almost* right but subtly off, use the fallback. Uncanny founder voice is worse than no founder voice.
+
+## 7. Comprehension check (post-video, 3 questions)
+
+1. Livaware describes itself as: *(a care provider / clinic-in-residence — not a staffing supplier)*
+2. The selection standard applies: *(every shift, as the daily expectation — not only at recruitment)*
+3. Livaware's remuneration is best described as: *(the counterpart of the standard expected — a reciprocal deal)*
+
+Wrong answers route to a rewatch prompt, not a fail state.
+
+## 8. Functional requirements (portal)
+
+- Hosted natively in the preboard portal; no public link (contains employment-terms framing).
+- Unskippable on first view; scrubbing enabled on rewatch.
+- Completion event logged per starter (name, timestamp) — feeds preboard checklist; auditable as CQC induction evidence.
+- Captions on by default; downloadable transcript (the "letter" itself doubles as the transcript); WCAG AA contrast on all cards.
+- Mobile-first playback.
+- Followed immediately by the comprehension check, then Module 2.
+
+## 9. Compliance & claims review — **required before publishing**
+
+- **Remuneration claim.** Script uses *"among the highest nursing rates in the country."* Do **not** escalate to "the highest" without a substantiation file (London private/ICU rates move). An unsubstantiated superlative shown pre-contract is a credibility and misrepresentation risk.
+- **Voice clone.** Hemmen's own voice, own consent — document it once in the governance file anyway (one line, dated).
+- **No client-identifiable content** anywhere in visuals (UK GDPR; Absolute Discretion).
+- **Employment-terms framing.** The "deal" language is cultural, not contractual — the video must not be referenced in contracts as defining pay terms.
+- Video + transcript retained as induction evidence (CQC Reg 18/19 support).
+
+| Sign-off | Name | Date |
+|---|---|---|
+| Founder / content & voice consent | Hemmen Jutla | |
+| Remuneration claim substantiation | | |
+| Clinical governance / CQC | | |
+
+## 10. Production plan (Claude Design)
+
+1. Lock script v1.1 → generate VO (ElevenLabs clone) → **approve audio before any visuals** (audio is the film; visuals follow its timing).
+2. Claude Design build against §5 brief, timed to the approved VO track. Deliver 1080p 16:9 master; keep the distribution section exportable as a standalone segment.
+3. Two review passes maximum: (i) pacing + curve moment, (ii) type/brand polish.
+4. Caption file + transcript export.
+5. Annual review date in portal CMS; the deal section is a discrete segment for easy re-generation when pay/structure changes.
+
+## 11. Risks & mitigations
+
+| Risk | Mitigation |
+|---|---|
+| A trust-and-standards message delivered by a synthetic voice reads as incongruent | Signed-letter device makes authorship explicit; use Hemmen's own cloned voice; QA gate in §6 — fallback human VO if the clone is uncanny |
+| Distribution framing reads as disdain for the profession | Generalised across professions; rarity located in sustained standard-holding. Final-cut test: would an excellent NHS ward sister feel respected watching it? |
+| Message attracts/reinforces arrogance rather than excellence | Ten Principles Module 0 (hierarchy, candour, raise-concerns) follows immediately — humility operationalised, not assumed |
+| Pay superlative challenged by a candidate with a counter-example | "Among the highest" wording; substantiation file required for anything stronger |
+| Motion-graphics treatment drifts into generic explainer aesthetics | §5 avoid-list is binding; one idea per screen; silence over the hero moment |
+
+## 12. Open questions
+
+1. Does preboard sit pre- or post-contract signature? (Changes how hard the "deal" language can lean.)
+2. Should a later portal video carry Dr Nambisan's clinical-governance voice, keeping Video 1 founder-only?
+3. 30-second recruitment cut of the distribution section — where that framing arguably belongs even more than at preboard. Same asset, second use.
